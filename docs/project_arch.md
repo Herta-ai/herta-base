@@ -1,52 +1,51 @@
-对于这种兼具 **Rust 复杂底层逻辑** 和 **复杂前端管理后台（JS/TS）** 的项目，强烈建议采用 **混合 Monorepo 架构（Cargo Workspace + PNPM Workspace）**。
+# HertaBase 项目架构设计
 
-这是目前业界顶级的全栈开源项目（如 Tauri、Deno、Prisma）都在使用的标准模式。两者完全不冲突，且能完美结合。
+> 注意：HertaBase 项目目前处于规划阶段（Planning Stage），以下目录结构将在开发过程中逐步创建。
 
-下面我为你详细设计这套架构的目录结构、配置文件以及构建流转机制。
+对于兼具 Rust 复杂底层逻辑和前端管理后台（JS/TS）的项目，HertaBase 采用**混合 Monorepo 架构（Cargo Workspace + PNPM Workspace）**。这种架构能将 Rust 生态与前端 Node 生态有效结合。
 
 ---
 
-### 一、 整体目录结构设计 (The Big Picture)
+## 一、 整体目录结构设计 (The Big Picture)
 
-我们将项目分为两大部分：**Rust 核心（Cargo 工作区）** 和 **前端/JS 生态（PNPM 工作区）**。
+项目分为两大部分：**Rust 核心（Cargo 工作区）** 和 **前端/JS 生态（PNPM 工作区）**。
 
 ```text
-my-baas/
+hertabase/
 ├── .git/
 ├── .github/                 # CI/CD 流程配置
 ├── Cargo.toml               # 📦 Cargo Workspace 根配置
 ├── pnpm-workspace.yaml      # 📦 PNPM Workspace 根配置
 ├── package.json             # 根 package.json (用于提供全局运行脚本)
-├── Justfile / Makefile      # 任务运行器 (推荐用 just)
+├── Justfile / Makefile      # 任务运行器
 │
-├── crates/                  # 🦀 Rust 核心代码 (Cargo Workspace)
-│   ├── api/                 # API 层: Salvo 路由、控制器、JWT 中间件
-│   ├── core/                # 核心层: App 上下文、配置管理、全局 Error
-│   ├── db/                  # 数据层: SurrealDB 客户端封装、Schema 动态转换
-│   ├── jsvm/                # 引擎层: rquickjs 封装、Rust与JS的FFI映射、Hook执行器
-│   ├── storage/             # 存储层: FS/S3 抽象适配器
-│   └── server/              # 启动层: Main 函数、CLI(clap)、静态文件嵌入(rust-embed)
+├── crates/                  # 🦀 Rust 后端微内核 (Cargo Workspace)
+│   ├── herta_api/           # Salvo 路由、控制器、中间件
+│   ├── herta_core/          # App 上下文、配置管理、全局错误处理
+│   ├── herta_db/            # SurrealDB 客户端封装、Schema 动态转换
+│   ├── herta_jsvm/          # rquickjs 运行时、沙盒、Rust↔JS FFI
+│   ├── herta_storage/       # 文件存储抽象适配器 (FS/S3)
+│   └── herta_server/        # CLI 入口、前端静态资源嵌入 (rust-embed)
 │
-├── frontend/                # 🌐 前端 UI (PNPM Workspace)
-│   └── admin-ui/            # 管理后台 SPA (SvelteKit / Vue3 / React)
+├── frontend/                # 🌐 前端项目 (PNPM Workspace)
+│   └── admin-ui/            # SvelteKit 管理后台 SPA
 │
-├── packages/                # 📦 JS/TS 依赖包 (PNPM Workspace)
-│   ├── sdk/                 # (可选) 提供给最终用户的 JS SDK (调用你的 REST API)
-│   └── types/               # (极其重要) 提供给用户写 Hook 用的 .d.ts 类型定义文件
+├── packages/                # 📦 JS/TS 包 (PNPM Workspace)
+│   ├── @hb/sdk/             # (可选) 面向最终用户的 JS SDK
+│   └── @hb/types/           # Hook 编写者的 .d.ts 类型定义
 │
-└── examples/                # 示例目录 (供用户参考如何编写 pb_hooks)
-    ├── hooks/
-    │   └── before_create.js
+└── examples/                # 示例与参考
+    ├── hooks/               # Hook 脚本示例
     └── data/
 ```
 
 ---
 
-### 二、 核心配置文件编写
+## 二、 核心配置文件编写
 
-#### 1. Cargo Workspace 根配置 (`Cargo.toml`)
+### 1. Cargo Workspace 根配置 (`Cargo.toml`)
 
-在根目录通过 Cargo 统一管理 Rust 依赖，避免不同 crate 编译出不同版本的底层依赖，极大优化编译速度。
+在根目录通过 Cargo 统一管理 Rust 依赖，避免不同 crate 编译出不同版本的底层依赖，优化编译速度。
 
 ```toml
 [workspace]
@@ -55,19 +54,19 @@ members = [
     "crates/*"
 ]
 
-# 统一管理所有 crate 的依赖版本
 [workspace.dependencies]
-salvo = { version = "0.65", features = ["oapi", "cors", "jwt-auth"] }
-surrealdb = { version = "1.0", features = ["kv-rocksdb"] }
-rquickjs = { version = "0.5", features = ["tokio", "macro"] }
+anyhow = "1"
+salvo = { version = "0.95", features = ["oapi", "cors", "anyhow", "jwt-auth"] }
+surrealdb = { version = "3.2.3", features = ["kv-rocksdb"] }
+rquickjs = { version = "0.12.2", features = ["macro"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tokio = { version = "1.0", features = ["full"] }
+tokio = { version = "1.53", features = ["full"] }
 ```
 
-#### 2. PNPM Workspace 根配置 (`pnpm-workspace.yaml`)
+### 2. PNPM Workspace 根配置 (`pnpm-workspace.yaml`)
 
-让 PNPM 知道哪些目录是前端/JS包。
+配置 PNPM 工作区包含前端模块与依赖包模块。
 
 ```yaml
 packages:
@@ -75,67 +74,66 @@ packages:
   - 'packages/*'
 ```
 
-#### 3. 根级 `package.json` (作为任务调度中心)
+### 3. 根级 `package.json` (任务调度中心)
 
-利用根目录的 `package.json`，我们可以把复杂的跨语言编译命令封装成简单的 npm scripts。也可以引入 `concurrently` 实现前后端一键同时启动开发。
+利用根目录的 `package.json`，将跨语言编译命令封装成 npm scripts，以实现前后端协同构建。
 
 ```json
 {
-  "name": "my-baas-monorepo",
+  "name": "@hb/monorepo",
   "private": true,
   "scripts": {
-    "dev:ui": "pnpm --filter admin-ui dev",
-    "dev:server": "cargo watch -x 'run -p my-baas-server'",
-    "dev": "concurrently \"pnpm dev:ui\" \"pnpm dev:server\"",
-    "build:ui": "pnpm --filter admin-ui build",
+    "dev:ui": "pnpm --filter @hb/admin-ui dev",
+    "dev:server": "cargo watch -x 'run -p herta_server'",
+    "dev": "turbo run dev",
+    "build:ui": "pnpm --filter @hb/admin-ui build",
     "build:server": "cargo build --release",
-    "build": "pnpm build:ui && pnpm build:server"
+    "build": "turbo run build"
   },
   "devDependencies": {
-    "concurrently": "^8.0.0"
+    "turbo": "^2.10.7"
   }
 }
 ```
 
 ---
 
-### 三、 架构设计亮点与填坑指南
+## 三、 架构设计亮点与技术解析
 
-#### 1. 为什么把 Rust 拆成这么多 Crates？
+### 1. Crates 模块拆分优势
 
-* **编译速度**：`rquickjs` (包含 C 编译) 和 `surrealdb` (包含 RocksDB C++ 编译) 编译极慢。如果全放在一个项目里，改一行 API 路由代码都要等很久。拆分后，`jsvm` 和 `db` 只要不改动，Cargo 就会直接复用缓存，Salvo 的路由层 (`api`) 秒级编译。
-* **依赖隔离**：前端后台打包（`rust-embed`）只在 `server` crate 里进行，不会污染底层的 `core`。
+- **编译速度**：`rquickjs`（包含 C 编译）和 `surrealdb`（包含 RocksDB C++ 编译）构建耗时较长。拆分后，`herta_jsvm` 和 `herta_db` 若无变动即可复用缓存，Salvo 的路由层（`herta_api`）可实现快速编译。
+- **依赖隔离**：前端后台打包（`rust-embed`）仅在 `herta_server` crate 中进行，不污染底层 `herta_core` 模块。
 
-#### 2. 前端打包与 Rust 静态嵌入的“生命周期”
+### 2. 前端打包与 Rust 静态嵌入流程
 
-这是一个核心难点：**如何把前端 Svelte 代码打包进 Rust 二进制文件？**
+通过 `rust-embed` 将前端 Svelte 代码打包进 Rust 二进制文件。
 
-**流程设计：**
+**构建流程：**
 
-1. 运行 `pnpm build:ui`，在 `frontend/admin-ui/dist` 生成静态 HTML/JS/CSS。
-2. 在 `crates/server` 中，引入 `rust-embed` 库。
-3. 代码中这样写：
+1. 执行 `pnpm build:ui`，在 `frontend/admin-ui/build` 或 `dist` 生成静态 HTML/JS/CSS。
+2. 在 `crates/herta_server` 中，引入 `rust-embed` 库。
+3. 代码实现如下：
 
    ```rust
-   // crates/server/src/ui.rs
+   // crates/herta_server/src/ui.rs
    use rust_embed::RustEmbed;
 
    #[derive(RustEmbed)]
-   // 指向 PNPM 构建出来的产物目录
    #[folder = "../../frontend/admin-ui/dist"] 
    pub struct AdminUiAssets;
    ```
 
-4. **避坑**：必须要确保**先执行 JS build，再执行 Cargo build**（如上面 `package.json` 的 `build` 脚本所示）。否则 Cargo 编译时会报错找不到 `dist` 目录。
+4. **构建顺序**：系统确保先执行 JS 构建，再执行 Cargo 构建，以避免 Cargo 找不到目标目录。
 
-#### 3. 为什么需要 `packages/types` 目录？(杀手级 DX 体验)
+### 3. `@hb/types` 包的作用
 
-你的框架允许用户在 `hooks` 目录下写 JS/TS 脚本（使用 `rquickjs` 运行）。用户写代码时，最需要的是**代码提示（Autocomplete）**。
+HertaBase 允许在 `hooks` 目录下编写 JS/TS 脚本，`@hb/types` 提供了编写时的代码提示（Autocomplete）。
 
-* 在 `packages/types` 中，你手写一套 `index.d.ts`，定义你通过 FFI 暴露给 JS 的 API：
+- 在 `packages/@hb/types` 中维护 `index.d.ts`，定义 FFI 暴露给 JS 的 API：
 
     ```typescript
-    // packages/types/index.d.ts
+    // packages/@hb/types/index.d.ts
     declare global {
       const $app: {
         db: {
@@ -149,18 +147,18 @@ packages:
     }
     ```
 
-* 将这个包发布到 npm（或者用户本地引用）。用户在 VSCode 里写 Hook 时，只要引用了这个类型文件，就能享受极爽的强类型提示，而实际运行时，是由你的 Rust `rquickjs` 提供真正的 `$app` 对象。
+- 开发者在编写 Hook 时引用该包即可获得类型提示，实际运行时由 Rust 的 `rquickjs` 提供真正的 `$app` 对象。
 
-#### 4. 开发环境的热更新联动
+### 4. 开发环境的热更新联动
 
-* **前端热更新**：`admin-ui` 使用 Vite 启动，监听 `http://localhost:5173`。
-* **后端热更新**：使用 `cargo-watch`，监听 `http://localhost:8080`。
-* **API 代理**：在 `admin-ui` 的 `vite.config.ts` 中配置 proxy，把前端所有对 `/api/*` 的请求代理到 Rust 服务器（8080端口）。这样你在开发时就能享受前后端分离的极速热更新体验，只有在最终发布（Release）时才将它们合体。
+- **前端热更新**：`admin-ui` 使用 Vite 启动监听（默认 `http://localhost:5173`）。
+- **后端热更新**：使用 `cargo-watch` 监听 Rust 服务（默认 `http://localhost:8080`）。
+- **API 代理**：在 `admin-ui` 的 `vite.config.ts` 中配置 proxy，将对 `/api/*` 的请求代理到 Rust 服务器。该模式保障了前后端分离的热更新体验，最终 Release 阶段再合并发布。
 
 ### 总结
 
-这套 **Cargo + PNPM 混合工作区** 架构，将 Rust 的底层硬核实力与前端 Node 生态的繁荣完美隔离又巧妙融合。
+Cargo + PNPM 混合工作区架构，实现了 Rust 底层服务与前端 Node 生态的解耦。
 
-1. **开发者体验 (DX)**：你可以用 Vite 极速写前端，用 cargo-watch 极速写后端。
-2. **架构扩展性**：各个模块解耦，如果你有一天想换掉 `rquickjs`，只要重写 `crates/jsvm` 即可，其他模块完全不受影响。
-3. **分发优雅**：最终用户只需要下载一个编译好的单一二进制文件 `my-baas.exe`，开箱即用。
+1. **开发者体验 (DX)**：利用 Vite 极速开发前端，通过 cargo-watch 极速调试后端。
+2. **架构扩展性**：各模块独立，便于未来替换或升级单独组件。
+3. **分发优雅**：应用可被打包为单一二进制文件 `hertabase`，实现开箱即用。
