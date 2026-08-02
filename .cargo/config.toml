@@ -1,0 +1,4 @@
+[env]
+# SurrealDB 3.x pulls AWS-LC through its internal JWT support. On Windows x64,
+# use the assembly objects shipped with aws-lc-sys when NASM is not installed.
+AWS_LC_SYS_PREBUILT_NASM = "1"

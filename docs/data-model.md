@@ -9,7 +9,7 @@ HertaBase 的底层数据存储构建在强大的 **SurrealDB** 之上，充分�
 系统中的表被称为集合 (Collections)，主要分为以下三大类：
 
 - **基础集合 (Base Collection)**: 对应标准的文档集合，存储常规的业务数据（如文章、评论、商品等）。
-- **鉴权集合 (Auth Collection)**: 继承自基础集合，系统会自动为其添加鉴权所需的专用字段（如 `email`, `password_hash`, `token_key`, `verified` 等）。支持用户登录与会话管理。
+- **鉴权集合 (Auth Collection)**: 继承自基础集合，系统会自动为其添加鉴权所需的专用字段（如 `email`, `password_hash`, `token_key`, `verified` 等）。该类型从 Phase 2 开始可创建；Phase 1 会明确拒绝 `type: auth`。
 - **系统集合 (System Collections)**: 维护 HertaBase 内部运行状态的核心集合，不对普通用户开放：
   - `_admins`: 存储超级管理员信息。
   - `_collections`: 存储集合的 Schema 配置和元数据。
@@ -98,4 +98,4 @@ HertaBase 为每条记录自动生成和维护以下系统级基础字段：
 
 ## 9. 结构迁移 (Migration)
 
-HertaBase 提供自动化的 Schema 迁移支持。在配置或管理后台修改集合定义后，核心层会负责自动计算变更（Diff）并安全地应用到底层 SurrealDB 数据库，同时确保类型转换的正确执行。重大变更（如删除有数据的字段）可配置为要求管理员二次确认以防止数据丢失。
+Phase 1 提供非破坏性的增量 Schema 更新，只允许增加字段和索引。字段删除、改名、类型转换、索引删除以及迁移历史记录将在后续迁移阶段实现。

@@ -8,10 +8,14 @@
 
 ```json
 {
-  "code": 400,
-  "message": "Validation failed.",
-  "error": "HB_VALIDATION_ERROR",
-  "details": { "field": "email", "reason": "invalid format" }
+  "data": null,
+  "meta": null,
+  "error": {
+    "code": 400,
+    "message": "Validation failed.",
+    "error": "HB_VALIDATION_ERROR",
+    "details": { "field": "email", "reason": "invalid format" }
+  }
 }
 ```
 

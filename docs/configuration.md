@@ -41,8 +41,7 @@ HertaBase 通过基于 `clap` 构筑的 CLI 工具进行管理：
 
 **数据库连接**
 
-* `HB_DB_ENGINE`：底层存储引擎，可选值 `rocksdb` (默认) | `tikv` (Phase 7 集群支持) | `memory` (仅供测试)。
-* `HB_DB_URI`：仅当引擎为 TiKV 时有效 (例: `tikv://127.0.0.1:2379`)。
+* `HB_DB_ENGINE`：Phase 1 可选值为 `surrealkv`（默认，持久化）或 `memory`（仅供测试）。TiKV 集群支持留到 Phase 7。
 
 **日志与安全**
 
@@ -78,7 +77,7 @@ data_dir = "./hb_data"
 hooks_dir = "./hb_hooks"
 
 [database]
-engine = "rocksdb" # 生产环境推荐 rocksdb，集群环境考虑 tikv
+engine = "surrealkv"
 
 [auth]
 access_ttl = "15m"
@@ -104,7 +103,7 @@ bucket = "hertabase-assets"
 
 HertaBase 将所有状态数据集中于 `--data-dir` (默认 `hb_data/`) 中，以便于无痛备份与迁移：
 
-* `hb_data/database/` — SurrealDB 底层 RocksDB 的键值对存储文件。
+* `hb_data/database/` — SurrealDB 底层 SurrealKV 的键值对存储文件。
 * `hb_data/storage/` — 本地存储模式下，用户上传的附件与文件存放于此。
 * `hb_data/logs/` — 系统自动归档的持久化日志文件。
 * `hb_data/backups/` — 数据库快照与自动备份。

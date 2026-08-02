@@ -10,7 +10,7 @@ HertaBase 项目的开发生命周期分为 7 个核心阶段（Phases），按�
 
 **目标：** 实现系统骨架，打通 Salvo 与 SurrealDB，实现动态集合（Collection）的增删改查。
 
-* **Step 1: 核心上下文抽象**。设计应用级别的 Context，封装 SurrealDB 的连接池（采用 `surrealdb::engine::local::RocksDb` 作为内嵌引擎）。
+* **Step 1: 核心上下文抽象**。设计应用级别的 Context，封装 SurrealDB 客户端（采用 `surrealdb::engine::local::SurrealKv` 作为持久化内嵌引擎，`Mem` 用于测试）。
 * **Step 2: 动态路由与 CRUD**。在 Salvo 中注册通用的 RESTful 路由（如 `GET /api/collections/{name}/records`）。
 * **Step 3: 数据类型转换层**。开发适配层，将客户端请求的 `serde_json::Value` 安全地映射为 SurrealDB 的 `surrealdb::sql::Value`。
 * **Step 4: OpenAPI 自动生成**。集成 Salvo 的 `oapi` 模块，实现数据库 Collection 的 OpenAPI（Swagger/Redoc）文档自动生成。

@@ -4,7 +4,7 @@
 
 **The Next-Generation, Single-Binary Backend-as-a-Service.**
 
-[![Rust](https://img.shields.io/badge/Rust-1.75+-f06292.svg?style=for-the-badge&logo=rust)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/Rust-1.97.1-f06292.svg?style=for-the-badge&logo=rust)](https://www.rust-lang.org)
 [![Salvo](https://img.shields.io/badge/Salvo-Web_Framework-blue.svg?style=for-the-badge)](https://salvo.rs/)
 [![SurrealDB](https://img.shields.io/badge/SurrealDB-Database-ff00a0.svg?style=for-the-badge)](https://surrealdb.com/)
 [![QuickJS](https://img.shields.io/badge/QuickJS-JS_Runtime-f7df1e.svg?style=for-the-badge&logo=javascript)](https://bellard.org/quickjs/)
@@ -14,7 +14,7 @@
 
 > 💡 **HertaBase** 是一个用 Rust 编写的开源 BaaS（后端即服务）。它将 Web 服务器、图/文档数据库、实时订阅引擎、JS 扩展运行时和精美的管理后台，全部打包进**一个极致轻量的独立二进制文件**中。
 
-**⚠️ 注意：本项目目前处于 Pre-Alpha / Planning Stage（预开发/规划阶段）。**
+**⚠️ 注意：本项目目前处于 Pre-Alpha，Phase 1 后端正在实现。**
 
 [快速开始](#-快速开始) • [核心特性](#-核心特性) • [架构设计](#-架构设计) • [编写 Hooks](#-编写扩展-hooks) • [路线图](#-开发路线图-roadmap)
 
@@ -59,11 +59,7 @@ HertaBase 旨在提供极致的开发体验（DX），同时利用 Rust 生态�
 git clone https://github.com/Herta-ai/hertabase.git
 cd hertabase
 
-# 安装前端依赖并构建 UI
-pnpm install
-pnpm build:ui
-
-# 编译 Rust 核心服务器 (Release 模式)
+# 编译 Rust 核心服务器 (Release 模式；Windows 需提供 CMake)
 cargo build --release
 ```
 

@@ -170,8 +170,8 @@ CRUD 和列表接口广泛支持以下参数：
 - `page`: 当前页码（默认 1）。
 - `perPage`: 每页记录数（默认 30）。
 - `sort`: 排序规则，例如 `sort=-created_at,title` （`-` 表示降序）。
-- `filter`: SurrealQL 风格的条件过滤，例如 `filter=(status='active')`。
-- `expand`: 关联字段的急切加载（Eager Loading），例如 `expand=author,comments`。
+- `filter`: 受限且参数化的 SurrealQL 子集，支持 `=`, `!=`, `>`, `>=`, `<`, `<=`, `IN`, `CONTAINS`、`AND/OR` 和括号，例如 `filter=(status='active' AND score>=10)`。不支持函数、子查询或任意 SurrealQL。
+- `expand`: 关联字段的急切加载（Eager Loading），例如 `expand=author,comments.user`。Phase 1 最多 10 条路径、每条最多 3 层，展开内容写入记录的 `expand` 对象并保留原 relation ID。
 
 ## 9. 标准响应格式
 
@@ -184,10 +184,13 @@ CRUD 和列表接口广泛支持以下参数：
   "error": {           // 请求失败时的错误详情（成功时为 null）
     "code": 404,
     "message": "Record not found",
+    "error": "HB_NOT_FOUND",
     "details": {}
   }
 }
 ```
+
+Phase 1 的 Collection 管理接口为 `GET/POST /_/collections` 和 `GET/PATCH/DELETE /_/collections/{name}`。PATCH 只允许增加字段和索引，不执行字段删除、改名或类型转换。Phase 1 仅允许创建 `base` Collection；`auth` Collection 在 Phase 2 启用。
 
 ## 10. 速率限制 (Rate Limiting)
 
