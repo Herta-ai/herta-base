@@ -28,7 +28,7 @@ hertabase/
 │   └── herta_server/        # CLI 入口、前端静态资源嵌入 (rust-embed)
 │
 ├── frontend/                # 🌐 前端项目 (PNPM Workspace)
-│   └── admin-ui/            # SvelteKit 管理后台 SPA
+│   └── admin-ui/            # Vue 管理后台 SPA
 │
 ├── packages/                # 📦 JS/TS 包 (PNPM Workspace)
 │   ├── @hb/sdk/             # (可选) 面向最终用户的 JS SDK

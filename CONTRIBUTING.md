@@ -31,7 +31,7 @@ cargo build
 
 我们推荐使用 **Visual Studio Code** 进行开发，并安装以下插件：
 - **rust-analyzer**: Rust 语言支持
-- **Svelte for VS Code**: Svelte/SvelteKit 支持
+- **Svelte for VS Code**: Svelte/Vue 支持
 - **ESLint**: 代码检查
 - **Prettier**: 代码格式化
 - **Even Better TOML**: TOML 文件支持
@@ -51,7 +51,7 @@ hertabase/
 │   └── herta_server/        # CLI 入口、前端静态资源嵌入 (rust-embed)
 │
 ├── frontend/                # 前端项目 (PNPM Workspace)
-│   └── admin-ui/            # SvelteKit 管理后台 SPA
+│   └── admin-ui/            # Vue 管理后台 SPA
 │
 ├── packages/                # JS/TS 包 (PNPM Workspace)
 │   ├── @hb/sdk/             # (可选) 面向最终用户的 JS SDK

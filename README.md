@@ -32,7 +32,7 @@ HertaBase 旨在提供极致的开发体验（DX），同时利用 Rust 生态�
 - 🔄 **原生实时订阅 (Realtime)**：基于 SurrealDB 的 `LIVE SELECT` 与 Salvo SSE，数据变更推送到客户端。
 - 📖 **OpenAPI 自动生成**：当在后台创建 Collection（表）时，系统自动生成 Swagger/Redoc API 文档。
 - 🛡️ **内建 Auth 与权限引擎**：开箱即用的 JWT 鉴权，支持细粒度的 API 访问规则（API Rules）。
-- 🎨 **现代化 Admin UI**：基于 SvelteKit 构建，并在编译时通过 `rust-embed` 静态嵌入到二进制中。
+- 🎨 **现代化 Admin UI**：基于 Vue 构建，并在编译时通过 `rust-embed` 静态嵌入到二进制中。
 
 ---
 
@@ -44,7 +44,7 @@ HertaBase 旨在提供极致的开发体验（DX），同时利用 Rust 生态�
 | **HTTP 层** | 🌐 **Salvo** | 易用且强大的 Rust Web 框架，原生支持 OpenAPI |
 | **数据库** | 🗄️ **SurrealDB** | 多模数据库，BaaS 架构的核心组件 |
 | **JS 引擎** | 🚀 **rquickjs** | 轻量的 JavaScript 引擎，融入 Rust 异步生态 |
-| **管理后台**| 🎨 **SvelteKit + Tailwind** | SPA 体验，通过 PNPM Workspace 联合构建 |
+| **管理后台**| 🎨 **Vue + Tailwind** | SPA 体验，通过 PNPM Workspace 联合构建 |
 
 ---
 
@@ -120,7 +120,7 @@ hertabase/
 │   └── herta_server/        # CLI 入口、前端静态资源嵌入 (rust-embed)
 │
 ├── frontend/                # 🌐 前端项目 (PNPM Workspace)
-│   └── admin-ui/            # SvelteKit 管理后台 SPA
+│   └── admin-ui/            # Vue 管理后台 SPA
 │
 └── packages/                # 📦 JS/TS 包 (PNPM Workspace)
     ├── @hb/sdk/             # 面向最终用户的 JS SDK
@@ -140,7 +140,7 @@ hertabase/
 | **Phase 3** | JS 扩展运行时 (rquickjs 集成) |
 | **Phase 4** | 实时订阅引擎 (SurrealDB LIVE SELECT + SSE) |
 | **Phase 5** | 文件存储模块 (LocalFS + S3) |
-| **Phase 6** | 管理后台与单体打包 (SvelteKit, rust-embed) |
+| **Phase 6** | 管理后台与单体打包 (Vue, rust-embed) |
 | **Phase 7** | 生产加固与分布式 (CLI, 结构化日志, TiKV 集群) |
 
 ---

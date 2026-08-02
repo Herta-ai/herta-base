@@ -1,0 +1,14 @@
+allowBuilds:
+  '@parcel/watcher': true
+  simple-git-hooks: true
+  unrs-resolver: true
+
+minimumReleaseAgeExclude:
+  - vite@8.2.0
+
+shellEmulator: true
+
+trustPolicy: no-downgrade
+
+overrides:
+  semver: ^7.8.5
