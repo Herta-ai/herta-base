@@ -6,8 +6,8 @@ use regex::Regex;
 use serde_json::{Map, Value, json};
 
 use crate::models::{
-    CollectionDef, CollectionType, FieldDef, FieldType, IndexDef, SchemaMode,
-    UpdateCollectionRequest, relation_is_many,
+    CollectionDef, FieldDef, FieldType, IndexDef, SchemaMode, UpdateCollectionRequest,
+    relation_is_many,
 };
 
 const SYSTEM_FIELDS: [&str; 4] = ["id", "created_at", "updated_at", "deleted_at"];
@@ -33,11 +33,7 @@ pub fn validate_collection(def: &CollectionDef) -> HbResult<()> {
             "collection name cannot start with an underscore",
         ));
     }
-    if def.collection_type != CollectionType::Base {
-        return Err(HbError::validation(
-            "auth collections are not available until Phase 2",
-        ));
-    }
+    validate_rules(&def.rules)?;
 
     let mut fields = HashSet::new();
     for field in &def.fields {
@@ -101,11 +97,82 @@ pub fn validate_patch(existing: &CollectionDef, patch: &UpdateCollectionRequest)
         }
     }
 
-    if patch.fields.is_empty() && patch.indexes.is_empty() {
+    if let Some(rules) = &patch.rules {
+        validate_rules(rules)?;
+    }
+    if patch.fields.is_empty() && patch.indexes.is_empty() && patch.rules.is_none() {
         return Err(HbError::validation(
             "at least one new field or index is required",
         ));
     }
+    Ok(())
+}
+
+pub fn validate_rules(rules: &crate::models::CollectionRules) -> HbResult<()> {
+    for rule in [
+        &rules.list,
+        &rules.view,
+        &rules.create,
+        &rules.update,
+        &rules.delete,
+    ] {
+        validate_rule(rule)?;
+    }
+    Ok(())
+}
+
+fn validate_rule(rule: &crate::models::ApiRule) -> HbResult<()> {
+    let crate::models::ApiRule::Expression(expression) = rule else {
+        return Ok(());
+    };
+    let expression = expression.trim();
+    if expression.is_empty() {
+        return Ok(());
+    }
+    if expression.len() > 4096 {
+        return Err(HbError::validation("API rule expression is too long"));
+    }
+    let upper = expression.to_ascii_uppercase();
+    for forbidden in [
+        ";",
+        "SELECT ",
+        "CREATE ",
+        "UPDATE ",
+        "DELETE ",
+        "REMOVE ",
+        "DEFINE ",
+        "RELATE ",
+        "INSERT ",
+        "UPSERT ",
+        "RETURN ",
+        "THROW ",
+        "SLEEP(",
+        "FUNCTION(",
+        "{",
+        "}",
+        "::",
+    ] {
+        if upper.contains(forbidden) {
+            return Err(HbError::validation(format!(
+                "API rule contains forbidden syntax '{forbidden}'"
+            )));
+        }
+    }
+    let parameter = Regex::new(r"\$[A-Za-z_][A-Za-z0-9_]*").expect("parameter regex is valid");
+    for value in parameter.find_iter(expression) {
+        if !matches!(value.as_str(), "$auth" | "$record" | "$request") {
+            return Err(HbError::validation(format!(
+                "unknown API rule parameter '{}'",
+                value.as_str()
+            )));
+        }
+    }
+    let parsed_expression = expression
+        .replace("$auth", "$hb_auth")
+        .replace("$record", "$hb_record")
+        .replace("$request", "$hb_request");
+    surrealdb_core::syn::parse(&format!("RETURN ({parsed_expression})"))
+        .map_err(|error| HbError::validation(format!("invalid API rule expression: {error}")))?;
     Ok(())
 }
 
@@ -322,6 +389,7 @@ mod tests {
                 options: None,
             }],
             indexes: vec![],
+            rules: Default::default(),
         }
     }
 

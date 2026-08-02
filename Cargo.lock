@@ -1923,6 +1923,7 @@ checksum = "fc0fef456e4baa96da950455cd02c081ca953b141298e41db3fc7e36b1da849c"
 name = "herta_api"
 version = "0.1.0"
 dependencies = [
+ "herta_auth",
  "herta_core",
  "herta_db",
  "salvo",
@@ -1930,6 +1931,24 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "herta_auth"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "argon2",
+ "email_address",
+ "herta_core",
+ "herta_db",
+ "jsonwebtoken",
+ "rand 0.8.7",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -1954,6 +1973,7 @@ dependencies = [
  "serde",
  "serde_json",
  "surrealdb",
+ "surrealdb-core",
  "tokio",
  "tracing",
  "url",

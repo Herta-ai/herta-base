@@ -3,15 +3,21 @@ use salvo::prelude::*;
 use serde_json::json;
 
 use crate::{
+    handlers::auth::require_admin,
     response::{ApiFailure, ApiResponse, parse_error},
     router::ApiState,
 };
 
 #[handler]
-pub async fn list(depot: &mut Depot, res: &mut Response) -> Result<(), ApiFailure> {
+pub async fn list(
+    req: &mut Request,
+    depot: &mut Depot,
+    res: &mut Response,
+) -> Result<(), ApiFailure> {
     let state = depot
         .get_typed::<ApiState>()
         .map_err(|_| internal_state())?;
+    require_admin(req, state).await?;
     let collections = SchemaManager::new(&state.db).list_collections().await?;
     res.render(Json(ApiResponse::ok(collections)));
     Ok(())
@@ -26,6 +32,7 @@ pub async fn create(
     let state = depot
         .get_typed::<ApiState>()
         .map_err(|_| internal_state())?;
+    require_admin(req, state).await?;
     let definition: CollectionDef = req
         .parse_json_with_max_size(state.config.server.max_body_size)
         .await
@@ -48,6 +55,7 @@ pub async fn get(
     let state = depot
         .get_typed::<ApiState>()
         .map_err(|_| internal_state())?;
+    require_admin(req, state).await?;
     let name = path(req, "name")?;
     let collection = SchemaManager::new(&state.db).get_collection(&name).await?;
     res.render(Json(ApiResponse::ok(collection)));
@@ -63,6 +71,7 @@ pub async fn update(
     let state = depot
         .get_typed::<ApiState>()
         .map_err(|_| internal_state())?;
+    require_admin(req, state).await?;
     let name = path(req, "name")?;
     let patch: UpdateCollectionRequest = req
         .parse_json_with_max_size(state.config.server.max_body_size)
@@ -85,6 +94,7 @@ pub async fn delete(
     let state = depot
         .get_typed::<ApiState>()
         .map_err(|_| internal_state())?;
+    require_admin(req, state).await?;
     let name = path(req, "name")?;
     SchemaManager::new(&state.db)
         .delete_collection(&name)

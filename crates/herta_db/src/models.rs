@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -11,6 +11,63 @@ pub struct CollectionDef {
     pub fields: Vec<FieldDef>,
     #[serde(default)]
     pub indexes: Vec<IndexDef>,
+    #[serde(default)]
+    pub rules: CollectionRules,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(default)]
+pub struct CollectionRules {
+    pub list: ApiRule,
+    pub view: ApiRule,
+    pub create: ApiRule,
+    pub update: ApiRule,
+    pub delete: ApiRule,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum ApiRule {
+    #[default]
+    AdminOnly,
+    Boolean(bool),
+    Expression(String),
+}
+
+impl Serialize for ApiRule {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Self::AdminOnly => serializer.serialize_none(),
+            Self::Boolean(value) => serializer.serialize_bool(*value),
+            Self::Expression(value) => serializer.serialize_str(value),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ApiRule {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = Option::<Value>::deserialize(deserializer)?;
+        match value {
+            None | Some(Value::Null) => Ok(Self::AdminOnly),
+            Some(Value::Bool(value)) => Ok(Self::Boolean(value)),
+            Some(Value::String(value)) => Ok(Self::Expression(value)),
+            Some(_) => Err(serde::de::Error::custom(
+                "API rule must be null, a boolean, or a string expression",
+            )),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct RuleContext {
+    pub admin: bool,
+    pub auth: Value,
+    pub request_body: Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -92,6 +149,7 @@ pub struct UpdateCollectionRequest {
     pub fields: Vec<FieldDef>,
     #[serde(default)]
     pub indexes: Vec<IndexDef>,
+    pub rules: Option<CollectionRules>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]

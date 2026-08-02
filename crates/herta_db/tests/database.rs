@@ -1,6 +1,6 @@
 use herta_db::{
-    CollectionDef, CollectionType, DbClient, FieldDef, FieldType, ListParams, RecordManager,
-    SchemaManager, SchemaMode, UpdateCollectionRequest,
+    ApiRule, CollectionDef, CollectionType, DbClient, FieldDef, FieldType, ListParams,
+    RecordManager, RuleContext, SchemaManager, SchemaMode, UpdateCollectionRequest,
 };
 use serde_json::json;
 
@@ -24,6 +24,7 @@ fn posts_collection() -> CollectionDef {
             },
         ],
         indexes: vec![],
+        rules: Default::default(),
     }
 }
 
@@ -63,6 +64,7 @@ async fn collection_and_record_lifecycle() {
                     options: None,
                 }],
                 indexes: vec![],
+                rules: None,
             },
         )
         .await
@@ -78,25 +80,25 @@ async fn collection_and_record_lifecycle() {
 }
 
 #[tokio::test]
-async fn rejects_incomplete_auth_collections_and_unknown_fields() {
+async fn creates_auth_collections_and_rejects_unknown_fields() {
     let db = DbClient::memory().await.unwrap();
     let mut collection = posts_collection();
     collection.collection_type = CollectionType::Auth;
-    assert!(
-        SchemaManager::new(&db)
-            .create_collection(&collection)
-            .await
-            .is_err()
-    );
-
     SchemaManager::new(&db)
-        .create_collection(&posts_collection())
+        .create_collection(&collection)
+        .await
+        .unwrap();
+
+    let mut collection = posts_collection();
+    collection.name = "other_posts".into();
+    SchemaManager::new(&db)
+        .create_collection(&collection)
         .await
         .unwrap();
     assert!(
         RecordManager::new(&db)
             .create(
-                "posts",
+                "other_posts",
                 json!({"title": "Hello", "status": "active", "unknown": true}),
             )
             .await
@@ -120,6 +122,7 @@ async fn expands_relation_records_without_replacing_relation_ids() {
                 options: None,
             }],
             indexes: vec![],
+            rules: Default::default(),
         })
         .await
         .unwrap();
@@ -143,6 +146,10 @@ async fn expands_relation_records_without_replacing_relation_ids() {
                 },
             ],
             indexes: vec![],
+            rules: herta_db::CollectionRules {
+                view: ApiRule::Boolean(true),
+                ..Default::default()
+            },
         })
         .await
         .unwrap();
@@ -168,4 +175,58 @@ async fn expands_relation_records_without_replacing_relation_ids() {
         .unwrap();
     assert_eq!(expanded["author"], user_id);
     assert_eq!(expanded["expand"]["author"]["name"], "Ada");
+
+    let anonymous = RuleContext::default();
+    let restricted = records
+        .get_authorized("articles", article_id, Some("author"), &anonymous)
+        .await
+        .unwrap();
+    assert_eq!(restricted["author"], user_id);
+    assert!(restricted["expand"]["author"].is_null());
+}
+
+#[tokio::test]
+async fn stores_rule_patches_and_rejects_statement_rules() {
+    let db = DbClient::memory().await.unwrap();
+    let schema = SchemaManager::new(&db);
+    schema.create_collection(&posts_collection()).await.unwrap();
+
+    let rules: herta_db::CollectionRules = serde_json::from_value(json!({
+        "list": true,
+        "view": "$auth.id = $record.owner",
+        "create": false,
+        "update": null,
+        "delete": ""
+    }))
+    .unwrap();
+    let updated = schema
+        .update_collection(
+            "posts",
+            &UpdateCollectionRequest {
+                fields: vec![],
+                indexes: vec![],
+                rules: Some(rules.clone()),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(updated.rules, rules);
+
+    let invalid: herta_db::CollectionRules = serde_json::from_value(json!({
+        "list": "true; DELETE posts"
+    }))
+    .unwrap();
+    assert!(
+        schema
+            .update_collection(
+                "posts",
+                &UpdateCollectionRequest {
+                    fields: vec![],
+                    indexes: vec![],
+                    rules: Some(invalid),
+                },
+            )
+            .await
+            .is_err()
+    );
 }

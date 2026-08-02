@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use herta_core::HbResult;
-use herta_db::{CollectionDef, FieldDef, FieldType, SchemaManager, relation_is_many};
+use herta_db::{
+    CollectionDef, CollectionType, FieldDef, FieldType, SchemaManager, relation_is_many,
+};
 use serde_json::{Map, Value, json};
 use tokio::sync::RwLock;
 
@@ -32,6 +34,9 @@ pub fn generate_document(collections: &[CollectionDef]) -> Value {
     for collection in collections {
         add_collection_paths(&mut paths, collection);
         add_collection_schemas(&mut schemas, collection);
+        if collection.collection_type == CollectionType::Auth {
+            add_auth_collection_paths(&mut paths, collection);
+        }
     }
     json!({
         "openapi": "3.1.0",
@@ -40,7 +45,12 @@ pub fn generate_document(collections: &[CollectionDef]) -> Value {
             "version": env!("CARGO_PKG_VERSION")
         },
         "paths": paths,
-        "components": { "schemas": schemas }
+        "components": {
+            "schemas": schemas,
+            "securitySchemes": {
+                "bearerAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"}
+            }
+        }
     })
 }
 
@@ -61,6 +71,34 @@ fn base_paths() -> Map<String, Value> {
             "delete": operation("Delete collection", "GenericEnvelope", true)
         }),
     );
+    paths.insert(
+        "/api/auth/register".into(),
+        json!({"post": auth_operation("Register a user", "_usersRegister", false)}),
+    );
+    paths.insert(
+        "/api/auth/login".into(),
+        json!({"post": auth_operation("Log in a user", "Credentials", false)}),
+    );
+    paths.insert(
+        "/api/auth/refresh".into(),
+        json!({"post": auth_operation("Rotate a user token pair", "RefreshRequest", false)}),
+    );
+    paths.insert(
+        "/api/auth/me".into(),
+        json!({"get": secured_operation("Get the current user", "AuthUserEnvelope")}),
+    );
+    paths.insert(
+        "/api/admin/auth/login".into(),
+        json!({"post": auth_operation("Log in an administrator", "Credentials", false)}),
+    );
+    paths.insert(
+        "/api/admin/auth/refresh".into(),
+        json!({"post": auth_operation("Rotate an administrator token pair", "RefreshRequest", false)}),
+    );
+    paths.insert(
+        "/api/admin/auth/me".into(),
+        json!({"get": secured_operation("Get the current administrator", "AuthUserEnvelope")}),
+    );
     paths
 }
 
@@ -80,6 +118,54 @@ fn base_schemas() -> Map<String, Value> {
         }),
     );
     schemas.insert("Collection".into(), collection_schema());
+    schemas.insert("ApiRules".into(), rules_schema());
+    schemas.insert(
+        "Credentials".into(),
+        json!({
+            "type": "object",
+            "required": ["email", "password"],
+            "properties": {
+                "email": {"type": "string", "format": "email"},
+                "password": {"type": "string", "format": "password", "minLength": 12}
+            }
+        }),
+    );
+    schemas.insert(
+        "RefreshRequest".into(),
+        json!({
+            "type": "object",
+            "required": ["refreshToken"],
+            "properties": {"refreshToken": {"type": "string"}}
+        }),
+    );
+    schemas.insert(
+        "AuthUser".into(),
+        json!({
+            "type": "object",
+            "required": ["id", "collection", "email", "role", "verified", "admin"],
+            "properties": {
+                "id": {"type": "string"}, "collection": {"type": "string"},
+                "email": {"type": "string", "format": "email"}, "role": {"type": "string"},
+                "verified": {"type": "boolean"}, "admin": {"type": "boolean"}
+            }
+        }),
+    );
+    schemas.insert(
+        "AuthUserEnvelope".into(),
+        envelope(json!({"$ref": "#/components/schemas/AuthUser"})),
+    );
+    schemas.insert(
+        "AuthEnvelope".into(),
+        envelope(json!({
+            "type": "object",
+            "required": ["accessToken", "refreshToken", "tokenType", "expiresIn", "user"],
+            "properties": {
+                "accessToken": {"type": "string"}, "refreshToken": {"type": "string"},
+                "tokenType": {"type": "string", "const": "Bearer"}, "expiresIn": {"type": "integer"},
+                "user": {"$ref": "#/components/schemas/AuthUser"}
+            }
+        })),
+    );
     schemas.insert(
         "CollectionPatch".into(),
         json!({
@@ -87,6 +173,7 @@ fn base_schemas() -> Map<String, Value> {
             "properties": {
                 "fields": {"type": "array", "items": {"type": "object"}},
                 "indexes": {"type": "array", "items": {"type": "object"}}
+                ,"rules": {"$ref": "#/components/schemas/ApiRules"}
             }
         }),
     );
@@ -108,10 +195,22 @@ fn collection_schema() -> Value {
         "required": ["name", "type", "schema_mode", "fields"],
         "properties": {
             "name": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$"},
-            "type": {"type": "string", "enum": ["base"]},
+            "type": {"type": "string", "enum": ["base", "auth"]},
             "schema_mode": {"type": "string", "enum": ["schema-less", "strict", "mixed"]},
             "fields": {"type": "array", "items": {"type": "object"}},
-            "indexes": {"type": "array", "items": {"type": "object"}}
+            "indexes": {"type": "array", "items": {"type": "object"}},
+            "rules": {"$ref": "#/components/schemas/ApiRules"}
+        }
+    })
+}
+
+fn rules_schema() -> Value {
+    let rule = json!({"oneOf": [{"type": "null"}, {"type": "boolean"}, {"type": "string"}]});
+    json!({
+        "type": "object",
+        "properties": {
+            "list": rule.clone(), "view": rule.clone(), "create": rule.clone(),
+            "update": rule.clone(), "delete": rule
         }
     })
 }
@@ -128,11 +227,13 @@ fn add_collection_paths(paths: &mut Map<String, Value>, collection: &CollectionD
         json!({
             "get": {
                 "summary": format!("List {} records", collection.name),
+                "security": [{}, {"bearerAuth": []}],
                 "parameters": list_parameters(),
                 "responses": success_response(&list_name)
             },
             "post": {
                 "summary": format!("Create a {} record", collection.name),
+                "security": [{}, {"bearerAuth": []}],
                 "requestBody": json_body(&create),
                 "responses": success_response(&envelope_name)
             }
@@ -144,16 +245,19 @@ fn add_collection_paths(paths: &mut Map<String, Value>, collection: &CollectionD
             "parameters": [path_parameter("id")],
             "get": {
                 "summary": format!("Get a {} record", collection.name),
+                "security": [{}, {"bearerAuth": []}],
                 "parameters": [{"name": "expand", "in": "query", "schema": {"type": "string"}}],
                 "responses": success_response(&envelope_name)
             },
             "patch": {
                 "summary": format!("Update a {} record", collection.name),
+                "security": [{}, {"bearerAuth": []}],
                 "requestBody": json_body(&update),
                 "responses": success_response(&envelope_name)
             },
             "delete": {
                 "summary": format!("Soft-delete a {} record", collection.name),
+                "security": [{}, {"bearerAuth": []}],
                 "responses": success_response(&envelope_name)
             }
         }),
@@ -199,17 +303,57 @@ fn add_collection_schemas(schemas: &mut Map<String, Value>, collection: &Collect
     );
     schemas.insert(
         create_name,
-        json!({"type": "object", "required": required, "properties": request_properties}),
+        json!({"type": "object", "required": required.clone(), "properties": request_properties.clone()}),
     );
     schemas.insert(
         update_name,
-        json!({"type": "object", "properties": request_properties}),
+        json!({"type": "object", "properties": request_properties.clone()}),
     );
     schemas.insert(
         format!("{}Envelope", collection.name),
         envelope(json!({"$ref": format!("#/components/schemas/{record_name}")})),
     );
     schemas.insert(format!("{}ListEnvelope", collection.name), envelope(json!({"type": "array", "items": {"$ref": format!("#/components/schemas/{record_name}")}})));
+    if collection.collection_type == CollectionType::Auth {
+        let mut register_properties = request_properties;
+        register_properties.insert("email".into(), json!({"type": "string", "format": "email"}));
+        register_properties.insert(
+            "password".into(),
+            json!({"type": "string", "format": "password", "minLength": 12}),
+        );
+        let mut register_required = required;
+        register_required.push(json!("email"));
+        register_required.push(json!("password"));
+        schemas.insert(
+            format!("{}Register", collection.name),
+            json!({"type": "object", "required": register_required, "properties": register_properties}),
+        );
+    }
+}
+
+fn add_auth_collection_paths(paths: &mut Map<String, Value>, collection: &CollectionDef) {
+    let root = format!("/api/auth/{}", collection.name);
+    paths.insert(format!("{root}/register"), json!({
+        "post": auth_operation("Register an auth collection user", &format!("{}Register", collection.name), false)
+    }));
+    paths.insert(
+        format!("{root}/login"),
+        json!({
+            "post": auth_operation("Log in an auth collection user", "Credentials", false)
+        }),
+    );
+    paths.insert(
+        format!("{root}/refresh"),
+        json!({
+            "post": auth_operation("Rotate an auth collection token pair", "RefreshRequest", false)
+        }),
+    );
+    paths.insert(
+        format!("{root}/me"),
+        json!({
+            "get": secured_operation("Get the current auth collection user", "AuthUserEnvelope")
+        }),
+    );
 }
 
 fn field_schema(field: &FieldDef) -> Value {
@@ -245,7 +389,7 @@ fn envelope(data: Value) -> Value {
 }
 
 fn operation(summary: &str, response: &str, path_name: bool) -> Value {
-    let mut value = json!({"summary": summary, "responses": success_response(response)});
+    let mut value = json!({"summary": summary, "security": [{"bearerAuth": []}], "responses": success_response(response)});
     if path_name {
         value["parameters"] = json!([path_parameter("name")]);
     }
@@ -253,7 +397,23 @@ fn operation(summary: &str, response: &str, path_name: bool) -> Value {
 }
 
 fn operation_with_body(summary: &str, body: &str, response: &str) -> Value {
-    json!({"summary": summary, "requestBody": json_body(body), "responses": success_response(response)})
+    json!({"summary": summary, "security": [{"bearerAuth": []}], "requestBody": json_body(body), "responses": success_response(response)})
+}
+
+fn secured_operation(summary: &str, response: &str) -> Value {
+    json!({"summary": summary, "security": [{"bearerAuth": []}], "responses": success_response(response)})
+}
+
+fn auth_operation(summary: &str, body: &str, secured: bool) -> Value {
+    let mut operation = json!({
+        "summary": summary,
+        "requestBody": json_body(body),
+        "responses": success_response("AuthEnvelope")
+    });
+    if secured {
+        operation["security"] = json!([{"bearerAuth": []}]);
+    }
+    operation
 }
 
 fn json_body(schema: &str) -> Value {
@@ -300,6 +460,7 @@ mod tests {
                 options: None,
             }],
             indexes: vec![],
+            rules: Default::default(),
         };
         let document = generate_document(&[collection]);
         assert!(document["paths"]["/api/collections/posts/records"].is_object());

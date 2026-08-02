@@ -28,6 +28,7 @@
   - `HB_AUTH_REQUIRED` (401) — 缺少认证令牌或令牌无效。
   - `HB_TOKEN_EXPIRED` (401) — JWT 认证令牌已过期。
   - `HB_FORBIDDEN` (403) — API Rule 拒绝该操作。
+  - `HB_ACCOUNT_LOCKED` (423) — 连续登录失败达到阈值，账户处于临时锁定状态。
   - `HB_HOOK_DENIED` (403) — JS 生命周期 Hook 返回 false 或主动抛出异常阻断请求。
   - `HB_NOT_FOUND` (404) — 请求的具体记录或目标未找到。
   - `HB_COLLECTION_NOT_FOUND` (404) — 指定的数据集合（Collection）不存在。

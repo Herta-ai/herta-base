@@ -35,9 +35,14 @@ HertaBase 通过基于 `clap` 构筑的 CLI 工具进行管理：
 
 **鉴权配置**
 
-* `HB_JWT_SECRET`：JWT 签名密钥（如果未设置且文件中无记录，系统首次启动将随机生成并写入配置）。
-* `HB_JWT_ACCESS_TTL`：访问令牌存活时间。
-* `HB_JWT_REFRESH_TTL`：刷新令牌存活时间。
+* `HB_JWT_SECRET`：至少 32 字节的 JWT 签名密钥。未设置时自动生成并原子写入 `HB_DATA_DIR/auth/jwt-secret`。
+* `HB_BOOTSTRAP_ADMIN_EMAIL`, `HB_BOOTSTRAP_ADMIN_PASSWORD`：仅当 `_admins` 为空时创建首个管理员；必须同时提供，密码至少 12 个字符。
+* `HB_AUTH_ACCESS_TOKEN_TTL_SECONDS`：Access Token 存活秒数，默认 `900`。
+* `HB_AUTH_REFRESH_TOKEN_TTL_SECONDS`：Refresh Token 存活秒数，默认 `604800`。
+* `HB_AUTH_LOCKOUT_THRESHOLD`, `HB_AUTH_LOCKOUT_SECONDS`：登录失败锁定阈值和时长，默认 `5` 次、`900` 秒。
+* `HB_AUTH_REGISTER_RATE_LIMIT_PER_MINUTE`：单 IP 注册限流，默认 `5`。
+* `HB_AUTH_LOGIN_RATE_LIMIT_PER_MINUTE`：单 IP 登录限流，默认 `10`。
+* `HB_AUTH_REFRESH_RATE_LIMIT_PER_MINUTE`：单 IP 刷新限流，默认 `30`。
 
 **数据库连接**
 
@@ -80,9 +85,13 @@ hooks_dir = "./hb_hooks"
 engine = "surrealkv"
 
 [auth]
-access_ttl = "15m"
-refresh_ttl = "7d"
-# jwt_secret = "YOUR_SUPER_SECRET_KEY" # 建议通过环境变量 HB_JWT_SECRET 提供
+access_token_ttl_seconds = 900
+refresh_token_ttl_seconds = 604800
+lockout_threshold = 5
+lockout_seconds = 900
+register_rate_limit_per_minute = 5
+login_rate_limit_per_minute = 10
+refresh_rate_limit_per_minute = 30
 
 [security.cors]
 origins = ["https://my-app.com", "https://admin.herta.ai"]
@@ -104,6 +113,7 @@ bucket = "hertabase-assets"
 HertaBase 将所有状态数据集中于 `--data-dir` (默认 `hb_data/`) 中，以便于无痛备份与迁移：
 
 * `hb_data/database/` — SurrealDB 底层 SurrealKV 的键值对存储文件。
+* `hb_data/auth/jwt-secret` — 自动生成的 HS256 密钥；必须与数据库一起备份并限制文件权限。
 * `hb_data/storage/` — 本地存储模式下，用户上传的附件与文件存放于此。
 * `hb_data/logs/` — 系统自动归档的持久化日志文件。
 * `hb_data/backups/` — 数据库快照与自动备份。

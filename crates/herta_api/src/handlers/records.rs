@@ -3,6 +3,7 @@ use salvo::prelude::*;
 use serde_json::{Value, json};
 
 use crate::{
+    handlers::auth::{identity, rule_context},
     response::{ApiFailure, ApiResponse, parse_error},
     router::ApiState,
 };
@@ -14,6 +15,7 @@ pub async fn list(
     res: &mut Response,
 ) -> Result<(), ApiFailure> {
     let state = state(depot)?;
+    let identity = identity(req, state).await?;
     let collection = path(req, "collection")?;
     let params = ListParams {
         page: req.query("page"),
@@ -23,7 +25,7 @@ pub async fn list(
         expand: req.query("expand"),
     };
     let (records, total) = RecordManager::new(&state.db)
-        .list(&collection, &params)
+        .list_authorized(&collection, &params, &rule_context(&identity, Value::Null))
         .await?;
     res.render(Json(ApiResponse::with_meta(
         records,
@@ -39,11 +41,13 @@ pub async fn get(
     res: &mut Response,
 ) -> Result<(), ApiFailure> {
     let state = state(depot)?;
+    let identity = identity(req, state).await?;
     let record = RecordManager::new(&state.db)
-        .get(
+        .get_authorized(
             &path(req, "collection")?,
             &path(req, "id")?,
             req.query::<String>("expand").as_deref(),
+            &rule_context(&identity, Value::Null),
         )
         .await?;
     res.render(Json(ApiResponse::ok(record)));
@@ -57,13 +61,14 @@ pub async fn create(
     res: &mut Response,
 ) -> Result<(), ApiFailure> {
     let state = state(depot)?;
+    let identity = identity(req, state).await?;
     let collection = path(req, "collection")?;
     let body: Value = req
         .parse_json_with_max_size(state.config.server.max_body_size)
         .await
         .map_err(parse_error)?;
     let record = RecordManager::new(&state.db)
-        .create(&collection, body)
+        .create_authorized(&collection, body.clone(), &rule_context(&identity, body))
         .await?;
     res.status_code(StatusCode::CREATED);
     res.render(Json(ApiResponse::ok(record)));
@@ -77,6 +82,7 @@ pub async fn update(
     res: &mut Response,
 ) -> Result<(), ApiFailure> {
     let state = state(depot)?;
+    let identity = identity(req, state).await?;
     let collection = path(req, "collection")?;
     let id = path(req, "id")?;
     let body: Value = req
@@ -84,7 +90,12 @@ pub async fn update(
         .await
         .map_err(parse_error)?;
     let record = RecordManager::new(&state.db)
-        .update(&collection, &id, body)
+        .update_authorized(
+            &collection,
+            &id,
+            body.clone(),
+            &rule_context(&identity, body),
+        )
         .await?;
     res.render(Json(ApiResponse::ok(record)));
     Ok(())
@@ -97,8 +108,13 @@ pub async fn delete(
     res: &mut Response,
 ) -> Result<(), ApiFailure> {
     let state = state(depot)?;
+    let identity = identity(req, state).await?;
     let record = RecordManager::new(&state.db)
-        .delete(&path(req, "collection")?, &path(req, "id")?)
+        .delete_authorized(
+            &path(req, "collection")?,
+            &path(req, "id")?,
+            &rule_context(&identity, Value::Null),
+        )
         .await?;
     res.render(Json(ApiResponse::ok(record)));
     Ok(())

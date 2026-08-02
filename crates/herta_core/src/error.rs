@@ -22,6 +22,16 @@ pub enum HbError {
     Conflict(String),
     #[error("Request payload too large")]
     PayloadTooLarge,
+    #[error("Authentication required")]
+    AuthRequired,
+    #[error("Authentication token has expired")]
+    TokenExpired,
+    #[error("Access is forbidden")]
+    Forbidden,
+    #[error("Rate limit exceeded")]
+    RateLimited,
+    #[error("Account is temporarily locked")]
+    AccountLocked,
     #[error("Database error: {0}")]
     Database(String),
     #[error("Internal error")]
@@ -42,6 +52,10 @@ impl HbError {
             Self::NotFound | Self::CollectionNotFound(_) => 404,
             Self::Conflict(_) => 409,
             Self::PayloadTooLarge => 413,
+            Self::AuthRequired | Self::TokenExpired => 401,
+            Self::Forbidden => 403,
+            Self::RateLimited => 429,
+            Self::AccountLocked => 423,
             Self::Database(_) | Self::Internal => 500,
         }
     }
@@ -55,6 +69,11 @@ impl HbError {
             Self::CollectionNotFound(_) => "HB_COLLECTION_NOT_FOUND",
             Self::Conflict(_) => "HB_CONFLICT",
             Self::PayloadTooLarge => "HB_PAYLOAD_TOO_LARGE",
+            Self::AuthRequired => "HB_AUTH_REQUIRED",
+            Self::TokenExpired => "HB_TOKEN_EXPIRED",
+            Self::Forbidden => "HB_FORBIDDEN",
+            Self::RateLimited => "HB_RATE_LIMITED",
+            Self::AccountLocked => "HB_ACCOUNT_LOCKED",
             Self::Database(_) => "HB_DB_ERROR",
             Self::Internal => "HB_INTERNAL_ERROR",
         }

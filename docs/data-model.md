@@ -9,7 +9,7 @@ HertaBase 的底层数据存储构建在强大的 **SurrealDB** 之上，充分�
 系统中的表被称为集合 (Collections)，主要分为以下三大类：
 
 - **基础集合 (Base Collection)**: 对应标准的文档集合，存储常规的业务数据（如文章、评论、商品等）。
-- **鉴权集合 (Auth Collection)**: 继承自基础集合，系统会自动为其添加鉴权所需的专用字段（如 `email`, `password_hash`, `token_key`, `verified` 等）。该类型从 Phase 2 开始可创建；Phase 1 会明确拒绝 `type: auth`。
+- **鉴权集合 (Auth Collection)**: 继承自基础集合，系统会自动添加 `email`, `password_hash`, `token_key`, `verified`, `role` 和登录锁定字段，并创建唯一邮箱索引。敏感字段不会通过 REST 返回。
 - **系统集合 (System Collections)**: 维护 HertaBase 内部运行状态的核心集合，不对普通用户开放：
   - `_admins`: 存储超级管理员信息。
   - `_collections`: 存储集合的 Schema 配置和元数据。
@@ -92,10 +92,17 @@ HertaBase 为每条记录自动生成和维护以下系统级基础字段：
   ],
   "indexes": [
     { "name": "idx_author", "fields": ["author"] }
-  ]
+  ],
+  "rules": {
+    "list": true,
+    "view": "$auth.id = $record.author",
+    "create": "$auth.id = $record.author",
+    "update": "$auth.id = $record.author",
+    "delete": null
+  }
 }
 ```
 
 ## 9. 结构迁移 (Migration)
 
-Phase 1 提供非破坏性的增量 Schema 更新，只允许增加字段和索引。字段删除、改名、类型转换、索引删除以及迁移历史记录将在后续迁移阶段实现。
+字段和索引更新仍是只追加的；PATCH 可以整体替换 `rules`。规则的 `null` 表示仅管理员，`false` 或空字符串表示拒绝，`true` 表示公开，字符串是经过 AST 校验的 SurrealQL 标量布尔表达式。

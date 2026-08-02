@@ -25,8 +25,7 @@ HertaBase 采用 RESTful 风格的 API 设计理念，致力于提供清晰、�
   ```json
   {
     "email": "user@example.com",
-    "password": "securepassword123",
-    "passwordConfirm": "securepassword123"
+    "password": "securepassword123"
   }
   ```
 
@@ -34,8 +33,14 @@ HertaBase 采用 RESTful 风格的 API 设计理念，致力于提供清晰、�
 
   ```json
   {
-    "data": { "id": "user_123", "email": "user@example.com" },
-    "meta": {},
+    "data": {
+      "accessToken": "eyJ...",
+      "refreshToken": "eyJ...",
+      "tokenType": "Bearer",
+      "expiresIn": 900,
+      "user": { "id": "_users:...", "email": "user@example.com" }
+    },
+    "meta": null,
     "error": null
   }
   ```
@@ -59,7 +64,10 @@ HertaBase 采用 RESTful 风格的 API 设计理念，致力于提供清晰、�
   ```json
   {
     "data": {
-      "token": "eyJhbGciOiJIUzI1NiIsInR...",
+      "accessToken": "eyJhbGciOiJIUzI1NiIsInR...",
+      "refreshToken": "eyJhbGciOiJIUzI1NiIsInR...",
+      "tokenType": "Bearer",
+      "expiresIn": 900,
       "user": { "id": "user_123", "email": "user@example.com" }
     },
     "meta": {},
@@ -71,13 +79,15 @@ HertaBase 采用 RESTful 风格的 API 设计理念，致力于提供清晰、�
 
 ### POST /api/auth/refresh
 
-- **描述**: 刷新当前的 JWT Token。
-- **所需权限**: 已认证用户
+- **描述**: 使用 `{"refreshToken":"..."}` 单次轮换 Access/Refresh Token。旧 Token 重放会撤销整个令牌族。
+- **所需权限**: 有效 Refresh Token
 
 ### GET /api/auth/me
 
 - **描述**: 获取当前登录用户的详细信息。
 - **所需权限**: 已认证用户
+
+以上四个接口是 `_users` 的别名。动态 Auth Collection 使用 `/api/auth/{collection}/register|login|refresh|me`。管理员使用 `/api/admin/auth/login|refresh|me`。
 
 ## 4. 集合操作接口 (Collection CRUD)
 
@@ -158,7 +168,7 @@ HertaBase 采用 RESTful 风格的 API 设计理念，致力于提供清晰、�
 
 ## 7. 管理端接口 (Admin API)
 
-这些接口保留给管理控制台使用（Phase 6）。
+这些接口仅接受管理员 Access Token；普通用户 Token 返回 403，缺少凭据返回 401。
 
 - **集合管理**: `/_/collections` 等，用于 Schema 动态转换与管理。
 - **用户管理**: `/_/users` 等，管理系统中的所有用户及超级管理员 `_admins`。
@@ -190,12 +200,8 @@ CRUD 和列表接口广泛支持以下参数：
 }
 ```
 
-Phase 1 的 Collection 管理接口为 `GET/POST /_/collections` 和 `GET/PATCH/DELETE /_/collections/{name}`。PATCH 只允许增加字段和索引，不执行字段删除、改名或类型转换。Phase 1 仅允许创建 `base` Collection；`auth` Collection 在 Phase 2 启用。
+Collection 管理接口为 `GET/POST /_/collections` 和 `GET/PATCH/DELETE /_/collections/{name}`。PATCH 只允许增加字段和索引，但可整体替换 `rules`。`base` 与 `auth` Collection 均可创建，新集合规则默认 `null`（仅管理员）。OpenAPI JSON 同样需要管理员 Token。
 
 ## 10. 速率限制 (Rate Limiting)
 
-为了保证服务的可用性，HertaBase API 将提供请求速率限制。客户端可参考以下响应头：
-
-- `X-RateLimit-Limit`: 周期内允许的最大请求数。
-- `X-RateLimit-Remaining`: 当前周期内剩余的请求数。
-- `X-RateLimit-Reset`: 速率限制重置的 UNIX 时间戳。
+认证端点按单进程、单 IP、每分钟限流：注册 5 次、登录 10 次、刷新 30 次。超过限制返回 429 `HB_RATE_LIMITED`；当前版本不发送配额响应头。

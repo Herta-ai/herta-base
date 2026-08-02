@@ -46,6 +46,9 @@ impl<'a> SchemaManager<'a> {
         for field in &def.fields {
             append_field_ddl(&mut sql, &table, field);
         }
+        if def.collection_type == crate::models::CollectionType::Auth {
+            append_auth_fields(&mut sql, &table);
+        }
         append_system_fields(&mut sql, &table);
         for index in &def.indexes {
             append_index_ddl(&mut sql, &table, index);
@@ -129,6 +132,9 @@ impl<'a> SchemaManager<'a> {
         let mut updated = existing.clone();
         updated.fields.extend(patch.fields.clone());
         updated.indexes.extend(patch.indexes.clone());
+        if let Some(rules) = &patch.rules {
+            updated.rules = rules.clone();
+        }
 
         let table = quote_identifier(name);
         let mut sql = String::from("BEGIN TRANSACTION;\n");
@@ -201,6 +207,19 @@ fn append_system_fields(sql: &mut String, table: &str) {
     ));
 }
 
+fn append_auth_fields(sql: &mut String, table: &str) {
+    sql.push_str(&format!(
+        "DEFINE FIELD email ON TABLE {table} TYPE string;\n\
+         DEFINE FIELD password_hash ON TABLE {table} TYPE string;\n\
+         DEFINE FIELD token_key ON TABLE {table} TYPE string;\n\
+         DEFINE FIELD verified ON TABLE {table} TYPE bool DEFAULT false;\n\
+         DEFINE FIELD role ON TABLE {table} TYPE string DEFAULT 'user';\n\
+         DEFINE FIELD failed_attempts ON TABLE {table} TYPE number DEFAULT 0;\n\
+         DEFINE FIELD locked_until ON TABLE {table} TYPE option<number> DEFAULT NONE;\n\
+         DEFINE INDEX idx_auth_email ON TABLE {table} FIELDS email UNIQUE;\n"
+    ));
+}
+
 fn append_index_ddl(sql: &mut String, table: &str, index: &IndexDef) {
     let index_name = quote_identifier(&index.name);
     let fields = index
@@ -225,6 +244,7 @@ pub(crate) fn database_error(error: impl std::fmt::Display) -> HbError {
     let message = error.to_string();
     if message.to_ascii_lowercase().contains("unique")
         || message.to_ascii_lowercase().contains("already exists")
+        || message.to_ascii_lowercase().contains("already contains")
     {
         HbError::Conflict(message)
     } else {

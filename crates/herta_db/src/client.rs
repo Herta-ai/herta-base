@@ -38,10 +38,36 @@ impl DbClient {
             .query(
                 "DEFINE TABLE IF NOT EXISTS _collections SCHEMALESS;\
                  DEFINE INDEX IF NOT EXISTS idx_collections_name \
-                   ON TABLE _collections FIELDS name UNIQUE;",
+                   ON TABLE _collections FIELDS name UNIQUE;\
+                 DEFINE TABLE IF NOT EXISTS _users SCHEMALESS;\
+                 DEFINE FIELD IF NOT EXISTS created_at ON TABLE _users TYPE datetime DEFAULT time::now();\
+                 DEFINE FIELD IF NOT EXISTS updated_at ON TABLE _users TYPE datetime DEFAULT time::now();\
+                 DEFINE FIELD IF NOT EXISTS deleted_at ON TABLE _users TYPE option<datetime> DEFAULT NONE;\
+                 DEFINE INDEX IF NOT EXISTS idx_users_email ON TABLE _users FIELDS email UNIQUE;\
+                 DEFINE TABLE IF NOT EXISTS _admins SCHEMALESS;\
+                 DEFINE FIELD IF NOT EXISTS created_at ON TABLE _admins TYPE datetime DEFAULT time::now();\
+                 DEFINE FIELD IF NOT EXISTS updated_at ON TABLE _admins TYPE datetime DEFAULT time::now();\
+                 DEFINE FIELD IF NOT EXISTS deleted_at ON TABLE _admins TYPE option<datetime> DEFAULT NONE;\
+                 DEFINE INDEX IF NOT EXISTS idx_admins_email ON TABLE _admins FIELDS email UNIQUE;\
+                 DEFINE TABLE IF NOT EXISTS _auth_refresh_tokens SCHEMALESS;\
+                 DEFINE INDEX IF NOT EXISTS idx_refresh_jti ON TABLE _auth_refresh_tokens FIELDS jti UNIQUE;\
+                 DEFINE INDEX IF NOT EXISTS idx_refresh_family ON TABLE _auth_refresh_tokens FIELDS family;",
             )
             .await?;
         response.check()?;
+        let users: Option<serde_json::Value> = self.db.select(("_collections", "_users")).await?;
+        if users.is_none() {
+            let response = self
+                .db
+                .query(
+                    "CREATE ONLY type::record('_collections', '_users') CONTENT {\
+                       name: '_users', type: 'auth', schema_mode: 'schema-less', fields: [], indexes: [],\
+                       rules: { list: NONE, view: NONE, create: NONE, update: NONE, delete: NONE }\
+                     };",
+                )
+                .await?;
+            response.check()?;
+        }
         Ok(())
     }
 

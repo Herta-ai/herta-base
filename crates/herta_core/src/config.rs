@@ -10,6 +10,42 @@ pub struct HbConfig {
     pub paths: PathsConfig,
     pub database: DatabaseConfig,
     pub log: LogConfig,
+    pub auth: AuthConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct AuthConfig {
+    pub access_token_ttl_seconds: u64,
+    pub refresh_token_ttl_seconds: u64,
+    pub lockout_threshold: u32,
+    pub lockout_seconds: u64,
+    pub register_rate_limit_per_minute: u32,
+    pub login_rate_limit_per_minute: u32,
+    pub refresh_rate_limit_per_minute: u32,
+    #[serde(skip)]
+    pub jwt_secret: Option<String>,
+    #[serde(skip)]
+    pub bootstrap_admin_email: Option<String>,
+    #[serde(skip)]
+    pub bootstrap_admin_password: Option<String>,
+}
+
+impl Default for AuthConfig {
+    fn default() -> Self {
+        Self {
+            access_token_ttl_seconds: 15 * 60,
+            refresh_token_ttl_seconds: 7 * 24 * 60 * 60,
+            lockout_threshold: 5,
+            lockout_seconds: 15 * 60,
+            register_rate_limit_per_minute: 5,
+            login_rate_limit_per_minute: 10,
+            refresh_rate_limit_per_minute: 30,
+            jwt_secret: None,
+            bootstrap_admin_email: None,
+            bootstrap_admin_password: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -127,6 +163,34 @@ impl HbConfig {
                 .parse()
                 .context("HB_MAX_REQUEST_BODY_SIZE must be a positive integer")?;
         }
+        apply_u64_env(
+            "HB_AUTH_ACCESS_TOKEN_TTL_SECONDS",
+            &mut self.auth.access_token_ttl_seconds,
+        )?;
+        apply_u64_env(
+            "HB_AUTH_REFRESH_TOKEN_TTL_SECONDS",
+            &mut self.auth.refresh_token_ttl_seconds,
+        )?;
+        apply_u32_env(
+            "HB_AUTH_LOCKOUT_THRESHOLD",
+            &mut self.auth.lockout_threshold,
+        )?;
+        apply_u64_env("HB_AUTH_LOCKOUT_SECONDS", &mut self.auth.lockout_seconds)?;
+        apply_u32_env(
+            "HB_AUTH_REGISTER_RATE_LIMIT_PER_MINUTE",
+            &mut self.auth.register_rate_limit_per_minute,
+        )?;
+        apply_u32_env(
+            "HB_AUTH_LOGIN_RATE_LIMIT_PER_MINUTE",
+            &mut self.auth.login_rate_limit_per_minute,
+        )?;
+        apply_u32_env(
+            "HB_AUTH_REFRESH_RATE_LIMIT_PER_MINUTE",
+            &mut self.auth.refresh_rate_limit_per_minute,
+        )?;
+        self.auth.jwt_secret = std::env::var("HB_JWT_SECRET").ok();
+        self.auth.bootstrap_admin_email = std::env::var("HB_BOOTSTRAP_ADMIN_EMAIL").ok();
+        self.auth.bootstrap_admin_password = std::env::var("HB_BOOTSTRAP_ADMIN_PASSWORD").ok();
         Ok(())
     }
 
@@ -143,8 +207,44 @@ impl HbConfig {
         if !matches!(self.log.format.as_str(), "pretty" | "json") {
             bail!("log.format must be either 'pretty' or 'json'");
         }
+        if self.auth.access_token_ttl_seconds == 0
+            || self.auth.refresh_token_ttl_seconds == 0
+            || self.auth.lockout_threshold == 0
+            || self.auth.lockout_seconds == 0
+            || self.auth.register_rate_limit_per_minute == 0
+            || self.auth.login_rate_limit_per_minute == 0
+            || self.auth.refresh_rate_limit_per_minute == 0
+        {
+            bail!("auth durations, thresholds, and rate limits must be greater than zero");
+        }
+        if self
+            .auth
+            .jwt_secret
+            .as_ref()
+            .is_some_and(|secret| secret.len() < 32)
+        {
+            bail!("HB_JWT_SECRET must contain at least 32 bytes");
+        }
         Ok(())
     }
+}
+
+fn apply_u64_env(name: &str, target: &mut u64) -> anyhow::Result<()> {
+    if let Ok(value) = std::env::var(name) {
+        *target = value
+            .parse()
+            .with_context(|| format!("{name} must be a positive integer"))?;
+    }
+    Ok(())
+}
+
+fn apply_u32_env(name: &str, target: &mut u32) -> anyhow::Result<()> {
+    if let Ok(value) = std::env::var(name) {
+        *target = value
+            .parse()
+            .with_context(|| format!("{name} must be a positive integer"))?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

@@ -24,7 +24,7 @@ HertaBase 的标准鉴权流程如下：
 4. **JWT 结构**：
    * **Header**：包含算法信息 (如 `{"alg": "HS256", "typ": "JWT"}`)。
    * **Payload**：包含实体信息，如 `user_id` (用户标识), `collection` (所属集合), `role` (角色, 若有), 以及 `exp` (过期时间)。
-   * **Signature**：基于配置的 Secret Key 生成的签名。
+   * **Signature**：使用 HS256 和系统密钥签名。Claims 包含 `sub`, `collection`, `role`, `email`, `admin`, `token_key`, `typ`, `iat`, `exp`, `jti`。
 
 ### 鉴权流程图 (文字描述)
 
@@ -43,9 +43,7 @@ API Rules 是 HertaBase 安全模型的核心，负责针对不同操作进行�
 
 * **规则定义**：规则配置于每个 Collection 上，并细化至具体的数据操作：`list` (列表), `view` (单条记录), `create` (创建), `update` (更新), `delete` (删除)。
 * **规则语法**：采用完全兼容 SurrealQL 的布尔表达式。
-* **内置变量**：
-  * `@hb` 注入上下文：`$auth.id` (当前用户 ID), `$auth.email` (当前用户邮箱), `$auth.role` (当前用户角色)。
-  * 数据记录上下文：`$record.user_id` (当前行记录的关联用户), 等等。
+* **内置变量**：`$auth` 是当前身份（匿名时为 `null`），`$record` 是当前/拟创建记录，`$request.body` 是写请求体。
 * **特殊规则值**：
   * `""` (空字符串)：拒绝所有访问 (Deny All)。
   * `true`：允许所有访问 (公开访问, Allow All)。
@@ -56,7 +54,7 @@ API Rules 是 HertaBase 安全模型的核心，负责针对不同操作进行�
 
 ## 6. 安全措施 (Security Measures)
 
-* **防注入**：所有 API Rules 在执行前均被编译为参数化的 SurrealQL WHERE 子句 (Parameterized Queries)，绝不使用字符串拼接。
+* **防注入**：规则先经 SurrealDB AST 解析并拒绝语句、子查询、脚本、函数、未知参数和尾随内容，再合并到参数化查询。
 * **输入清理**：规则评估执行前会经过严格的输入校验与净化。
 * **速率限制 (Rate Limiting)**：针对注册、登录等敏感鉴权端点默认启用速率限制，防止恶意自动化攻击。
 * **密码存储**：采用业界标准的 **Argon2id** 算法进行哈希处理。
