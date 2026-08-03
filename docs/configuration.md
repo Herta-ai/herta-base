@@ -14,11 +14,11 @@ HertaBase (`hertabase` 二进制文件) 采用分层配置系统，优先级从�
 HertaBase 通过基于 `clap` 构筑的 CLI 工具进行管理：
 
 * `hertabase serve` — 启动核心服务器
-  * `--host`, `-H`：绑定地址 (默认: `0.0.0.0`)
-  * `--port`, `-p`：监听端口 (默认: `8080`)
-  * `--data-dir`：数据存储主目录 (默认: `./hb_data`)
-  * `--hooks-dir`：JS Hook 脚本存放目录 (默认: `./hb_hooks`)
-  * `--dev`：启动开发者模式 (自动放宽 CORS 限制，开启调试日志，禁用某些生产缓存)
+    * `--host`, `-H`：绑定地址 (默认: `0.0.0.0`)
+    * `--port`, `-p`：监听端口 (默认: `8080`)
+    * `--data-dir`：数据存储主目录 (默认: `./hb_data`)
+    * `--hooks-dir`：JS Hook 脚本存放目录 (默认: `./hb_hooks`)
+    * `--dev`：启动开发者模式 (自动放宽 CORS 限制，开启调试日志，禁用某些生产缓存)
 * `hertabase superuser create` — 交互式创建 Admin 账户
 * `hertabase superuser list` — 列出当前系统中的管理员列表
 * `hertabase migrate` — 扫描并运行挂起的数据库 Schema 迁移
@@ -36,7 +36,8 @@ HertaBase 通过基于 `clap` 构筑的 CLI 工具进行管理：
 **鉴权配置**
 
 * `HB_JWT_SECRET`：至少 32 字节的 JWT 签名密钥。未设置时自动生成并原子写入 `HB_DATA_DIR/auth/jwt-secret`。
-* `HB_BOOTSTRAP_ADMIN_EMAIL`, `HB_BOOTSTRAP_ADMIN_PASSWORD`：仅当 `_admins` 为空时创建首个管理员；必须同时提供，密码至少 12 个字符。
+* `HB_BOOTSTRAP_ADMIN_EMAIL`, `HB_BOOTSTRAP_ADMIN_PASSWORD`：仅当 `_admins` 为空时创建首个管理员；必须同时提供，密码至少 12
+  个字符。
 * `HB_AUTH_ACCESS_TOKEN_TTL_SECONDS`：Access Token 存活秒数，默认 `900`。
 * `HB_AUTH_REFRESH_TOKEN_TTL_SECONDS`：Refresh Token 存活秒数，默认 `604800`。
 * `HB_AUTH_LOCKOUT_THRESHOLD`, `HB_AUTH_LOCKOUT_SECONDS`：登录失败锁定阈值和时长，默认 `5` 次、`900` 秒。
@@ -120,9 +121,13 @@ HertaBase 将所有状态数据集中于 `--data-dir` (默认 `hb_data/`) 中，
 
 ## 6. 日志系统
 
-集成 `tracing` 框架。生产环境下，建议设置 `HB_LOG_FORMAT=json` 与 `HB_LOG_LEVEL=info` 以配合 ELK/Fluentd 采集。开发调试时，系统自动切换为 `pretty` 终端带色彩输出，级别下调至 `debug` 以跟踪 SurrealQL 执行情况与 Hook 运行流。
+集成 `tracing` 框架。生产环境下，建议设置 `HB_LOG_FORMAT=json` 与 `HB_LOG_LEVEL=info` 以配合 ELK/Fluentd 采集。开发调试时，系统自动切换为
+`pretty` 终端带色彩输出，级别下调至 `debug` 以跟踪 SurrealQL 执行情况与 Hook 运行流。
 
 ## 7. 生产模式 vs 开发模式
 
 * **开发模式 (`--dev`)**：跳过 CORS 源校验，放行所有 Origin；开启更详尽的路由匹配日志与详细错误栈注入到 HTTP 响应体中。
 * **生产模式 (默认)**：启用所有安全头，严格校验 API Rules，错误响应被泛化屏蔽（避免内部路径泄露），日志仅报告严重异常。
+
+$env:HB_BOOTSTRAP_ADMIN_EMAIL="admin@example.com"; $env:HB_BOOTSTRAP_ADMIN_PASSWORD="ChangeThisPassword123!";
+.\target\release\hertabase.exe serve

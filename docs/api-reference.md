@@ -200,7 +200,7 @@ CRUD 和列表接口广泛支持以下参数：
 }
 ```
 
-Collection 管理接口为 `GET/POST /_/collections` 和 `GET/PATCH/DELETE /_/collections/{name}`。PATCH 只允许增加字段和索引，但可整体替换 `rules`。`base` 与 `auth` Collection 均可创建，新集合规则默认 `null`（仅管理员）。OpenAPI JSON 同样需要管理员 Token。
+Collection 管理接口为 `GET/POST /_/collections` 和 `GET/PATCH/DELETE /_/collections/{name}`。PATCH 只允许增加字段和索引，但可整体替换 `rules`。`base` 与 `auth` Collection 均可创建，新集合规则默认 `null`（仅管理员）。OpenAPI JSON 可公开读取，以便 Swagger UI 加载接口定义；实际管理和数据访问仍按 Bearer Token 与 Collection Rules 鉴权。
 
 ## 10. 速率限制 (Rate Limiting)
 

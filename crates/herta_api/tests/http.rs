@@ -153,6 +153,29 @@ async fn errors_use_the_standard_envelope() {
 }
 
 #[tokio::test]
+async fn openapi_is_public_but_management_routes_require_admin() {
+    let service = service().await;
+
+    let mut response = TestClient::get("http://localhost/api-doc/openapi.json")
+        .send(&service)
+        .await;
+    assert_eq!(response.status_code, Some(StatusCode::OK));
+    let document: Value = response.take_json().await.unwrap();
+    assert_eq!(document["openapi"], "3.1.0");
+    assert_eq!(
+        document["components"]["securitySchemes"]["bearerAuth"]["scheme"],
+        "bearer"
+    );
+
+    let mut response = TestClient::get("http://localhost/_/collections")
+        .send(&service)
+        .await;
+    assert_eq!(response.status_code, Some(StatusCode::UNAUTHORIZED));
+    let body: Value = response.take_json().await.unwrap();
+    assert_eq!(body["error"]["error"], "HB_AUTH_REQUIRED");
+}
+
+#[tokio::test]
 async fn user_auth_rotation_replay_and_default_rules() {
     let service = service().await;
 
