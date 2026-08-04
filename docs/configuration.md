@@ -45,6 +45,14 @@ HertaBase 通过基于 `clap` 构筑的 CLI 工具进行管理：
 * `HB_AUTH_LOGIN_RATE_LIMIT_PER_MINUTE`：单 IP 登录限流，默认 `10`。
 * `HB_AUTH_REFRESH_RATE_LIMIT_PER_MINUTE`：单 IP 刷新限流，默认 `30`。
 
+**实时订阅配置**
+
+* `HB_REALTIME_MAX_CONNECTIONS`：全局 SSE 连接上限，默认 `1000`。
+* `HB_REALTIME_MAX_CONNECTIONS_PER_IP`：单 IP SSE 连接上限，默认 `20`。
+* `HB_REALTIME_HEARTBEAT_SECONDS`：SSE 心跳间隔，默认 `30` 秒。
+
+以上三个值必须大于零。操作系统文件描述符上限仍需在部署环境中单独配置。
+
 **数据库连接**
 
 * `HB_DB_ENGINE`：Phase 1 可选值为 `surrealkv`（默认，持久化）或 `memory`（仅供测试）。TiKV 集群支持留到 Phase 7。
@@ -116,6 +124,11 @@ lockout_seconds = 900
 register_rate_limit_per_minute = 5
 login_rate_limit_per_minute = 10
 refresh_rate_limit_per_minute = 30
+
+[realtime]
+max_connections = 1000
+max_connections_per_ip = 20
+heartbeat_seconds = 30
 
 [security.cors]
 origins = ["https://my-app.com", "https://admin.herta.ai"]
@@ -193,6 +206,3 @@ HertaBase 将所有状态数据集中于 `--data-dir` (默认 `hb_data/`) 中，
 
 * **开发模式 (`--dev`)**：跳过 CORS 源校验，放行所有 Origin；开启更详尽的路由匹配日志与详细错误栈注入到 HTTP 响应体中。
 * **生产模式 (默认)**：启用所有安全头，严格校验 API Rules，错误响应被泛化屏蔽（避免内部路径泄露），日志仅报告严重异常。
-
-$env:HB_BOOTSTRAP_ADMIN_EMAIL="admin@example.com"; $env:HB_BOOTSTRAP_ADMIN_PASSWORD="ChangeThisPassword123!";
-.\target\release\hertabase.exe serve

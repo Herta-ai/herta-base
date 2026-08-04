@@ -11,6 +11,25 @@ pub struct HbConfig {
     pub database: DatabaseConfig,
     pub log: LogConfig,
     pub auth: AuthConfig,
+    pub realtime: RealtimeConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct RealtimeConfig {
+    pub max_connections: usize,
+    pub max_connections_per_ip: usize,
+    pub heartbeat_seconds: u64,
+}
+
+impl Default for RealtimeConfig {
+    fn default() -> Self {
+        Self {
+            max_connections: 1000,
+            max_connections_per_ip: 20,
+            heartbeat_seconds: 30,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -188,6 +207,18 @@ impl HbConfig {
             "HB_AUTH_REFRESH_RATE_LIMIT_PER_MINUTE",
             &mut self.auth.refresh_rate_limit_per_minute,
         )?;
+        apply_usize_env(
+            "HB_REALTIME_MAX_CONNECTIONS",
+            &mut self.realtime.max_connections,
+        )?;
+        apply_usize_env(
+            "HB_REALTIME_MAX_CONNECTIONS_PER_IP",
+            &mut self.realtime.max_connections_per_ip,
+        )?;
+        apply_u64_env(
+            "HB_REALTIME_HEARTBEAT_SECONDS",
+            &mut self.realtime.heartbeat_seconds,
+        )?;
         self.auth.jwt_secret = std::env::var("HB_JWT_SECRET").ok();
         self.auth.bootstrap_admin_email = std::env::var("HB_BOOTSTRAP_ADMIN_EMAIL").ok();
         self.auth.bootstrap_admin_password = std::env::var("HB_BOOTSTRAP_ADMIN_PASSWORD").ok();
@@ -225,6 +256,12 @@ impl HbConfig {
         {
             bail!("HB_JWT_SECRET must contain at least 32 bytes");
         }
+        if self.realtime.max_connections == 0
+            || self.realtime.max_connections_per_ip == 0
+            || self.realtime.heartbeat_seconds == 0
+        {
+            bail!("realtime connection limits and heartbeat must be greater than zero");
+        }
         Ok(())
     }
 }
@@ -247,6 +284,15 @@ fn apply_u32_env(name: &str, target: &mut u32) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn apply_usize_env(name: &str, target: &mut usize) -> anyhow::Result<()> {
+    if let Ok(value) = std::env::var(name) {
+        *target = value
+            .parse()
+            .with_context(|| format!("{name} must be a positive integer"))?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -257,5 +303,13 @@ mod tests {
         assert_eq!(config.server.port, 9000);
         assert_eq!(config.server.host, "0.0.0.0");
         assert_eq!(config.database.engine, "surrealkv");
+        assert_eq!(config.realtime.heartbeat_seconds, 30);
+    }
+
+    #[test]
+    fn realtime_values_must_be_positive() {
+        let mut config = HbConfig::default();
+        config.realtime.max_connections = 0;
+        assert!(config.validate().is_err());
     }
 }

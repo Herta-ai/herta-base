@@ -36,6 +36,24 @@ impl<T> ApiResponse<T> {
     }
 }
 
+pub fn error_value(error: &HbError, dev_mode: bool) -> Value {
+    let details = match error {
+        HbError::Validation { details, .. } => details.clone(),
+        _ => None,
+    };
+    serde_json::to_value(ApiResponse::<Value> {
+        data: None,
+        meta: None,
+        error: Some(ApiError {
+            code: error.status_code(),
+            message: error.public_message(dev_mode),
+            error: error.error_code().into(),
+            details,
+        }),
+    })
+    .expect("API error envelope always serializes")
+}
+
 #[derive(Debug)]
 pub struct ApiFailure(pub HbError);
 
@@ -54,22 +72,8 @@ impl Writer for ApiFailure {
             .unwrap_or(false);
         let status =
             StatusCode::from_u16(self.0.status_code()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-        let details = match &self.0 {
-            HbError::Validation { details, .. } => details.clone(),
-            _ => None,
-        };
-        let body = ApiResponse::<Value> {
-            data: None,
-            meta: None,
-            error: Some(ApiError {
-                code: self.0.status_code(),
-                message: self.0.public_message(dev_mode),
-                error: self.0.error_code().into(),
-                details,
-            }),
-        };
         res.status_code(status);
-        res.render(Json(body));
+        res.render(Json(error_value(&self.0, dev_mode)));
     }
 }
 

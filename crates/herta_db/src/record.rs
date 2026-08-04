@@ -540,7 +540,11 @@ fn json_request(body: &Value) -> Value {
     serde_json::json!({"body": body})
 }
 
-fn compile_rule(rule: &ApiRule, context: &RuleContext, current_record: bool) -> HbResult<String> {
+pub(crate) fn compile_rule(
+    rule: &ApiRule,
+    context: &RuleContext,
+    current_record: bool,
+) -> HbResult<String> {
     if context.admin {
         return Ok("true".into());
     }
@@ -601,7 +605,7 @@ fn sanitize_records(schema: &CollectionDef, records: &mut [Value]) {
     }
 }
 
-fn sanitize_record(schema: &CollectionDef, record: &mut Value) {
+pub(crate) fn sanitize_record(schema: &CollectionDef, record: &mut Value) {
     if schema.collection_type != CollectionType::Auth {
         return;
     }
@@ -635,7 +639,7 @@ fn sanitize_sensitive_expansion(value: &mut Value) {
     }
 }
 
-fn allowed_fields(schema: &CollectionDef) -> HashSet<String> {
+pub(crate) fn allowed_fields(schema: &CollectionDef) -> HashSet<String> {
     schema
         .fields
         .iter()
@@ -733,7 +737,7 @@ fn normalize_records(records: &mut [Value]) {
     }
 }
 
-fn normalize_value(value: &mut Value) {
+pub(crate) fn normalize_value(value: &mut Value) {
     match value {
         Value::String(text) => {
             if let Some((table, key)) = text.split_once(':')

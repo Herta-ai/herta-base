@@ -1,22 +1,105 @@
 use herta_api::{ApiState, build_router};
 use herta_core::HbConfig;
-use herta_db::DbClient;
+use herta_db::{
+    CollectionDef, CollectionType, DbClient, FieldDef, FieldType, SchemaManager, SchemaMode,
+};
+use http_body_util::BodyExt;
 use salvo::{
     http::StatusCode,
     prelude::*,
     test::{ResponseExt, TestClient},
 };
 use serde_json::{Value, json};
+use tokio::time::{Duration, timeout};
 
 async fn service() -> Service {
+    service_with_settings(1000, 20, 900).await
+}
+
+async fn service_with_realtime_limits(max_connections: usize, per_ip: usize) -> Service {
+    service_with_settings(max_connections, per_ip, 900).await
+}
+
+async fn service_with_settings(
+    max_connections: usize,
+    per_ip: usize,
+    access_token_ttl_seconds: u64,
+) -> Service {
     let db = DbClient::memory().await.unwrap();
     let mut config = HbConfig::default();
     config.database.engine = "memory".into();
     config.server.dev_mode = true;
     config.auth.bootstrap_admin_email = Some("admin@example.com".into());
     config.auth.bootstrap_admin_password = Some("correct horse battery staple".into());
+    config.auth.access_token_ttl_seconds = access_token_ttl_seconds;
+    config.realtime.max_connections = max_connections;
+    config.realtime.max_connections_per_ip = per_ip;
     let state = ApiState::new(db, config).await.unwrap();
     Service::new(build_router()).hoop(affix_state::inject(state))
+}
+
+async fn realtime_service(access_token_ttl_seconds: u64, heartbeat_seconds: u64) -> Service {
+    let db = DbClient::memory().await.unwrap();
+    let mut config = HbConfig::default();
+    config.database.engine = "memory".into();
+    config.server.dev_mode = true;
+    config.auth.access_token_ttl_seconds = access_token_ttl_seconds;
+    config.realtime.heartbeat_seconds = heartbeat_seconds;
+    config.auth.bootstrap_admin_email = Some("admin@example.com".into());
+    config.auth.bootstrap_admin_password = Some("correct horse battery staple".into());
+    SchemaManager::new(&db)
+        .create_collection(&CollectionDef {
+            name: "public_posts".into(),
+            collection_type: CollectionType::Base,
+            schema_mode: SchemaMode::Strict,
+            fields: vec![FieldDef {
+                name: "title".into(),
+                field_type: FieldType::Text,
+                required: true,
+                options: None,
+            }],
+            indexes: vec![],
+            rules: herta_db::CollectionRules {
+                view: herta_db::ApiRule::Boolean(true),
+                ..Default::default()
+            },
+        })
+        .await
+        .unwrap();
+    let state = ApiState::new(db, config).await.unwrap();
+    Service::new(build_router()).hoop(affix_state::inject(state))
+}
+
+async fn create_public_posts(service: &Service, admin: &str) {
+    let mut response = TestClient::post("http://localhost/_/collections")
+        .bearer_auth(admin)
+        .json(&json!({
+            "name": "public_posts",
+            "type": "base",
+            "schema_mode": "strict",
+            "fields": [{"name": "title", "type": "text", "required": true}],
+            "indexes": [],
+            "rules": {"view": true}
+        }))
+        .send(service)
+        .await;
+    let status = response.status_code;
+    let body: Value = response.take_json().await.unwrap();
+    assert_eq!(status, Some(StatusCode::CREATED), "{body}");
+}
+
+async fn first_body_frame(response: &mut Response) -> String {
+    let mut body = response.take_body();
+    next_body_frame(&mut body).await
+}
+
+async fn next_body_frame(body: &mut salvo::http::ResBody) -> String {
+    let frame = timeout(Duration::from_secs(7), body.frame())
+        .await
+        .expect("SSE frame timed out")
+        .expect("SSE body ended")
+        .expect("SSE body failed");
+    String::from_utf8(frame.into_data().expect("expected data frame").to_vec()).unwrap()
 }
 
 async fn admin_token(service: &Service) -> String {
@@ -82,6 +165,7 @@ async fn collection_record_and_openapi_flow() {
     );
     assert!(document["paths"]["/api/auth/register"].is_object());
     assert!(document["paths"]["/api/admin/auth/login"].is_object());
+    assert!(document["paths"]["/api/realtime/{collection}"].is_object());
 
     let mut response = TestClient::patch("http://localhost/_/collections/posts")
         .bearer_auth(&admin)
@@ -336,4 +420,122 @@ async fn user_auth_rotation_replay_and_default_rules() {
     .await;
     assert_eq!(response.status_code, Some(StatusCode::OK));
     let _: Value = response.take_json().await.unwrap();
+}
+
+#[tokio::test]
+async fn realtime_sse_preflight_authentication_and_connected_frame() {
+    let service = service().await;
+    let admin = admin_token(&service).await;
+    create_public_posts(&service, &admin).await;
+
+    let mut response = TestClient::get("http://localhost/api/realtime/public_posts")
+        .send(&service)
+        .await;
+    assert_eq!(response.status_code, Some(StatusCode::OK));
+    assert_eq!(
+        response.headers().get("content-type").unwrap(),
+        "text/event-stream"
+    );
+    assert_eq!(response.headers().get("cache-control").unwrap(), "no-cache");
+    assert_eq!(response.headers().get("x-accel-buffering").unwrap(), "no");
+    let frame = first_body_frame(&mut response).await;
+    assert!(frame.contains("event:connected"), "{frame}");
+    assert!(frame.contains("\"collection\":\"public_posts\""), "{frame}");
+    assert!(frame.contains("\"subscriptionId\":"), "{frame}");
+
+    let mut response = TestClient::get(format!(
+        "http://localhost/api/realtime/public_posts?token={admin}"
+    ))
+    .send(&service)
+    .await;
+    assert_eq!(response.status_code, Some(StatusCode::OK));
+    drop(response.take_body());
+
+    let mut response = TestClient::get(format!(
+        "http://localhost/api/realtime/public_posts?token={admin}"
+    ))
+    .bearer_auth("invalid")
+    .send(&service)
+    .await;
+    assert_eq!(response.status_code, Some(StatusCode::UNAUTHORIZED));
+    let body: Value = response.take_json().await.unwrap();
+    assert_eq!(body["error"]["error"], "HB_AUTH_REQUIRED");
+
+    let mut response =
+        TestClient::get("http://localhost/api/realtime/public_posts?filter=unknown%20%3D%201")
+            .send(&service)
+            .await;
+    assert_eq!(response.status_code, Some(StatusCode::BAD_REQUEST));
+    let body: Value = response.take_json().await.unwrap();
+    assert_eq!(body["error"]["error"], "HB_INVALID_FILTER");
+
+    let mut response = TestClient::get("http://localhost/api/realtime/_users")
+        .send(&service)
+        .await;
+    assert_eq!(response.status_code, Some(StatusCode::FORBIDDEN));
+    let body: Value = response.take_json().await.unwrap();
+    assert_eq!(body["error"]["error"], "HB_FORBIDDEN");
+}
+
+#[tokio::test]
+async fn realtime_connection_limit_is_released_with_response_body() {
+    let service = service_with_realtime_limits(1, 1).await;
+    let admin = admin_token(&service).await;
+    create_public_posts(&service, &admin).await;
+
+    let mut first = TestClient::get("http://localhost/api/realtime/public_posts")
+        .send(&service)
+        .await;
+    assert_eq!(first.status_code, Some(StatusCode::OK));
+
+    let mut limited = TestClient::get("http://localhost/api/realtime/public_posts")
+        .send(&service)
+        .await;
+    assert_eq!(limited.status_code, Some(StatusCode::TOO_MANY_REQUESTS));
+    let body: Value = limited.take_json().await.unwrap();
+    assert_eq!(body["error"]["error"], "HB_RATE_LIMITED");
+
+    drop(first.take_body());
+    let mut released = TestClient::get("http://localhost/api/realtime/public_posts")
+        .send(&service)
+        .await;
+    assert_eq!(released.status_code, Some(StatusCode::OK));
+    drop(released.take_body());
+}
+
+#[tokio::test]
+async fn realtime_token_expiry_sends_error_and_closes() {
+    let service = realtime_service(2, 30).await;
+    let admin = admin_token(&service).await;
+    let mut response = TestClient::get("http://localhost/api/realtime/public_posts")
+        .bearer_auth(&admin)
+        .send(&service)
+        .await;
+    assert_eq!(response.status_code, Some(StatusCode::OK));
+    let mut body = response.take_body();
+    let connected = next_body_frame(&mut body).await;
+    assert!(connected.contains("event:connected"), "{connected}");
+
+    let expired = next_body_frame(&mut body).await;
+    assert!(expired.contains("event:error"), "{expired}");
+    assert!(expired.contains("HB_TOKEN_EXPIRED"), "{expired}");
+    let ended = timeout(Duration::from_secs(1), body.frame())
+        .await
+        .expect("expired stream did not close");
+    assert!(ended.is_none());
+}
+
+#[tokio::test]
+async fn realtime_sends_configured_ping_events() {
+    let service = realtime_service(900, 1).await;
+    let mut response = TestClient::get("http://localhost/api/realtime/public_posts")
+        .send(&service)
+        .await;
+    assert_eq!(response.status_code, Some(StatusCode::OK));
+    let mut body = response.take_body();
+    let connected = next_body_frame(&mut body).await;
+    assert!(connected.contains("event:connected"), "{connected}");
+    let ping = next_body_frame(&mut body).await;
+    assert!(ping.contains("event:ping"), "{ping}");
+    assert!(ping.contains("\"timestamp\":"), "{ping}");
 }

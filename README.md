@@ -14,7 +14,7 @@
 
 > 💡 **HertaBase** 是一个用 Rust 编写的开源 BaaS（后端即服务）。它将 Web 服务器、图/文档数据库、实时订阅引擎、JS 扩展运行时和精美的管理后台，全部打包进**一个极致轻量的独立二进制文件**中。
 
-**⚠️ 注意：本项目目前处于 Pre-Alpha，Phase 2 后端已实现，后续阶段仍在开发。**
+**⚠️ 注意：本项目目前处于 Pre-Alpha，Phase 4 实时订阅后端已实现，后续阶段仍在开发。**
 
 [快速开始](#-快速开始) • [核心特性](#-核心特性) • [架构设计](#-架构设计) • [编写 Hooks](#-编写扩展-hooks) • [路线图](#-开发路线图-roadmap)
 
@@ -136,15 +136,15 @@ hertabase/
 
 项目分为 7 个主要阶段推进，详细内容请参考 [开发路线图](docs/roadmap.md)。
 
-| 阶段 | 核心目标 |
-| :--- | :--- |
-| **Phase 1** | 基础架构与动态 ORM (Salvo + SurrealDB) |
-| **Phase 2** | 鉴权与权限引擎 (JWT, API Rules) |
-| **Phase 3** | JS 扩展运行时 (rquickjs 集成) |
-| **Phase 4** | 实时订阅引擎 (SurrealDB LIVE SELECT + SSE) |
-| **Phase 5** | 文件存储模块 (LocalFS + S3) |
-| **Phase 6** | 管理后台与单体打包 (Vue, rust-embed) |
-| **Phase 7** | 生产加固与分布式 (CLI, 结构化日志, TiKV 集群) |
+| 阶段 | 核心目标 | 状态 |
+| :--- | :--- | :--- |
+| **Phase 1** | 基础架构与动态 ORM (Salvo + SurrealDB) | 已实现 |
+| **Phase 2** | 鉴权与权限引擎 (JWT, API Rules) | 已实现 |
+| **Phase 3** | JS 扩展运行时 (rquickjs 集成) | 已跳过 |
+| **Phase 4** | 实时订阅引擎 (SurrealDB LIVE SELECT + SSE) | 已实现 |
+| **Phase 5** | 文件存储模块 (LocalFS + S3) | 计划中 |
+| **Phase 6** | 管理后台与单体打包 (Vue, rust-embed) | 计划中 |
+| **Phase 7** | 生产加固与分布式 (CLI, 结构化日志, TiKV 集群) | 计划中 |
 
 ---
 

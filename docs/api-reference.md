@@ -147,6 +147,12 @@ HertaBase 采用 RESTful 风格的 API 设计理念，致力于提供清晰、�
 
 基于 Phase 4（实时订阅引擎）的实现。
 
+`GET /api/realtime/{collection}` 建立 SSE 长连接。令牌可通过推荐的
+`Authorization: Bearer <JWT>` 请求头或 `token` 查询参数传入；两者同时存在时以请求头为准。
+可选 `filter` 参数使用与记录列表相同的绑定过滤语法。连接建立后发送 `connected` 首帧，
+后续事件为 `create`、`update`、`delete` 和 `ping`；数据事件的 SSE `id` 为 UUIDv7。
+令牌到期发送 `HB_TOKEN_EXPIRED` 错误事件后关闭连接。当前不支持 `Last-Event-ID` 重放。
+
 ### GET /api/realtime/{collection}
 
 - **描述**: 建立 Server-Sent Events (SSE) 连接，实时接收 SurrealDB 数据变更推送。

@@ -57,6 +57,31 @@ pub fn generate_document(collections: &[CollectionDef]) -> Value {
 fn base_paths() -> Map<String, Value> {
     let mut paths = Map::new();
     paths.insert(
+        "/api/realtime/{collection}".into(),
+        json!({
+            "get": {
+                "summary": "Subscribe to collection changes",
+                "security": [{}, {"bearerAuth": []}],
+                "parameters": [
+                    path_parameter("collection"),
+                    {"name": "filter", "in": "query", "required": false,
+                     "schema": {"type": "string"}},
+                    {"name": "token", "in": "query", "required": false,
+                     "schema": {"type": "string"}}
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Server-sent collection events",
+                        "content": {"text/event-stream": {"schema": {"type": "string"}}}
+                    },
+                    "401": {"description": "Authentication required"},
+                    "403": {"description": "Access forbidden"},
+                    "429": {"description": "Connection limit exceeded"}
+                }
+            }
+        }),
+    );
+    paths.insert(
         "/_/collections".into(),
         json!({
             "get": operation("List collections", "CollectionListEnvelope", false),

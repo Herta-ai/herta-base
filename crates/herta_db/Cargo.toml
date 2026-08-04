@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 anyhow.workspace = true
 email_address.workspace = true
+futures-util.workspace = true
 herta_core = { path = "../herta_core" }
 regex.workspace = true
 serde.workspace = true

@@ -58,6 +58,12 @@ pub enum AuthIdentity {
     },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Authentication {
+    pub identity: AuthIdentity,
+    pub expires_at: u64,
+}
+
 impl AuthIdentity {
     pub fn is_admin(&self) -> bool {
         matches!(self, Self::Admin { .. })
@@ -358,13 +364,18 @@ impl AuthService {
     }
 
     pub async fn authenticate(&self, token: &str) -> HbResult<AuthIdentity> {
+        Ok(self.authenticate_with_expiry(token).await?.identity)
+    }
+
+    pub async fn authenticate_with_expiry(&self, token: &str) -> HbResult<Authentication> {
         let claims = self.decode_token(token, "access")?;
         let account = self.load_account(&claims).await?;
         if account.get("token_key").and_then(Value::as_str) != Some(claims.token_key.as_str()) {
             return Err(HbError::AuthRequired);
         }
         let id = full_record_id(&account)?;
-        Ok(if claims.admin {
+        let expires_at = claims.exp;
+        let identity = if claims.admin {
             AuthIdentity::Admin {
                 id,
                 email: claims.email,
@@ -379,6 +390,10 @@ impl AuthService {
                 role: claims.role,
                 token_key: claims.token_key,
             }
+        };
+        Ok(Authentication {
+            identity,
+            expires_at,
         })
     }
 

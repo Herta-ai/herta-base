@@ -39,12 +39,12 @@ HertaBase 项目的开发生命周期分为 7 个核心阶段（Phases），按�
 * **Step 4: 后台与外部服务**。支持 `cronAdd()` 定时任务、受 SSRF 策略保护的 HTTP 请求和基于 Mailer trait 的邮件发送。
 * **Step 5: 跨阶段能力桥接**。定义 `$app.realtime` 和 `$app.files` 契约；分别对接 Phase 4 实时总线和 Phase 5 Storage，在服务未启用时明确返回能力不可用错误。
 
-### Phase 4: 实时订阅引擎 — *预计 2-3 周*
+### Phase 4: 实时订阅引擎 — *已实现*
 
 **目标：** 基于系统原生机制实现数据变更的实时推送。
 
 * **Step 1: 原生实时查询**。利用 SurrealDB 的 `LIVE SELECT` 功能捕获底层数据变更流。
-* **Step 2: SSE 转发**。建立客户端与 Salvo 的 Server-Sent Events (SSE) 或 WebSocket 连接，将数据变更流低延迟分发到对应订阅的客户端。
+* **Step 2: SSE 转发**。建立客户端与 Salvo 的 Server-Sent Events (SSE) 连接，将数据变更流低延迟分发到对应订阅的客户端。
 
 ### Phase 5: 文件存储模块 — *预计 2-3 周*
 
