@@ -178,6 +178,9 @@ HertaBase 采用 RESTful 风格的 API 设计理念，致力于提供清晰、�
 
 - **集合管理**: `/_/collections` 等，用于 Schema 动态转换与管理。
 - **用户管理**: `/_/users` 等，管理系统中的所有用户及超级管理员 `_admins`。
+- **网页项目管理（Phase 6）**: `/_/web-projects` 管理项目上传、配置和删除；
+  `/_/web-projects/{project}/versions` 与 `/_/web-projects/{project}/rollback` 管理文件版本。
+  仅管理员可访问，详细契约见 [网页部署与静态托管](web-deployment.md)。
 
 ## 8. 通用查询参数
 

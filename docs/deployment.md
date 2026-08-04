@@ -98,7 +98,17 @@ WantedBy=multi-user.target
 
 配置后，可使用 `journalctl -u hertabase.service -f` 跟踪管理日志。
 
-## 5. 反向代理
+## 5. 网页项目部署
+
+HertaBase 计划支持管理员通过 Admin API 上传 ZIP、`tar.gz` 或 7z 前端构建产物，并将每个
+顶层目录作为一个独立网页项目托管。项目默认解压到 `./hb_data/web/{project}`，通过
+`/web/{project}/` 访问，并默认启用适合 History API SPA 的 `try_files` fallback。
+重复上传同名项目会先备份当前版本，再部署新版本。
+
+压缩包结构、更新与回滚、路由别名、安全解压和静态文件行为见
+[网页部署与静态托管](web-deployment.md)。
+
+## 6. 反向代理
 
 ### Nginx 配置示例（支持 WebSocket/SSE）
 
@@ -131,11 +141,11 @@ api.example.com {
 }
 ```
 
-## 6. TLS/HTTPS 配置
+## 7. TLS/HTTPS 配置
 
 推荐通过反向代理处理 TLS。使用 Caddy 可自动申请和续期 Let's Encrypt 证书。
 
-## 7. 生产环境检查清单
+## 8. 生产环境检查清单
 
 部署至生产环境前，系统管理员需确认以下配置：
 
@@ -145,13 +155,14 @@ api.example.com {
 - 配置定期备份机制
 - 监控磁盘空间，特别是在文件存储模块使用 LocalFS 时
 - 在反向代理层配置限流（Rate Limiting）以防止恶意攻击
+- 备份并监控 `HB_DATA_DIR/web` 中托管的网页项目
 
-## 8. 扩展与高可用
+## 9. 扩展与高可用
 
 - **垂直扩展**：优化单实例资源分配，HertaBase 极低的内存占用使其在小机型上亦有良好表现。
 - **水平扩展**：在企业级应用场景中，HertaBase 支持基于 TiKV 的集群模式（Phase 7）。
 
-## 9. 数据备份与恢复
+## 10. 数据备份与恢复
 
 备份数据目录即可实现全量备份。恢复时替换对应的 `hb_data` 目录即可。
 

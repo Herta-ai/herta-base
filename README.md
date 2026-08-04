@@ -33,6 +33,7 @@ HertaBase 旨在提供极致的开发体验（DX），同时利用 Rust 生态�
 - 📖 **OpenAPI 自动生成**：当在后台创建 Collection（表）时，系统自动生成 Swagger/Redoc API 文档。
 - 🛡️ **内建 Auth 与权限引擎**：开箱即用的 JWT 鉴权，支持细粒度的 API 访问规则（API Rules）。
 - 🎨 **现代化 Admin UI**：基于 Vue 构建，并在编译时通过 `rust-embed` 静态嵌入到二进制中。
+- 🌐 **网页项目托管（计划中）**：上传前端构建产物，以 `/web/{project}/` 路由部署独立 SPA 或静态站点。
 
 ---
 

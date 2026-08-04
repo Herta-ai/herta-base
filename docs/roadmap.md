@@ -60,6 +60,9 @@ HertaBase 项目的开发生命周期分为 7 个核心阶段（Phases），按�
 * **Step 1: Admin UI 开发**。使用 Vue 开发单页应用（SPA）形式的管理后台。
 * **Step 2: 静态资源嵌入**。利用 `rust-embed` 宏在编译期将构建后的前端 HTML/JS/CSS 文件静态嵌入到 Rust 二进制程序中。
 * **Step 3: 静态文件路由**。配置 Salvo 处理面板路径路由，从内存中直接提供 UI 静态资源。
+* **Step 4: 用户网页部署**。由管理员上传并安全解压前端产物到 `HB_DATA_DIR/web/{project}`，
+  通过 `/web/{project}/` 或 `/web/` 开头的唯一别名提供静态文件，支持 SPA fallback、
+  ETag、Range、自定义 404，以及基于 `HB_DATA_DIR/web_backup` 的版本历史和回滚。
 
 ### Phase 7: 生产加固与分布式 — *持续进行*
 

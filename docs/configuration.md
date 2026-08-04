@@ -53,6 +53,13 @@ HertaBase 通过基于 `clap` 构筑的 CLI 工具进行管理：
 
 以上三个值必须大于零。操作系统文件描述符上限仍需在部署环境中单独配置。
 
+**网页部署配置（Phase 6）**
+
+* `HB_WEB_MAX_ARCHIVE_SIZE`：网页项目压缩包大小上限，默认 `104857600` 字节（100 MiB）；
+  该值独立于普通 API 的 `HB_MAX_REQUEST_BODY_SIZE`。
+
+网页项目文件和版本备份均位于 `HB_DATA_DIR` 下；别名、SPA fallback、缓存及 404 设置存入数据库。
+
 **数据库连接**
 
 * `HB_DB_ENGINE`：Phase 1 可选值为 `surrealkv`（默认，持久化）或 `memory`（仅供测试）。TiKV 集群支持留到 Phase 7。
@@ -130,6 +137,9 @@ max_connections = 1000
 max_connections_per_ip = 20
 heartbeat_seconds = 30
 
+[web]
+max_archive_size = 104857600
+
 [security.cors]
 origins = ["https://my-app.com", "https://admin.herta.ai"]
 
@@ -194,6 +204,8 @@ HertaBase 将所有状态数据集中于 `--data-dir` (默认 `hb_data/`) 中，
 * `hb_data/database/` — SurrealDB 底层 SurrealKV 的键值对存储文件。
 * `hb_data/auth/jwt-secret` — 自动生成的 HS256 密钥；必须与数据库一起备份并限制文件权限。
 * `hb_data/storage/` — 本地存储模式下，用户上传的附件与文件存放于此。
+* `hb_data/web/` — 网页部署功能托管的前端项目目录；每个直接子目录代表一个项目。
+* `hb_data/web_backup/` — 网页项目按项目名和时间戳组织的文件版本历史，不写入数据库。
 * `hb_data/logs/` — 系统自动归档的持久化日志文件。
 * `hb_data/backups/` — 数据库快照与自动备份。
 
