@@ -14,7 +14,9 @@ HertaBase 的底层数据存储构建在强大的 **SurrealDB** 之上，充分�
   - `_admins`: 存储超级管理员信息。
   - `_collections`: 存储集合的 Schema 配置和元数据。
   - `_users`: 默认提供的一个鉴权集合模板。
-  - `_hooks`: 用于记录 Hook 脚本状态（若配置为数据库驱动的 Hook）。
+
+Phase 3 的 JS 扩展来自 `hb_hooks/`，编译结果和注册表驻留内存，不使用 `_hooks` 系统集合。
+需要可靠投递的外部副作用应使用单独的 outbox 业务集合，而不是把执行状态混入扩展注册表。
 
 ## 3. 字段类型映射 (Field Types Mapping)
 

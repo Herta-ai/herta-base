@@ -25,15 +25,19 @@ HertaBase 项目的开发生命周期分为 7 个核心阶段（Phases），按�
   * 解析访问规则表达式（如 `@request.auth.id = user_id`）。
   * 将规则动态编译为 SurrealDB 的查询条件（如 `WHERE` 子句），复用底层数据库的评估性能。
 
-### Phase 3: JS 扩展运行时 — *预计 4 周*
+### Phase 3: JS 扩展运行时 — *预计 4-6 周*
 
-**目标：** 集成 `rquickjs` 引擎，实现无服务器生命周期 Hook 执行环境。
+**目标：** 集成 `rquickjs`，实现参考 PocketBase 开发体验的应用级 JavaScript 扩展环境。
+完整契约见 [JavaScript 扩展运行时设计](js-runtime.md)。
 
-* **Step 1: 环境初始化**。配置 `rquickjs::AsyncRuntime` 与 `AsyncContext`。
-* **Step 2: FFI 边界映射 (Rust -> JS)**。
-  * 将 HTTP Request 和 Response 映射给 JS 上下文。
-  * 提供数据库操作接口（如 `$app.db.query`），允许 JS 脚本直接执行数据查询。
-* **Step 3: 生命周期 Hook 挂载**。在 Salvo 路由控制器中，拦截数据库读写操作并挂载自定义 JS 脚本（如 `before_create`, `after_update`）执行逻辑。
+* **Step 1: 运行时与注册表**。配置 `rquickjs::AsyncRuntime`、隔离的 `AsyncContext`、资源限制、脚本发现、编译缓存和原子热重载；扩展通过注册函数声明行为，不再通过文件名推断 Hook。
+* **Step 2: Event Hooks**。支持 Record、Collection、Auth 和应用生命周期事件，采用 `e.next()` 中间件链语义，并明确调用前的事务内逻辑与调用后的提交后逻辑边界。
+* **Step 3: FFI 边界映射 (Rust -> JS)**。
+  * 提供 Record/Collection 优先的数据库 API，并保留受限且可关闭的 `$app.db.query` 高级接口。
+  * 提供五级结构化日志、受限环境变量和统一错误类型。
+  * 将 HTTP Request/Response 映射给 JS，支持 `routerAdd()` 注册自定义路由。
+* **Step 4: 后台与外部服务**。支持 `cronAdd()` 定时任务、受 SSRF 策略保护的 HTTP 请求和基于 Mailer trait 的邮件发送。
+* **Step 5: 跨阶段能力桥接**。定义 `$app.realtime` 和 `$app.files` 契约；分别对接 Phase 4 实时总线和 Phase 5 Storage，在服务未启用时明确返回能力不可用错误。
 
 ### Phase 4: 实时订阅引擎 — *预计 2-3 周*
 

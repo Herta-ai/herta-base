@@ -22,6 +22,11 @@ HertaBase 作为一个高度可扩展的 BaaS，允许用户通过编写 JavaScr
 
 HertaBase 决定采用 **rquickjs**（基于 QuickJS 的 Rust 绑定）作为内置的 JS 扩展运行时。
 
+运行时定位为应用级扩展环境，而不是只执行按文件名匹配的 Hook。启动脚本通过显式 API 注册
+Event Hooks、自定义路由和定时任务；宿主通过 `$app` 提供 Record/Collection 数据访问、邮件、
+受限 HTTP、实时事件、沙盒文件与结构化日志。详细公开契约和安全边界见
+[JavaScript 扩展运行时设计](../js-runtime.md)。
+
 ## 后果 (Consequences)
 
 ### 优势 (Pros)
@@ -34,3 +39,4 @@ HertaBase 决定采用 **rquickjs**（基于 QuickJS 的 Rust 绑定）作为内
 
 - **缺少 JIT 编译**：由于没有 V8 级别的 JIT，对于重度计算密集型任务，执行性能相对逊色。
 - **生态较小**：相较于 Node.js / Deno 庞大的标准库和模块生态，开发者在编写脚本时可直接利用的第三方原生依赖较为受限。
+- **宿主 API 维护成本**：数据库、网络、邮件、实时和文件能力都必须由 Rust 显式桥接、授权和版本化，不能直接复用 Node.js 标准库。

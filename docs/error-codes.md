@@ -29,7 +29,10 @@
   - `HB_TOKEN_EXPIRED` (401) — JWT 认证令牌已过期。
   - `HB_FORBIDDEN` (403) — API Rule 拒绝该操作。
   - `HB_ACCOUNT_LOCKED` (423) — 连续登录失败达到阈值，账户处于临时锁定状态。
-  - `HB_HOOK_DENIED` (403) — JS 生命周期 Hook 返回 false 或主动抛出异常阻断请求。
+  - `HB_HOOK_DENIED` (403) — JS Event Hook 在调用 `e.next()` 前明确拒绝或终止操作。
+  - `HB_CAPABILITY_DENIED` (403) — JS 扩展没有使用某项宿主能力的授权。
+  - `HB_OUTBOUND_DENIED` (403) — JS HTTP 请求目标未通过出站安全策略。
+  - `HB_FILE_ACCESS_DENIED` (403) — JS 文件路径或操作超出沙盒授权范围。
   - `HB_NOT_FOUND` (404) — 请求的具体记录或目标未找到。
   - `HB_COLLECTION_NOT_FOUND` (404) — 指定的数据集合（Collection）不存在。
   - `HB_CONFLICT` (409) — 唯一性约束冲突。
@@ -40,6 +43,9 @@
   - `HB_HOOK_TIMEOUT` (500) — JS Hook 执行时间超出安全限制。
   - `HB_HOOK_ERROR` (500) — JS Hook 内部抛出未捕获的异常。
   - `HB_HOOK_OOM` (500) — JS Hook 执行消耗内存超出沙盒限制。
+  - `HB_SCRIPT_LOAD_ERROR` (500) — JS 扩展加载、编译或注册失败。
+  - `HB_ROUTE_CONFLICT` (500) — JS 自定义路由与已有路由冲突。
+  - `HB_CAPABILITY_UNAVAILABLE` (503) — JS API 依赖的宿主服务尚未启用。
   - `HB_DB_ERROR` (500) — 底层 SurrealDB 数据库操作失败。
   - `HB_STORAGE_ERROR` (500) — 文件存储适配器（LocalFS / S3）操作失败。
   - `HB_INTERNAL_ERROR` (500) — 不可预期的系统内部错误。

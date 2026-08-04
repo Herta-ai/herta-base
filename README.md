@@ -77,29 +77,32 @@ cargo build --release
 
 ---
 
-## 🧩 编写扩展 Hooks (Serverless JS)
+## 🧩 编写 JavaScript 扩展
 
-在运行目录下创建 `hb_hooks/{lifecycle}_{collection}.js` 形式的 Hook 脚本（如 `hb_hooks/before_create_posts.js`），即可拦截并修改 HTTP 请求与数据库操作。详见 [Hook 开发指南](docs/hooks-guide.md)。
+在 `hb_hooks/` 中创建 JavaScript 文件，通过显式注册 API 添加 Event Hooks、自定义路由和
+定时任务，并通过受控的 `$app` 使用数据库、邮件、HTTP、实时、文件和日志能力。Phase 3
+尚在开发，目标契约见 [扩展开发指南](docs/hooks-guide.md) 和
+[运行时设计](docs/js-runtime.md)。
 
 ```javascript
-// 享受 TypeScript 代码提示 (@hb/types)
-export default async function (context) {
-    const { request, user } = context;
+/// <reference types="@hb/types" />
 
-    // 1. 验证自定义业务逻辑
-    if (request.body.title.includes("spam")) {
-        throw new Error("Title contains spam words!");
+onRecordCreate(async (e) => {
+    if (!e.record.get("title")) {
+        throw new BadRequestError("title is required");
+    }
+    if (!e.auth) {
+        throw new ForbiddenError("authentication required");
     }
 
-    // 2. 自动补充字段
-    request.body.author_id = user.id;
-    request.body.created_at = new Date().toISOString();
+    e.record.set("author_id", e.auth.id);
+    $app.logger.info("creating post", { authorId: e.auth.id });
+    await e.next();
+}, "posts");
 
-    // 3. 调用底层 SurrealDB (使用 await 等待 Promise 返回)
-    await $app.db.query("UPDATE metrics SET total_posts += 1");
-
-    return true; // 允许记录创建
-}
+routerAdd("GET", "/api/hello", (e) => {
+    return e.json(200, { message: "hello" });
+});
 ```
 
 ---

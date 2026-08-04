@@ -61,11 +61,34 @@ HertaBase 通过基于 `clap` 构筑的 CLI 工具进行管理：
 * `HB_STORAGE_TYPE`：存储策略 `local` 或 `s3`。
 * `HB_S3_ENDPOINT`, `HB_S3_BUCKET`, `HB_S3_ACCESS_KEY`, `HB_S3_SECRET_KEY`：S3 云存储认证信息。
 
+**邮件服务**
+
+* `HB_MAIL_DRIVER`：邮件驱动，可选 `disabled`（默认）或 `smtp`。
+* `HB_MAIL_FROM_ADDRESS`, `HB_MAIL_FROM_NAME`：默认发件地址和显示名称。
+* `HB_SMTP_HOST`, `HB_SMTP_PORT`, `HB_SMTP_USERNAME`, `HB_SMTP_PASSWORD`：SMTP 连接信息。
+* `HB_SMTP_TLS`：TLS 策略，可选 `required`, `starttls`, `none`；生产环境不允许 `none`。
+
+邮件服务配置只负责建立宿主 `Mailer`。脚本还必须通过 `HB_JS_MAIL_ENABLED` 单独获得发送授权，
+SMTP 凭据永远不会暴露给 `$app.env()`。
+
 **JS Sandbox (Phase 3)**
 
-* `HB_JS_MEMORY_LIMIT`：Hook 运行内存上限。
-* `HB_JS_TIMEOUT_MS`：Hook 运行超时熔断时间。
-* `HB_JS_NETWORK_ALLOWLIST`：Hook 允许访问的外网域名白名单。
+* `HB_JS_ENABLED`：是否启用 JS 扩展运行时。
+* `HB_JS_MEMORY_LIMIT_MB`, `HB_JS_STACK_LIMIT_KB`：单个执行上下文的内存与栈上限。
+* `HB_JS_EXECUTION_TIMEOUT_MS`：同步 JS CPU 执行上限。
+* `HB_JS_ASYNC_TIMEOUT_MS`：包含数据库和外部 I/O 的单次总时长上限。
+* `HB_JS_POOL_SIZE`, `HB_JS_QUEUE_CAPACITY`：运行时池大小和有界等待队列容量。
+* `HB_JS_RAW_QUERY_ENABLED`：是否允许使用受审计的 `$app.db.query`。
+* `HB_JS_ENV_ALLOWLIST`：`$app.env()` 可读取的非敏感环境变量名列表。
+* `HB_JS_HTTP_ENABLED`, `HB_JS_HTTP_ALLOWLIST`：是否允许出站 HTTP 及 `host:port` 白名单。
+* `HB_JS_HTTP_TIMEOUT_MS`, `HB_JS_HTTP_MAX_RESPONSE_BYTES`：出站请求总超时和响应上限。
+* `HB_JS_FILES_ENABLED`, `HB_JS_FILES_ROOT`：是否允许文件操作及其沙盒根目录。
+* `HB_JS_FILES_QUOTA_BYTES`, `HB_JS_FILES_MAX_FILE_BYTES`：文件总配额和单文件上限。
+* `HB_JS_MAIL_ENABLED`：是否允许通过宿主 Mailer 发送邮件。
+* `HB_JS_CRON_ENABLED`, `HB_JS_CRON_TIMEZONE`：是否启用定时任务及默认 IANA 时区。
+
+`HB_JS_HTTP_ALLOWLIST` 只接受明确的 HTTP(S) 主机与端口，不能用于放开私网和云元数据
+地址。SMTP、JWT、数据库和对象存储密钥不得加入 `HB_JS_ENV_ALLOWLIST`。
 
 ## 4. 配置文件示例 (hertabase.toml)
 
@@ -98,9 +121,51 @@ refresh_rate_limit_per_minute = 30
 origins = ["https://my-app.com", "https://admin.herta.ai"]
 
 [jsvm]
+enabled = true
 memory_limit_mb = 16
-timeout_ms = 100
-network_allowlist = ["api.github.com"]
+stack_limit_kb = 512
+execution_timeout_ms = 100
+async_timeout_ms = 5000
+pool_size = 4
+queue_capacity = 128
+raw_query_enabled = false
+env_allowlist = ["PUBLIC_APP_URL"]
+
+[jsvm.http]
+enabled = false
+allowlist = ["api.github.com:443"]
+max_redirects = 3
+max_request_bytes = 1048576
+max_response_bytes = 4194304
+timeout_ms = 5000
+
+[jsvm.files]
+enabled = false
+root = "./hb_data/js-files"
+quota_bytes = 104857600
+max_file_bytes = 10485760
+
+[jsvm.mail]
+enabled = false
+max_recipients = 20
+max_message_bytes = 1048576
+
+[jsvm.cron]
+enabled = true
+timezone = "UTC"
+max_runtime_ms = 30000
+
+[mail]
+driver = "disabled"
+from_address = "noreply@example.com"
+from_name = "HertaBase"
+
+[mail.smtp]
+host = "smtp.example.com"
+port = 587
+username = ""
+password = ""
+tls = "starttls"
 
 [storage]
 type = "s3"

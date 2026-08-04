@@ -128,26 +128,33 @@ packages:
 
 ### 3. `@hb/types` 包的作用
 
-HertaBase 允许在 `hooks` 目录下编写 JS/TS 脚本，`@hb/types` 提供了编写时的代码提示（Autocomplete）。
+HertaBase 允许在 `hb_hooks` 目录下编写应用级 JS 扩展。脚本在启动期通过
+`onRecordCreate()`、`routerAdd()`、`cronAdd()` 等函数显式注册行为，运行时通过
+`$app` 使用数据库、邮件、受限 HTTP、实时、文件和日志服务。完整契约见
+[JavaScript 扩展运行时设计](js-runtime.md)，`@hb/types` 提供编写时的代码提示。
 
 - 在 `packages/@hb/types` 中维护 `index.d.ts`，定义 FFI 暴露给 JS 的 API：
 
     ```typescript
     // packages/@hb/types/index.d.ts
     declare global {
-      const $app: {
-        db: {
-          query(sql: string, vars?: Record<string, any>): Promise<any>;
-        };
-        request: {
-          headers: Record<string, string>;
-          body: any;
-        };
-      };
+      const $app: App;
+      const $apis: ApiMiddlewareFactory;
+      function onRecordCreate(
+        handler: (event: RecordEvent) => void | Promise<void>,
+        ...collections: string[]
+      ): void;
+      function routerAdd(
+        method: string,
+        path: string,
+        handler: (event: RequestEvent) => unknown,
+        ...middleware: ApiMiddleware[]
+      ): void;
+      function cronAdd(name: string, expression: string, handler: () => unknown): void;
     }
     ```
 
-- 开发者在编写 Hook 时引用该包即可获得类型提示，实际运行时由 Rust 的 `rquickjs` 提供真正的 `$app` 对象。
+- 开发者在编写扩展时引用该包即可获得类型提示，实际运行时由 Rust 的 `rquickjs` 提供注册函数、事件对象和 `$app`。类型包只声明服务端已经实现的能力。
 
 ### 4. 开发环境的热更新联动
 
