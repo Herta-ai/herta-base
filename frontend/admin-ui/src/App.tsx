@@ -7,21 +7,23 @@ import Theme, {
 import { queryClient } from './lib/query-client'
 import { routeTree } from './routeTree.gen'
 import { appStore } from './store/app'
+import { I18nProvider } from './lib/i18n'
 
-// 实例化 Router 并注入 queryClient (这样可以在 Router 的 loader 中预取数据)
 const router = createRouter({
   routeTree,
-  context: { queryClient }
+  context: { queryClient },
 })
 
 export function App() {
   const dark = useSelector(appStore, (state) => state.dark)
 
   return (
-    <ThemeProvider theme={dark ? Theme.DARK : Theme.LIGHT}>
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>
-    </ThemeProvider>
+    <I18nProvider>
+      <ThemeProvider theme={dark ? Theme.DARK : Theme.LIGHT}>
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </ThemeProvider>
+    </I18nProvider>
   )
 }
