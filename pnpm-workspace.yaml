@@ -1,0 +1,17 @@
+packages:
+  - 'frontend/*'
+  - 'packages/*'
+
+allowBuilds:
+  core-js: true
+
+minimumReleaseAgeExclude:
+  - '@tanstack/react-router-devtools@1.167.1'
+  - '@tanstack/react-router@1.170.19'
+  - '@tanstack/react-table@9.0.0'
+  - '@tanstack/router-core@1.171.16'
+  - '@tanstack/router-devtools-core@1.168.1'
+  - '@tanstack/router-devtools@1.167.1'
+  - '@tanstack/router-generator@1.167.22'
+  - '@tanstack/router-plugin@1.168.24'
+  - '@tanstack/table-core@9.0.0'

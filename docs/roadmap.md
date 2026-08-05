@@ -6,7 +6,7 @@ HertaBase 项目的开发生命周期分为 7 个核心阶段（Phases），按�
 
 ## 🗺️ 核心开发路线图
 
-### Phase 1: 基础架构与动态 ORM — *预计 3-4 周*
+### Phase 1: 基础架构与动态 ORM — *已实现*
 
 **目标：** 实现系统骨架，打通 Salvo 与 SurrealDB，实现动态集合（Collection）的增删改查。
 
@@ -15,7 +15,7 @@ HertaBase 项目的开发生命周期分为 7 个核心阶段（Phases），按�
 * **Step 3: 数据类型转换层**。开发适配层，将客户端请求的 `serde_json::Value` 安全地映射为 SurrealDB 的 `surrealdb::sql::Value`。
 * **Step 4: OpenAPI 自动生成**。集成 Salvo 的 `oapi` 模块，实现数据库 Collection 的 OpenAPI（Swagger/Redoc）文档自动生成。
 
-### Phase 2: 鉴权与权限引擎 — *预计 3 周*
+### Phase 2: 鉴权与权限引擎 — *已实现*
 
 **目标：** 构建完善的用户系统和细粒度的 API 访问控制引擎。
 
@@ -25,7 +25,7 @@ HertaBase 项目的开发生命周期分为 7 个核心阶段（Phases），按�
   * 解析访问规则表达式（如 `@request.auth.id = user_id`）。
   * 将规则动态编译为 SurrealDB 的查询条件（如 `WHERE` 子句），复用底层数据库的评估性能。
 
-### Phase 3: JS 扩展运行时 — *预计 4-6 周*
+### Phase 3: JS 扩展运行时 — *预计 4-6 周(暂时跳过)*
 
 **目标：** 集成 `rquickjs`，实现参考 PocketBase 开发体验的应用级 JavaScript 扩展环境。
 完整契约见 [JavaScript 扩展运行时设计](js-runtime.md)。

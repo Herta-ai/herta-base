@@ -1,0 +1,544 @@
+/* JetBrains IDE (IntelliJ / Fleet) Workspace Styling with Light/Dark Theme Support */
+
+/* Light Theme Default Variables */
+.themed-wrapper,
+.themed-wrapper.theme-light,
+.theme-light {
+  --jb-bg: #f2f3f5;
+  --jb-header-bg: #ebecef;
+  --jb-panel-bg: #f7f8fa;
+  --jb-sidebar-bg: #ebecef;
+  --jb-editor-bg: #ffffff;
+  --jb-tab-active-bg: #ffffff;
+  --jb-tab-inactive-bg: #ebecef;
+  --jb-border: #d3d5db;
+  --jb-text: #27282e;
+  --jb-text-muted: #6c707e;
+  --jb-text-heading: #000000;
+  --jb-accent-blue: #3574f0;
+  --jb-accent-green: #2e7d32;
+  --jb-accent-purple: #8752a3;
+  --jb-accent-orange: #d67929;
+  --jb-active-item: #e1e4ea;
+  --jb-hover-item: #e8eaee;
+  --jb-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  --jb-dock-bg: #f7f8fa;
+  --jb-console-text: #222222;
+}
+
+/* Dark Theme Overrides */
+.themed-wrapper.theme-dark,
+.theme-dark,
+.ring-ui-theme-dark {
+  --jb-bg: #1e1f22;
+  --jb-header-bg: #2b2d30;
+  --jb-panel-bg: #1e1f22;
+  --jb-sidebar-bg: #2b2d30;
+  --jb-editor-bg: #1e1f22;
+  --jb-tab-active-bg: #1e1f22;
+  --jb-tab-inactive-bg: #2b2d30;
+  --jb-border: #393b40;
+  --jb-text: #bcbec4;
+  --jb-text-muted: #787b80;
+  --jb-text-heading: #f0f0f4;
+  --jb-accent-blue: #3574f0;
+  --jb-accent-green: #499c54;
+  --jb-accent-purple: #9876aa;
+  --jb-accent-orange: #e5934e;
+  --jb-active-item: #2d313b;
+  --jb-hover-item: #35373c;
+  --jb-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  --jb-dock-bg: #1e1f22;
+  --jb-console-text: #a9b7c6;
+}
+
+.jb-workspace {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  max-width: 100%;
+  flex: 1;
+  background-color: var(--ring-content-background-color, var(--jb-bg));
+  color: var(--ring-text-color, var(--jb-text));
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow: hidden;
+  box-sizing: border-box;
+  text-align: left;
+  transition: background-color 0.25s, color 0.25s;
+}
+
+/* Header Navbar */
+.jb-header {
+  height: 44px;
+  background-color: var(--jb-header-bg);
+  border-bottom: 1px solid var(--jb-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  user-select: none;
+  z-index: 10;
+  transition: background-color 0.25s, border-color 0.25s;
+}
+
+.jb-header-left, .jb-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.jb-logo-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--jb-text-heading);
+}
+
+.jb-logo-icon {
+  width: 22px;
+  height: 22px;
+  background: linear-gradient(135deg, #000000 0%, #087cfa 50%, #fe2857 100%);
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.jb-project-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--jb-text-heading);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.jb-branch-badge {
+  background: rgba(0,0,0,0.06);
+  border: 1px solid var(--jb-border);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--jb-accent-blue);
+  font-family: monospace;
+}
+
+.jb-menu-bar {
+  display: flex;
+  gap: 4px;
+  margin-left: 12px;
+}
+
+.jb-menu-item {
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--jb-text);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.jb-menu-item:hover {
+  background: var(--jb-hover-item);
+  color: var(--jb-text-heading);
+}
+
+.jb-search-everywhere {
+  background: var(--jb-bg);
+  border: 1px solid var(--jb-border);
+  border-radius: 6px;
+  padding: 4px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 280px;
+  font-size: 12px;
+  color: var(--jb-text-muted);
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.25s;
+}
+
+.jb-search-everywhere:hover {
+  border-color: var(--jb-accent-blue);
+}
+
+.jb-kbd {
+  background: rgba(0,0,0,0.08);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-family: monospace;
+  margin-left: auto;
+}
+
+/* Main Layout Grid */
+.jb-main-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Left Sidebar Tool Windows Bar */
+.jb-tool-sidebar {
+  width: 48px;
+  background-color: var(--jb-sidebar-bg);
+  border-right: 1px solid var(--jb-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 0;
+  gap: 8px;
+  user-select: none;
+  transition: background-color 0.25s, border-color 0.25s;
+}
+
+.jb-tool-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--jb-text-muted);
+  cursor: pointer;
+  font-size: 20px;
+  transition: all 0.15s ease-in-out;
+}
+
+.jb-tool-icon:hover {
+  background: var(--jb-hover-item);
+  color: var(--jb-text-heading);
+}
+
+/* Block Selection Highlight (JetBrains New UI style) */
+.jb-tool-icon.active {
+  background: rgba(53, 116, 240, 0.18);
+  color: var(--jb-accent-blue);
+  box-shadow: inset 0 0 0 1px rgba(53, 116, 240, 0.3);
+}
+
+.theme-light .jb-tool-icon.active {
+  background: rgba(53, 116, 240, 0.14);
+  color: var(--jb-accent-blue);
+  box-shadow: inset 0 0 0 1px rgba(53, 116, 240, 0.25);
+}
+
+/* Left Tool Window Panel (Project Tree) */
+.jb-project-panel {
+  width: 240px;
+  background-color: var(--jb-panel-bg);
+  border-right: 1px solid var(--jb-border);
+  display: flex;
+  flex-direction: column;
+  user-select: none;
+  font-size: 13px;
+  transition: background-color 0.25s, border-color 0.25s;
+}
+
+.jb-panel-title {
+  height: 36px;
+  padding: 0 12px;
+  background: var(--jb-header-bg);
+  border-bottom: 1px solid var(--jb-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--jb-text-muted);
+  transition: background-color 0.25s, border-color 0.25s;
+}
+
+.jb-tree-list {
+  padding: 6px 0;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.jb-tree-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  cursor: pointer;
+  color: var(--jb-text);
+  transition: background 0.15s;
+  font-size: 12px;
+}
+
+.jb-tree-item:hover {
+  background: var(--jb-hover-item);
+}
+
+.jb-tree-item.active {
+  background: var(--jb-active-item);
+  color: var(--jb-accent-blue);
+  font-weight: 500;
+}
+
+.jb-tree-indent {
+  width: 12px;
+}
+
+.jb-file-icon {
+  font-size: 13px;
+}
+
+/* Center Editor Area */
+.jb-editor-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--jb-editor-bg);
+  overflow: hidden;
+  transition: background-color 0.25s;
+}
+
+.jb-editor-tabs {
+  height: 36px;
+  background-color: var(--jb-tab-inactive-bg);
+  border-bottom: 1px solid var(--jb-border);
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+  overflow-x: auto;
+  user-select: none;
+  transition: background-color 0.25s, border-color 0.25s;
+}
+
+.jb-editor-tab {
+  height: 32px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--jb-text-muted);
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid transparent;
+  border-bottom: none;
+  margin-right: 2px;
+}
+
+.jb-editor-tab:hover {
+  background: var(--jb-hover-item);
+  color: var(--jb-text);
+}
+
+.jb-editor-tab.active {
+  background: var(--jb-tab-active-bg);
+  color: var(--jb-text-heading);
+  border-color: var(--jb-border);
+  font-weight: 500;
+}
+
+.jb-tab-close {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+.jb-tab-close:hover {
+  background: rgba(0,0,0,0.15);
+  opacity: 1;
+}
+
+.jb-breadcrumbs {
+  height: 28px;
+  background: var(--jb-panel-bg);
+  border-bottom: 1px solid var(--jb-border);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  font-size: 11px;
+  color: var(--jb-text-muted);
+  gap: 6px;
+  transition: background-color 0.25s, border-color 0.25s;
+}
+
+.jb-breadcrumb-sep {
+  color: var(--jb-border);
+}
+
+/* Editor Workspace Content */
+.jb-editor-content {
+  flex: 1;
+  padding: 20px 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.jb-welcome-banner {
+  background: linear-gradient(135deg, rgba(53, 116, 240, 0.1) 0%, rgba(152, 118, 170, 0.1) 100%);
+  border: 1px solid var(--jb-accent-blue);
+  border-radius: 8px;
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.jb-banner-info h2 {
+  margin: 0 0 6px 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--jb-text-heading);
+}
+
+.jb-banner-info p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--jb-text-muted);
+}
+
+.jb-grid-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.jb-card {
+  background: var(--jb-panel-bg);
+  border: 1px solid var(--jb-border);
+  border-radius: 8px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: var(--jb-shadow);
+  transition: transform 0.2s, box-shadow 0.2s, background-color 0.25s, border-color 0.25s;
+}
+
+.jb-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--jb-border);
+  padding-bottom: 10px;
+}
+
+.jb-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--jb-text-heading);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Bottom Console / Terminal Dock */
+.jb-bottom-dock {
+  height: 160px;
+  background-color: var(--jb-panel-bg);
+  border-top: 1px solid var(--jb-border);
+  display: flex;
+  flex-direction: column;
+  transition: background-color 0.25s, border-color 0.25s;
+}
+
+.jb-dock-tabs {
+  height: 30px;
+  background-color: var(--jb-header-bg);
+  border-bottom: 1px solid var(--jb-border);
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  gap: 4px;
+  transition: background-color 0.25s, border-color 0.25s;
+}
+
+.jb-dock-tab {
+  padding: 2px 10px;
+  font-size: 11px;
+  color: var(--jb-text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.jb-dock-tab.active {
+  background: var(--jb-active-item);
+  color: var(--jb-accent-blue);
+  font-weight: 600;
+}
+
+.jb-dock-content {
+  flex: 1;
+  padding: 10px 14px;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 12px;
+  color: var(--jb-console-text);
+  background: var(--jb-dock-bg);
+  overflow-y: auto;
+  line-height: 1.5;
+  transition: background-color 0.25s, color 0.25s;
+}
+
+.jb-log-line {
+  display: flex;
+  gap: 12px;
+}
+
+.jb-log-time {
+  color: var(--jb-text-muted);
+}
+
+.jb-log-info {
+  color: var(--jb-accent-green);
+}
+
+.jb-log-warn {
+  color: var(--jb-accent-orange);
+}
+
+/* Status Bar */
+.jb-status-bar {
+  height: 24px;
+  background-color: var(--jb-header-bg);
+  border-top: 1px solid var(--jb-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  font-size: 11px;
+  color: var(--jb-text-muted);
+  user-select: none;
+  transition: background-color 0.25s, border-color 0.25s;
+}
+
+.jb-status-left, .jb-status-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.jb-status-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.jb-status-item:hover {
+  color: var(--jb-text-heading);
+}

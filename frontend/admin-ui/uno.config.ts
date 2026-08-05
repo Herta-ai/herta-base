@@ -7,10 +7,6 @@ import {
   transformerDirectives,
   transformerVariantGroup,
 } from 'unocss'
-import { themeVars } from './src/theme/vars'
-import { ICONS_ASSETS } from './src/const'
-
-const svgReplaceReg = /^<svg\s/
 
 export default defineConfig({
   shortcuts: {
@@ -30,9 +26,11 @@ export default defineConfig({
     'fixed-full': 'fixed right-0 top-0 left-0 bottom-0',
     'fixed-center': 'fixed left-0 top-0 wh-full flex-center',
     'nprogress-primary': 'important-bg-primary',
+    'modal-container': 'rounded-10px bg-white',
+    'modal-header': 'flex items-center justify-between b-(b-1px #D9DCE5 solid) px-32px py-18px text-18px font-bold',
+    'modal-close': 'i-material-symbols-close-rounded shrink-0 cursor-pointer text-30px rounded-8px hover:text-#666',
   },
   theme: {
-    ...themeVars,
     fontSize: {
       'icon-xs': '0.875rem',
       'icon-small': '1rem',
@@ -65,8 +63,8 @@ export default defineConfig({
         display: 'inline-block',
       },
       collections: {
-        local: FileSystemIconLoader(ICONS_ASSETS, svg =>
-          svg.replace(svgReplaceReg, '<svg width="1em" height="1em" ')),
+        local: FileSystemIconLoader('./src/assets/svg', svg =>
+          svg.replace(/^<svg\s/, '<svg width="1em" height="1em" ')),
       },
       warn: true,
       unit: 'em',
@@ -74,5 +72,4 @@ export default defineConfig({
     presetTypography(),
   ],
   transformers: [transformerDirectives(), transformerVariantGroup()],
-  safelist: ['nprogress-primary'],
 })

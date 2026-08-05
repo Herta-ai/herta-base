@@ -1,0 +1,21 @@
+{
+  "name": "@hb/monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm dev:ui",
+    "dev:ui": "pnpm --filter @hb/admin-ui dev",
+    "dev:server": "cargo watch -x \"run -p herta_server\"",
+    "build": "pnpm build:ui && pnpm build:server",
+    "build:ui": "pnpm --filter @hb/admin-ui build",
+    "build:server": "cargo build --release",
+    "lint": "pnpm lint:ui && pnpm lint:server",
+    "lint:ui": "pnpm --filter @hb/admin-ui lint",
+    "lint:server": "cargo clippy --workspace -- -D warnings",
+    "test": "cargo test --workspace"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
