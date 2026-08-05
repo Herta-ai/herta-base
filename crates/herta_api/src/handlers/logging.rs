@@ -10,6 +10,11 @@ pub struct RequestLogger {
     sender: LogSender,
 }
 
+// Reading the log stream must not create another log-stream event.
+fn should_skip_request_log(path: &str) -> bool {
+    matches!(path, "/api/admin/logs" | "/api/realtime/_logs")
+}
+
 impl RequestLogger {
     pub fn new(sender: LogSender) -> Self {
         Self { sender }
@@ -27,6 +32,10 @@ impl RequestLogger {
     ) {
         let method = req.method().to_string();
         let path = req.uri().path().to_string();
+        if should_skip_request_log(&path) {
+            ctrl.call_next(req, depot, res).await;
+            return;
+        }
         let remote_ip = req.remote_addr().ip().map(|ip| ip.to_string());
         let referer = header_value(req, "referer");
         let user_agent = header_value(req, "user-agent");

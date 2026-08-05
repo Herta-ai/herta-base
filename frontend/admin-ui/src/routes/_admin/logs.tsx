@@ -12,6 +12,7 @@ export const Route = createFileRoute('/_admin/logs')({
 })
 
 type TimeRangeOption = 'all' | '15m' | '1h' | '24h'
+const LOG_POLL_INTERVAL_MS = 4000
 
 function SystemLogsPage() {
   const { t } = useI18n()
@@ -30,7 +31,8 @@ function SystemLogsPage() {
 
   // UI state
   const [autoScroll, setAutoScroll] = useState(true)
-  const [autoRefresh, setAutoRefresh] = useState(true)
+  // Logs intentionally use HTTP polling only. The log read request is not an SSE source.
+  const [pollingEnabled, setPollingEnabled] = useState(true)
   const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null)
   const [copiedNotification, setCopiedNotification] = useState(false)
 
@@ -90,14 +92,15 @@ function SystemLogsPage() {
     return params
   }, [page, perPage, selectedType, selectedLevel, debouncedKeyword, debouncedTarget, statusCodeFilter, fromTime])
 
-  // Fetch logs using TanStack Query
+  // Fetch logs using TanStack Query polling. Do not add an SSE subscription here:
+  // each refresh is itself an HTTP request and is excluded from request persistence.
   const { data: logsResponse, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['admin-logs', queryParams],
     queryFn: async () => {
       const res = await hbApi.logs.list(queryParams)
       return res.data
     },
-    refetchInterval: autoRefresh ? 4000 : false,
+    refetchInterval: pollingEnabled ? LOG_POLL_INTERVAL_MS : false,
   })
 
   const logs = useMemo(() => logsResponse?.data || [], [logsResponse])
@@ -252,13 +255,13 @@ function SystemLogsPage() {
             </span>
           )}
 
-          <Tooltip title={autoRefresh ? 'Live Polling Active' : 'Live Polling Paused'}>
+          <Tooltip title={pollingEnabled ? 'Live Polling Active' : 'Live Polling Paused'}>
             <button
-              onClick={() => setAutoRefresh(!autoRefresh)}
+              onClick={() => setPollingEnabled(!pollingEnabled)}
               style={{
-                background: autoRefresh ? 'rgba(73, 156, 84, 0.15)' : 'transparent',
+                background: pollingEnabled ? 'rgba(73, 156, 84, 0.15)' : 'transparent',
                 border: '1px solid var(--jb-border)',
-                color: autoRefresh ? 'var(--jb-accent-green)' : 'var(--jb-text-muted)',
+                color: pollingEnabled ? 'var(--jb-accent-green)' : 'var(--jb-text-muted)',
                 borderRadius: 4,
                 padding: '2px 8px',
                 height: 24,
@@ -271,7 +274,7 @@ function SystemLogsPage() {
               }}
             >
               <span
-                className={`i-ph:broadcast-bold text-12px ${autoRefresh ? 'text-emerald-500 animate-pulse' : ''}`}
+                className={`i-ph:broadcast-bold text-12px ${pollingEnabled ? 'text-emerald-500 animate-pulse' : ''}`}
               />
               <span>{t('logs.auto_refresh')}</span>
             </button>

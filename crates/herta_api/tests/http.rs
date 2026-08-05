@@ -42,6 +42,29 @@ async fn request_logger_records_metadata_only() {
     assert_eq!(entry.auth_type.as_deref(), Some("anonymous"));
 }
 
+#[tokio::test]
+async fn request_logger_skips_log_stream_reads() {
+    let db = DbClient::memory().await.unwrap();
+    let config = HbConfig::default();
+    let state = ApiState::new(db, config).await.unwrap();
+    let (sender, mut receiver) = log_channel();
+    let service = Service::new(build_router_with_logger(Some(
+        herta_api::handlers::logging::RequestLogger::new(sender),
+    )))
+    .hoop(affix_state::inject(state));
+
+    let mut response = TestClient::get("http://localhost/api/admin/logs")
+        .send(&service)
+        .await;
+    assert_eq!(response.status_code, Some(StatusCode::UNAUTHORIZED));
+    let _: Value = response.take_json().await.unwrap();
+    assert!(
+        timeout(Duration::from_millis(100), receiver.recv())
+            .await
+            .is_err()
+    );
+}
+
 async fn service() -> Service {
     service_with_settings(1000, 20, 900).await
 }
