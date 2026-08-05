@@ -32,6 +32,8 @@ enum Command {
         #[arg(long)]
         hooks_dir: Option<String>,
         #[arg(long)]
+        db_engine: Option<String>,
+        #[arg(long)]
         dev: bool,
     },
     Version,
@@ -45,6 +47,7 @@ async fn main() -> anyhow::Result<()> {
         port: None,
         data_dir: None,
         hooks_dir: None,
+        db_engine: None,
         dev: false,
     }) {
         Command::Serve {
@@ -52,6 +55,7 @@ async fn main() -> anyhow::Result<()> {
             port,
             data_dir,
             hooks_dir,
+            db_engine,
             dev,
         } => {
             let mut config = HbConfig::load(cli.config.as_deref())?;
@@ -66,6 +70,9 @@ async fn main() -> anyhow::Result<()> {
             }
             if let Some(hooks_dir) = hooks_dir {
                 config.paths.hooks_dir = hooks_dir;
+            }
+            if let Some(db_engine) = db_engine {
+                config.database.engine = db_engine;
             }
             if dev {
                 config.server.dev_mode = true;

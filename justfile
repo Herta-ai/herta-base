@@ -11,6 +11,10 @@ dev-ui:
 dev-server:
     cargo watch -x "run -p herta_server"
 
+# 启动后端内存数据库开发服务器 (用于调试，无需写磁盘)
+dev-server-mem:
+    cargo watch -x "run -p herta_server -- --db-engine memory"
+
 # 构建前端产物
 build-ui:
     pnpm --filter @hb/admin-ui build

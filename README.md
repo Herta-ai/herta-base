@@ -66,6 +66,24 @@ cargo build --release
 
 ### 2. 启动服务
 
+配置初始化管理员账号密码:
+
+Windows:
+
+```shell
+$env:HB_BOOTSTRAP_ADMIN_EMAIL="admin@example.com"
+$env:HB_BOOTSTRAP_ADMIN_PASSWORD="Password123!"
+```
+
+Linux、MacOS：
+
+```shell
+export HB_BOOTSTRAP_ADMIN_EMAIL="admin@example.com"
+export HB_BOOTSTRAP_ADMIN_PASSWORD="Password123!"
+```
+
+启动
+
 ```bash
 ./target/release/hertabase serve
 ```

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "pnpm dev:ui",
     "dev:ui": "pnpm --filter @hb/admin-ui dev",
-    "dev:server": "cargo watch -x \"run -p herta_server\"",
+    "dev:server": "cargo run -p herta_server serve",
+    "dev:server:mem": "cargo run -p herta_server -- serve --db-engine memory",
     "build": "pnpm build:ui && pnpm build:server",
     "build:ui": "pnpm --filter @hb/admin-ui build",
     "build:server": "cargo build --release",
