@@ -51,7 +51,27 @@ impl DbClient {
                  DEFINE INDEX IF NOT EXISTS idx_admins_email ON TABLE _admins FIELDS email UNIQUE;\
                  DEFINE TABLE IF NOT EXISTS _auth_refresh_tokens SCHEMALESS;\
                  DEFINE INDEX IF NOT EXISTS idx_refresh_jti ON TABLE _auth_refresh_tokens FIELDS jti UNIQUE;\
-                 DEFINE INDEX IF NOT EXISTS idx_refresh_family ON TABLE _auth_refresh_tokens FIELDS family;",
+                 DEFINE INDEX IF NOT EXISTS idx_refresh_family ON TABLE _auth_refresh_tokens FIELDS family;\
+                 DEFINE TABLE IF NOT EXISTS _logs SCHEMALESS;\
+                 DEFINE FIELD IF NOT EXISTS log_type ON TABLE _logs TYPE string;\
+                 DEFINE FIELD IF NOT EXISTS level ON TABLE _logs TYPE string;\
+                 DEFINE FIELD IF NOT EXISTS message ON TABLE _logs TYPE string;\
+                 DEFINE FIELD IF NOT EXISTS target ON TABLE _logs TYPE string;\
+                 DEFINE FIELD IF NOT EXISTS method ON TABLE _logs TYPE option<string>;\
+                 DEFINE FIELD IF NOT EXISTS path ON TABLE _logs TYPE option<string>;\
+                 DEFINE FIELD IF NOT EXISTS status_code ON TABLE _logs TYPE option<number>;\
+                 DEFINE FIELD IF NOT EXISTS referer ON TABLE _logs TYPE option<string>;\
+                 DEFINE FIELD IF NOT EXISTS remote_ip ON TABLE _logs TYPE option<string>;\
+                 DEFINE FIELD IF NOT EXISTS user_agent ON TABLE _logs TYPE option<string>;\
+                 DEFINE FIELD IF NOT EXISTS auth_type ON TABLE _logs TYPE option<string>;\
+                 DEFINE FIELD IF NOT EXISTS user_id ON TABLE _logs TYPE option<string>;\
+                 DEFINE FIELD IF NOT EXISTS user_collection ON TABLE _logs TYPE option<string>;\
+                 DEFINE FIELD IF NOT EXISTS created_at ON TABLE _logs TYPE datetime DEFAULT time::now();\
+                 DEFINE INDEX IF NOT EXISTS idx_logs_type ON TABLE _logs FIELDS log_type;\
+                 DEFINE INDEX IF NOT EXISTS idx_logs_level ON TABLE _logs FIELDS level;\
+                 DEFINE INDEX IF NOT EXISTS idx_logs_created ON TABLE _logs FIELDS created_at;\
+                 DEFINE INDEX IF NOT EXISTS idx_logs_status ON TABLE _logs FIELDS status_code;\
+                 DEFINE INDEX IF NOT EXISTS idx_logs_user ON TABLE _logs FIELDS user_id;",
             )
             .await?;
         response.check()?;

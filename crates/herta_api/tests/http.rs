@@ -1,7 +1,8 @@
-use herta_api::{ApiState, build_router};
+use herta_api::{ApiState, build_router, build_router_with_logger};
 use herta_core::HbConfig;
 use herta_db::{
-    CollectionDef, CollectionType, DbClient, FieldDef, FieldType, SchemaManager, SchemaMode,
+    CollectionDef, CollectionType, DbClient, FieldDef, FieldType, LogEntry, SchemaManager,
+    SchemaMode, log_channel,
 };
 use http_body_util::BodyExt;
 use salvo::{
@@ -11,6 +12,35 @@ use salvo::{
 };
 use serde_json::{Value, json};
 use tokio::time::{Duration, timeout};
+
+#[tokio::test]
+async fn request_logger_records_metadata_only() {
+    let db = DbClient::memory().await.unwrap();
+    let config = HbConfig::default();
+    let state = ApiState::new(db, config).await.unwrap();
+    let (sender, mut receiver) = log_channel();
+    let service = Service::new(build_router_with_logger(Some(
+        herta_api::handlers::logging::RequestLogger::new(sender),
+    )))
+    .hoop(affix_state::inject(state));
+
+    let mut response = TestClient::get("http://localhost/api-doc/openapi.json?token=secret")
+        .add_header("referer", "https://example.test", true)
+        .add_header("user-agent", "test-agent", true)
+        .send(&service)
+        .await;
+    let _: Value = response.take_json().await.unwrap();
+    let entry: LogEntry = timeout(Duration::from_secs(1), receiver.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(entry.method.as_deref(), Some("GET"));
+    assert_eq!(entry.path.as_deref(), Some("/api-doc/openapi.json"));
+    assert_eq!(entry.status_code, Some(200));
+    assert_eq!(entry.referer.as_deref(), Some("https://example.test"));
+    assert_eq!(entry.user_agent.as_deref(), Some("test-agent"));
+    assert_eq!(entry.auth_type.as_deref(), Some("anonymous"));
+}
 
 async fn service() -> Service {
     service_with_settings(1000, 20, 900).await

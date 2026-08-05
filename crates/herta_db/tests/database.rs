@@ -1,10 +1,47 @@
 use herta_db::{
-    ApiRule, CollectionDef, CollectionType, DbClient, FieldDef, FieldType, ListParams,
-    RealtimeAction, RealtimeManager, RecordManager, RuleContext, SchemaManager, SchemaMode,
-    UpdateCollectionRequest,
+    ApiRule, CollectionDef, CollectionType, DbClient, FieldDef, FieldType, ListParams, LogEntry,
+    LogType, RealtimeAction, RealtimeManager, RecordManager, RuleContext, SchemaManager,
+    SchemaMode, UpdateCollectionRequest, log_channel, spawn_log_worker,
 };
 use serde_json::json;
 use tokio::time::{Duration, timeout};
+
+#[tokio::test]
+async fn log_worker_persists_server_and_request_metadata() {
+    let db = DbClient::memory().await.unwrap();
+    let (sender, receiver) = log_channel();
+    let worker = spawn_log_worker(db.clone(), receiver);
+    sender
+        .send(LogEntry {
+            log_type: LogType::Request,
+            level: "info".into(),
+            message: "GET /health -> 200".into(),
+            target: "test".into(),
+            method: Some("GET".into()),
+            path: Some("/health".into()),
+            status_code: Some(200),
+            referer: Some("https://example.test".into()),
+            remote_ip: Some("192.0.2.1".into()),
+            user_agent: Some("test-agent".into()),
+            auth_type: Some("anonymous".into()),
+            user_id: None,
+            user_collection: None,
+        })
+        .await
+        .unwrap();
+    drop(sender);
+    timeout(Duration::from_secs(2), worker)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let mut response = db.inner().query("SELECT * FROM _logs").await.unwrap();
+    let rows: Vec<serde_json::Value> = response.take(0).unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["path"], "/health");
+    assert_eq!(rows[0]["remote_ip"], "192.0.2.1");
+    assert_eq!(rows[0]["auth_type"], "anonymous");
+}
 
 fn posts_collection() -> CollectionDef {
     CollectionDef {

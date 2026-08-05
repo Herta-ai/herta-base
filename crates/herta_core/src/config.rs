@@ -94,6 +94,12 @@ pub struct DatabaseConfig {
 pub struct LogConfig {
     pub level: String,
     pub format: String,
+    /// Whether application/server tracing events are persisted in `_logs`.
+    pub server_persist_enabled: bool,
+    /// Minimum application/server tracing level persisted in `_logs`.
+    pub server_persist_level: String,
+    /// Whether HTTP request metadata is persisted in `_logs`.
+    pub http_persist_enabled: bool,
 }
 
 impl Default for ServerConfig {
@@ -129,6 +135,9 @@ impl Default for LogConfig {
         Self {
             level: "info".into(),
             format: "pretty".into(),
+            server_persist_enabled: true,
+            server_persist_level: "info".into(),
+            http_persist_enabled: true,
         }
     }
 }
@@ -176,6 +185,19 @@ impl HbConfig {
         }
         if let Ok(value) = std::env::var("HB_LOG_FORMAT") {
             self.log.format = value;
+        }
+        if let Ok(value) = std::env::var("HB_LOG_SERVER_PERSIST_ENABLED") {
+            self.log.server_persist_enabled = value
+                .parse()
+                .context("HB_LOG_SERVER_PERSIST_ENABLED must be true or false")?;
+        }
+        if let Ok(value) = std::env::var("HB_LOG_SERVER_PERSIST_LEVEL") {
+            self.log.server_persist_level = value;
+        }
+        if let Ok(value) = std::env::var("HB_LOG_HTTP_PERSIST_ENABLED") {
+            self.log.http_persist_enabled = value
+                .parse()
+                .context("HB_LOG_HTTP_PERSIST_ENABLED must be true or false")?;
         }
         if let Ok(value) = std::env::var("HB_MAX_REQUEST_BODY_SIZE") {
             self.server.max_body_size = value
@@ -238,6 +260,12 @@ impl HbConfig {
         if !matches!(self.log.format.as_str(), "pretty" | "json") {
             bail!("log.format must be either 'pretty' or 'json'");
         }
+        if !is_log_level(&self.log.level) {
+            bail!("log.level must be trace, debug, info, warn, or error");
+        }
+        if !is_log_level(&self.log.server_persist_level) {
+            bail!("log.server_persist_level must be trace, debug, info, warn, or error");
+        }
         if self.auth.access_token_ttl_seconds == 0
             || self.auth.refresh_token_ttl_seconds == 0
             || self.auth.lockout_threshold == 0
@@ -264,6 +292,10 @@ impl HbConfig {
         }
         Ok(())
     }
+}
+
+fn is_log_level(level: &str) -> bool {
+    matches!(level, "trace" | "debug" | "info" | "warn" | "error")
 }
 
 fn apply_u64_env(name: &str, target: &mut u64) -> anyhow::Result<()> {
@@ -310,6 +342,21 @@ mod tests {
     fn realtime_values_must_be_positive() {
         let mut config = HbConfig::default();
         config.realtime.max_connections = 0;
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn log_persistence_defaults_are_enabled_at_info() {
+        let config = HbConfig::default();
+        assert!(config.log.server_persist_enabled);
+        assert_eq!(config.log.server_persist_level, "info");
+        assert!(config.log.http_persist_enabled);
+    }
+
+    #[test]
+    fn invalid_log_persistence_level_is_rejected() {
+        let mut config = HbConfig::default();
+        config.log.server_persist_level = "verbose".into();
         assert!(config.validate().is_err());
     }
 }

@@ -68,6 +68,9 @@ HertaBase 通过基于 `clap` 构筑的 CLI 工具进行管理：
 
 * `HB_LOG_LEVEL`：日志级别 `trace`, `debug`, `info`, `warn`, `error`。
 * `HB_LOG_FORMAT`：日志输出格式，可选 `json` (机器友好) 或 `pretty` (人眼友好)。
+* `HB_LOG_SERVER_PERSIST_ENABLED`：是否将服务端日志写入 `_logs`，默认 `true`。
+* `HB_LOG_SERVER_PERSIST_LEVEL`：服务端日志入库最低级别，默认 `info`；支持 `trace`, `debug`, `info`, `warn`, `error`。
+* `HB_LOG_HTTP_PERSIST_ENABLED`：是否将 HTTP 请求元数据写入 `_logs`，默认 `true`。
 * `HB_CORS_ORIGINS`：逗号分隔的 CORS 允许来源列表。
 * `HB_MAX_REQUEST_BODY_SIZE`：全局最大请求体大小限制。
 
@@ -122,6 +125,13 @@ hooks_dir = "./hb_hooks"
 
 [database]
 engine = "surrealkv"
+
+[log]
+level = "info"
+format = "pretty"
+server_persist_enabled = true
+server_persist_level = "info"
+http_persist_enabled = true
 
 [auth]
 access_token_ttl_seconds = 900
@@ -213,6 +223,9 @@ HertaBase 将所有状态数据集中于 `--data-dir` (默认 `hb_data/`) 中，
 
 集成 `tracing` 框架。生产环境下，建议设置 `HB_LOG_FORMAT=json` 与 `HB_LOG_LEVEL=info` 以配合 ELK/Fluentd 采集。开发调试时，系统自动切换为
 `pretty` 终端带色彩输出，级别下调至 `debug` 以跟踪 SurrealQL 执行情况与 Hook 运行流。
+
+服务端日志和 HTTP 请求日志独立控制入库。服务端日志默认写入 `info` 及以上级别；HTTP 日志默认开启，
+只记录方法、路径、状态码、身份类型与 ID、referer、连接 IP、user-agent 和创建时间，不记录请求头、请求体或响应体。
 
 ## 7. 生产模式 vs 开发模式
 

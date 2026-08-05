@@ -102,6 +102,12 @@ impl Drop for RealtimePermit {
 }
 
 pub fn build_router() -> Router {
+    build_router_with_logger(None)
+}
+
+pub fn build_router_with_logger(
+    request_logger: Option<crate::handlers::logging::RequestLogger>,
+) -> Router {
     let records_router = Router::with_path("api/collections/{collection}/records")
         .get(records::list)
         .post(records::create)
@@ -135,8 +141,11 @@ pub fn build_router() -> Router {
         .push(Router::with_path("refresh").post(auth::refresh_admin))
         .push(Router::with_path("me").get(auth::me_admin));
 
-    Router::new()
-        .push(Router::with_path("api/realtime/{collection}").get(realtime::subscribe))
+    let mut root = Router::new();
+    if let Some(logger) = request_logger {
+        root = root.hoop(logger);
+    }
+    root.push(Router::with_path("api/realtime/{collection}").get(realtime::subscribe))
         .push(records_router)
         .push(collections_router)
         .push(default_auth)

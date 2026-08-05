@@ -3,4 +3,4 @@ pub mod handlers;
 pub mod response;
 pub mod router;
 
-pub use router::{ApiState, build_router};
+pub use router::{ApiState, build_router, build_router_with_logger};
