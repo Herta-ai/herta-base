@@ -202,45 +202,71 @@ function AdminLayout() {
               <span className={isDark ? 'i-ph:moon-stars-bold text-14px text-indigo-400' : 'i-ph:sun-dim-bold text-14px text-amber-400'} />
             </button>
 
-            {/* Current Admin Capsule */}
+            {/* Current Admin Capsule with embedded Logout Button */}
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: 6,
                 background: 'var(--jb-panel-bg)',
-                padding: '4px 10px',
+                padding: '3px 4px 3px 10px',
                 borderRadius: 6,
                 border: '1px solid var(--jb-border)',
                 fontSize: 12,
               }}
             >
               <span className="i-ph:user-circle-gear-bold text-14px text-blue-500" />
-              <span style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>
+              <span
+                style={{
+                  maxWidth: 140,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  fontWeight: 500,
+                  color: 'var(--jb-text)',
+                }}
+                title={auth.admin?.email || 'Admin'}
+              >
                 {auth.admin?.email || 'Admin'}
               </span>
+              <div style={{ width: 1, height: 14, backgroundColor: 'var(--jb-border)', margin: '0 2px' }} />
+              <Tooltip
+                title={t('auth.logout')}
+                popupProps={{
+                  directions: [Directions.BOTTOM_LEFT],
+                  style: { zIndex: 99999 },
+                  className: 'jb-tooltip-popup',
+                }}
+              >
+                <button
+                  onClick={handleLogout}
+                  aria-label={t('auth.logout')}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--jb-text-muted)',
+                    borderRadius: 4,
+                    padding: '3px 5px',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'color 0.15s, background-color 0.15s',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = '#ef4444'
+                    e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.12)'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = 'var(--jb-text-muted)'
+                    e.currentTarget.style.backgroundColor = 'transparent'
+                  }}
+                >
+                  <span className="i-ph:sign-out-bold text-13px" />
+                </button>
+              </Tooltip>
             </div>
-
-            {/* Logout Button */}
-            <button
-              onClick={handleLogout}
-              title={t('auth.logout')}
-              style={{
-                background: 'transparent',
-                border: '1px solid var(--jb-border)',
-                color: 'var(--jb-text-muted)',
-                borderRadius: 6,
-                padding: '4px 10px',
-                fontSize: 12,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-              }}
-            >
-              <span className="i-ph:sign-out-bold text-13px" />
-              <span>{t('auth.logout')}</span>
-            </button>
           </div>
         </header>
 

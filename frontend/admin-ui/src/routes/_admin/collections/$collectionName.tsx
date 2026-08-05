@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Button from '@jetbrains/ring-ui-built/components/button/button'
 import { hbApi, type RecordModel, type CollectionModel } from '../../../lib/api'
@@ -153,7 +153,27 @@ function CollectionRecordsPage() {
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       {/* Editor Tabs Bar */}
       <div className="jb-editor-tabs" style={{ justifyContent: 'space-between', paddingRight: 12 }}>
-        <div style={{ display: 'flex' }}>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <Link
+            to="/collections"
+            title="Back to Collections"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 24,
+              height: 24,
+              color: 'var(--jb-text-muted)',
+              textDecoration: 'none',
+              borderRadius: 4,
+              marginLeft: 4,
+              marginRight: 4,
+              cursor: 'pointer',
+            }}
+            className="hover:bg-[var(--jb-hover-item)] hover:text-[var(--jb-accent-blue)]"
+          >
+            <span className="i-ph:arrow-left-bold text-12px" />
+          </Link>
           <div className="jb-editor-tab active">
             <span className={collection?.type === 'auth' ? 'i-ph:shield-check-bold text-purple-400 text-13px' : 'i-ph:table-bold text-sky-400 text-13px'} />
             <span style={{ fontWeight: 500 }}>{collectionName}</span>
@@ -230,7 +250,16 @@ function CollectionRecordsPage() {
       <div className="jb-breadcrumbs">
         <span>HertaBase</span>
         <span className="jb-breadcrumb-sep">›</span>
-        <span>Collections</span>
+        <span>Schema</span>
+        <span className="jb-breadcrumb-sep">›</span>
+        <Link
+          to="/collections"
+          className="jb-breadcrumb-link"
+          style={{ textDecoration: 'none', color: 'inherit' }}
+        >
+          <span className="i-ph:table-bold text-11px text-zinc-400" />
+          <span>{t('collections.title')}</span>
+        </Link>
         <span className="jb-breadcrumb-sep">›</span>
         <span style={{ color: 'var(--jb-accent-blue)', fontWeight: 500 }}>{collectionName}</span>
       </div>

@@ -372,6 +372,21 @@
   transition: background-color 0.25s, border-color 0.25s;
 }
 
+.jb-breadcrumb-link {
+  color: var(--jb-text-muted);
+  text-decoration: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  transition: color 0.15s ease;
+}
+
+.jb-breadcrumb-link:hover {
+  color: var(--jb-accent-blue);
+  text-decoration: underline;
+}
+
 .jb-breadcrumb-sep {
   color: var(--jb-border);
 }
@@ -542,3 +557,14 @@
 .jb-status-item:hover {
   color: var(--jb-text-heading);
 }
+
+/* Tooltip & Popup z-index elevation */
+.jb-tooltip-popup,
+[class*="popup_"],
+[class*="tooltip_"],
+.ring-popup,
+.ring-tooltip,
+[data-portalled] {
+  z-index: 99999 !important;
+}
+

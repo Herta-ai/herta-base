@@ -731,12 +731,12 @@ function SettingsPage() {
 
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                      <span style={{ fontSize: 12, fontWeight: 600 }}>选择导出的数据表:</span>
+                      <span style={{ fontSize: 12, fontWeight: 600 }}>{t('settings.migration.select_collections')}:</span>
                       <button
                         onClick={toggleSelectAll}
                         style={{ background: 'transparent', border: 'none', color: 'var(--jb-accent-blue)', cursor: 'pointer', fontSize: 11 }}
                       >
-                        {selectedCollections.length === collections.length ? '取消全选' : t('settings.migration.select_all')}
+                        {selectedCollections.length === collections.length ? t('settings.migration.unselect_all') : t('settings.migration.select_all')}
                       </button>
                     </div>
 

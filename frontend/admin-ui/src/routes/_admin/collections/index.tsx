@@ -197,7 +197,10 @@ function CollectionsOverviewPage() {
         <span className="jb-breadcrumb-sep">›</span>
         <span>Schema</span>
         <span className="jb-breadcrumb-sep">›</span>
-        <span style={{ color: 'var(--jb-accent-blue)', fontWeight: 500 }}>{t('collections.title')}</span>
+        <span style={{ color: 'var(--jb-accent-blue)', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+          <span className="i-ph:table-bold text-11px text-sky-400" />
+          <span>{t('collections.title')}</span>
+        </span>
       </div>
 
       {/* Main Content Area */}
@@ -211,7 +214,7 @@ function CollectionsOverviewPage() {
           <div style={{ display: 'flex', gap: 8 }}>
             <span className="jb-branch-badge" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <span className="i-ph:table-bold text-12px" />
-              <span>{collections.length} Tables</span>
+              <span>{t('collections.tables_count', { count: collections.length })}</span>
             </span>
           </div>
         </div>
@@ -232,7 +235,7 @@ function CollectionsOverviewPage() {
                 <th style={{ padding: '10px 16px', fontWeight: 600, color: 'var(--jb-text-heading)' }}>{t('collections.name')}</th>
                 <th style={{ padding: '10px 16px', fontWeight: 600, color: 'var(--jb-text-heading)' }}>{t('collections.type')}</th>
                 <th style={{ padding: '10px 16px', fontWeight: 600, color: 'var(--jb-text-heading)' }}>{t('collections.fields')}</th>
-                <th style={{ padding: '10px 16px', fontWeight: 600, color: 'var(--jb-text-heading)' }}>API Rules</th>
+                <th style={{ padding: '10px 16px', fontWeight: 600, color: 'var(--jb-text-heading)' }}>{t('collections.rules')}</th>
                 <th style={{ padding: '10px 16px', fontWeight: 600, color: 'var(--jb-text-heading)', textAlign: 'right' }}>{t('app.actions')}</th>
               </tr>
             </thead>
@@ -293,7 +296,7 @@ function CollectionsOverviewPage() {
                       </span>
                     </td>
                     <td style={{ padding: '12px 16px', color: 'var(--jb-text-muted)' }}>
-                      {col.fields?.map((f) => `${f.name} (${f.type})`).join(', ') || '(无字段)'}
+                      {col.fields?.map((f) => `${f.name} (${f.type})`).join(', ') || t('collections.no_fields')}
                     </td>
                     <td style={{ padding: '12px 16px', fontSize: 12, color: 'var(--jb-text-muted)' }}>
                       <span
@@ -303,12 +306,12 @@ function CollectionsOverviewPage() {
                         {col.rules?.list === null || col.rules?.list === undefined ? (
                           <>
                             <span className="i-ph:lock-simple-bold text-amber-500 text-13px" />
-                            <span>仅管理员</span>
+                            <span>{t('collections.rule.admin_only')}</span>
                           </>
                         ) : (
                           <>
                             <span className="i-ph:lock-simple-open-bold text-emerald-500 text-13px" />
-                            <span>已配置规则</span>
+                            <span>{t('collections.rule.configured')}</span>
                           </>
                         )}
                       </span>
@@ -560,7 +563,7 @@ function CollectionsOverviewPage() {
                     <span style={{ fontSize: 11, color: 'var(--jb-text-muted)' }}>{t('collections.rule.list')}</span>
                     <input
                       type="text"
-                      placeholder="留空 (仅管理员) 或 true"
+                      placeholder={t('collections.rule.placeholder_public')}
                       value={listRule}
                       onChange={(e) => setListRule(e.target.value)}
                       style={{ width: '100%', padding: '4px 8px', borderRadius: 3, border: '1px solid var(--jb-border)', backgroundColor: 'var(--jb-editor-bg)', color: 'var(--jb-text)', fontSize: 12, boxSizing: 'border-box' }}
@@ -571,7 +574,7 @@ function CollectionsOverviewPage() {
                     <span style={{ fontSize: 11, color: 'var(--jb-text-muted)' }}>{t('collections.rule.view')}</span>
                     <input
                       type="text"
-                      placeholder="留空 (仅管理员) 或 true"
+                      placeholder={t('collections.rule.placeholder_public')}
                       value={viewRule}
                       onChange={(e) => setViewRule(e.target.value)}
                       style={{ width: '100%', padding: '4px 8px', borderRadius: 3, border: '1px solid var(--jb-border)', backgroundColor: 'var(--jb-editor-bg)', color: 'var(--jb-text)', fontSize: 12, boxSizing: 'border-box' }}
@@ -582,7 +585,7 @@ function CollectionsOverviewPage() {
                     <span style={{ fontSize: 11, color: 'var(--jb-text-muted)' }}>{t('collections.rule.create')}</span>
                     <input
                       type="text"
-                      placeholder="留空 (仅管理员)"
+                      placeholder={t('collections.rule.placeholder_admin')}
                       value={createRule}
                       onChange={(e) => setCreateRule(e.target.value)}
                       style={{ width: '100%', padding: '4px 8px', borderRadius: 3, border: '1px solid var(--jb-border)', backgroundColor: 'var(--jb-editor-bg)', color: 'var(--jb-text)', fontSize: 12, boxSizing: 'border-box' }}
@@ -593,7 +596,7 @@ function CollectionsOverviewPage() {
                     <span style={{ fontSize: 11, color: 'var(--jb-text-muted)' }}>{t('collections.rule.update')}</span>
                     <input
                       type="text"
-                      placeholder="留空 (仅管理员)"
+                      placeholder={t('collections.rule.placeholder_admin')}
                       value={updateRule}
                       onChange={(e) => setUpdateRule(e.target.value)}
                       style={{ width: '100%', padding: '4px 8px', borderRadius: 3, border: '1px solid var(--jb-border)', backgroundColor: 'var(--jb-editor-bg)', color: 'var(--jb-text)', fontSize: 12, boxSizing: 'border-box' }}
@@ -604,7 +607,7 @@ function CollectionsOverviewPage() {
                     <span style={{ fontSize: 11, color: 'var(--jb-text-muted)' }}>{t('collections.rule.delete')}</span>
                     <input
                       type="text"
-                      placeholder="留空 (仅管理员)"
+                      placeholder={t('collections.rule.placeholder_admin')}
                       value={deleteRule}
                       onChange={(e) => setDeleteRule(e.target.value)}
                       style={{ width: '100%', padding: '4px 8px', borderRadius: 3, border: '1px solid var(--jb-border)', backgroundColor: 'var(--jb-editor-bg)', color: 'var(--jb-text)', fontSize: 12, boxSizing: 'border-box' }}

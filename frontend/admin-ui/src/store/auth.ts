@@ -61,14 +61,22 @@ export function setAuthSession(data: {
   }))
 }
 
-export function updateTokens(accessToken: string, refreshToken: string) {
+export function updateTokens(
+  accessToken: string,
+  refreshToken: string,
+  user?: AdminUser
+) {
   localStorage.setItem(ACCESS_TOKEN_KEY, accessToken)
   localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
+  if (user) {
+    localStorage.setItem(ADMIN_USER_KEY, JSON.stringify(user))
+  }
 
   authStore.setState((state) => ({
     ...state,
     accessToken,
     refreshToken,
+    admin: user || state.admin,
     isAuthenticated: true,
   }))
 }
