@@ -182,6 +182,34 @@ HertaBase 采用 RESTful 风格的 API 设计理念，致力于提供清晰、�
   `/_/web-projects/{project}/versions` 与 `/_/web-projects/{project}/rollback` 管理文件版本。
   仅管理员可访问，详细契约见 [网页部署与静态托管](web-deployment.md)。
 
+### GET /api/admin/logs
+
+查询服务端日志和 HTTP 请求元数据，仅管理员 Access Token 可访问。结果默认按
+`created_at` 倒序返回，响应使用标准 envelope，`meta` 包含 `total`、`page` 和 `perPage`。
+
+支持的查询参数：
+
+- `page` / `perPage`：页码和每页数量，默认 `1/30`，每页最多 500 条。
+- `level`：`trace`、`debug`、`info`、`warn` 或 `error`。
+- `logType`：`server` 或 `request`。
+- `q`：大小写不敏感的关键字，匹配消息、target、请求元数据和用户标识文本。
+- `target` / `path`：精确匹配日志 target 或请求路径。
+- `statusCode`：HTTP 状态码（100-599）。
+- `from` / `to`：RFC3339 时间范围，按 `created_at` 包含边界过滤。
+
+示例：
+
+```http
+GET /api/admin/logs?page=1&perPage=50&level=error&logType=request&statusCode=500
+    &from=2026-08-01T00:00:00Z&to=2026-08-05T23:59:59Z
+Authorization: Bearer <admin-access-token>
+```
+
+`data` 中的日志记录包含 `id`、`created_at`、`log_type`、`level`、`message`、`target`，
+以及可选的 `method`、`path`、`status_code`、`referer`、`remote_ip`、`user_agent`、
+`auth_type`、`user_id` 和 `user_collection`。日志接口不支持通用 `filter`、动态排序、
+清空或删除操作。
+
 ## 8. 通用查询参数
 
 CRUD 和列表接口广泛支持以下参数：

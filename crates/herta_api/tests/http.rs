@@ -46,6 +46,20 @@ async fn service() -> Service {
     service_with_settings(1000, 20, 900).await
 }
 
+async fn service_with_db() -> (Service, DbClient) {
+    let db = DbClient::memory().await.unwrap();
+    let mut config = HbConfig::default();
+    config.database.engine = "memory".into();
+    config.server.dev_mode = true;
+    config.auth.bootstrap_admin_email = Some("admin@example.com".into());
+    config.auth.bootstrap_admin_password = Some("correct horse battery staple".into());
+    let state = ApiState::new(db.clone(), config).await.unwrap();
+    (
+        Service::new(build_router()).hoop(affix_state::inject(state)),
+        db,
+    )
+}
+
 async fn service_with_realtime_limits(max_connections: usize, per_ip: usize) -> Service {
     service_with_settings(max_connections, per_ip, 900).await
 }
@@ -155,6 +169,83 @@ async fn admin_token(service: &Service) -> String {
 }
 
 #[tokio::test]
+async fn admin_logs_endpoint_requires_admin_and_applies_filters() {
+    let (service, db) = service_with_db().await;
+    db.inner()
+        .query("CREATE _logs CONTENT $entry")
+        .bind((
+            "entry",
+            json!({
+                "log_type": "request",
+                "level": "error",
+                "message": "GET /admin failed",
+                "target": "herta_api::request",
+                "method": "GET",
+                "path": "/admin",
+                "status_code": 500,
+                "referer": "https://example.test",
+                "remote_ip": "192.0.2.10",
+                "user_agent": "admin-browser",
+                "auth_type": "admin",
+                "user_id": "_admins:one",
+                "user_collection": "_admins"
+            }),
+        ))
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+
+    let mut response = TestClient::get("http://localhost/api/admin/logs")
+        .send(&service)
+        .await;
+    assert_eq!(response.status_code, Some(StatusCode::UNAUTHORIZED));
+    let body: Value = response.take_json().await.unwrap();
+    assert_eq!(body["error"]["error"], "HB_AUTH_REQUIRED");
+
+    let mut response = TestClient::post("http://localhost/api/auth/register")
+        .json(&json!({
+            "email": "user@example.com",
+            "password": "a sufficiently long password"
+        }))
+        .send(&service)
+        .await;
+    assert_eq!(response.status_code, Some(StatusCode::CREATED));
+    let registered: Value = response.take_json().await.unwrap();
+    let user_access = registered["data"]["accessToken"].as_str().unwrap();
+    let mut response = TestClient::get("http://localhost/api/admin/logs")
+        .bearer_auth(user_access)
+        .send(&service)
+        .await;
+    assert_eq!(response.status_code, Some(StatusCode::FORBIDDEN));
+    let body: Value = response.take_json().await.unwrap();
+    assert_eq!(body["error"]["error"], "HB_FORBIDDEN");
+
+    let admin = admin_token(&service).await;
+    let mut response = TestClient::get(
+        "http://localhost/api/admin/logs?level=ERROR&logType=request&q=ADMIN-BROWSER&target=herta_api%3A%3Arequest&path=%2Fadmin&statusCode=500",
+    )
+    .bearer_auth(&admin)
+    .send(&service)
+    .await;
+    assert_eq!(response.status_code, Some(StatusCode::OK));
+    let body: Value = response.take_json().await.unwrap();
+    assert_eq!(body["meta"]["total"], 1);
+    assert_eq!(body["data"].as_array().unwrap().len(), 1);
+    assert!(body["data"][0]["id"].as_str().is_some());
+    assert!(body["data"][0]["created_at"].as_str().is_some());
+    assert_eq!(body["data"][0]["status_code"], 500);
+
+    let mut response = TestClient::get("http://localhost/api/admin/logs?from=not-a-date")
+        .bearer_auth(&admin)
+        .send(&service)
+        .await;
+    assert_eq!(response.status_code, Some(StatusCode::BAD_REQUEST));
+    let body: Value = response.take_json().await.unwrap();
+    assert_eq!(body["error"]["error"], "HB_VALIDATION_ERROR");
+}
+
+#[tokio::test]
 async fn collection_record_and_openapi_flow() {
     let service = service().await;
     let admin = admin_token(&service).await;
@@ -195,6 +286,17 @@ async fn collection_record_and_openapi_flow() {
     );
     assert!(document["paths"]["/api/auth/register"].is_object());
     assert!(document["paths"]["/api/admin/auth/login"].is_object());
+    assert!(document["paths"]["/api/admin/logs"].is_object());
+    assert_eq!(
+        document["paths"]["/api/admin/logs"]["get"]["parameters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|parameter| parameter["name"] == "q")
+            .unwrap()["schema"]["maxLength"],
+        256
+    );
+    assert!(document["components"]["schemas"]["LogRecord"].is_object());
     assert!(document["paths"]["/api/realtime/{collection}"].is_object());
 
     let mut response = TestClient::patch("http://localhost/_/collections/posts")

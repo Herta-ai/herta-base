@@ -124,6 +124,27 @@ fn base_paths() -> Map<String, Value> {
         "/api/admin/auth/me".into(),
         json!({"get": secured_operation("Get the current administrator", "AuthUserEnvelope")}),
     );
+    paths.insert(
+        "/api/admin/logs".into(),
+        json!({
+            "get": {
+                "summary": "List persisted server and request logs",
+                "security": [{"bearerAuth": []}],
+                "parameters": log_list_parameters(),
+                "responses": {
+                    "200": {
+                        "description": "Log list",
+                        "content": {"application/json": {
+                            "schema": {"$ref": "#/components/schemas/LogListEnvelope"}
+                        }}
+                    },
+                    "400": {"description": "Invalid query parameters"},
+                    "401": {"description": "Authentication required"},
+                    "403": {"description": "Administrator access required"}
+                }
+            }
+        }),
+    );
     paths
 }
 
@@ -209,6 +230,37 @@ fn base_schemas() -> Map<String, Value> {
     schemas.insert(
         "CollectionListEnvelope".into(),
         envelope(json!({"type": "array", "items": {"$ref": "#/components/schemas/Collection"}})),
+    );
+    schemas.insert(
+        "LogRecord".into(),
+        json!({
+            "type": "object",
+            "required": ["id", "created_at", "log_type", "level", "message", "target"],
+            "properties": {
+                "id": {"type": "string", "readOnly": true},
+                "created_at": {"type": "string", "format": "date-time", "readOnly": true},
+                "log_type": {"type": "string", "enum": ["server", "request"]},
+                "level": {"type": "string", "enum": ["trace", "debug", "info", "warn", "error"]},
+                "message": {"type": "string"},
+                "target": {"type": "string"},
+                "method": {"type": ["string", "null"]},
+                "path": {"type": ["string", "null"]},
+                "status_code": {"type": ["integer", "null"]},
+                "referer": {"type": ["string", "null"]},
+                "remote_ip": {"type": ["string", "null"]},
+                "user_agent": {"type": ["string", "null"]},
+                "auth_type": {"type": ["string", "null"]},
+                "user_id": {"type": ["string", "null"]},
+                "user_collection": {"type": ["string", "null"]}
+            }
+        }),
+    );
+    schemas.insert(
+        "LogListEnvelope".into(),
+        envelope(json!({
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/LogRecord"}
+        })),
     );
     schemas.insert("GenericEnvelope".into(), envelope(json!({})));
     schemas
@@ -467,6 +519,21 @@ fn list_parameters() -> Value {
     ])
 }
 
+fn log_list_parameters() -> Value {
+    json!([
+        {"name": "page", "in": "query", "schema": {"type": "integer", "minimum": 1, "default": 1}},
+        {"name": "perPage", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 500, "default": 30}},
+        {"name": "level", "in": "query", "schema": {"type": "string", "enum": ["trace", "debug", "info", "warn", "error"]}},
+        {"name": "logType", "in": "query", "schema": {"type": "string", "enum": ["server", "request"]}},
+        {"name": "q", "in": "query", "schema": {"type": "string", "maxLength": 256}},
+        {"name": "target", "in": "query", "schema": {"type": "string"}},
+        {"name": "path", "in": "query", "schema": {"type": "string"}},
+        {"name": "statusCode", "in": "query", "schema": {"type": "integer", "minimum": 100, "maximum": 599}},
+        {"name": "from", "in": "query", "schema": {"type": "string", "format": "date-time"}},
+        {"name": "to", "in": "query", "schema": {"type": "string", "format": "date-time"}}
+    ])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -489,9 +556,11 @@ mod tests {
         };
         let document = generate_document(&[collection]);
         assert!(document["paths"]["/api/collections/posts/records"].is_object());
+        assert!(document["paths"]["/api/admin/logs"].is_object());
         assert_eq!(
             document["components"]["schemas"]["postsCreate"]["required"][0],
             "title"
         );
+        assert!(document["components"]["schemas"]["LogRecord"].is_object());
     }
 }

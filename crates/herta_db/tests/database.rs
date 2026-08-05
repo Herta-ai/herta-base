@@ -1,7 +1,7 @@
 use herta_db::{
     ApiRule, CollectionDef, CollectionType, DbClient, FieldDef, FieldType, ListParams, LogEntry,
-    LogType, RealtimeAction, RealtimeManager, RecordManager, RuleContext, SchemaManager,
-    SchemaMode, UpdateCollectionRequest, log_channel, spawn_log_worker,
+    LogManager, LogQuery, LogType, RealtimeAction, RealtimeManager, RecordManager, RuleContext,
+    SchemaManager, SchemaMode, UpdateCollectionRequest, log_channel, spawn_log_worker,
 };
 use serde_json::json;
 use tokio::time::{Duration, timeout};
@@ -41,6 +41,140 @@ async fn log_worker_persists_server_and_request_metadata() {
     assert_eq!(rows[0]["path"], "/health");
     assert_eq!(rows[0]["remote_ip"], "192.0.2.1");
     assert_eq!(rows[0]["auth_type"], "anonymous");
+}
+
+#[tokio::test]
+async fn log_query_supports_pagination_filters_and_time_range() {
+    let db = DbClient::memory().await.unwrap();
+    let (sender, receiver) = log_channel();
+    let worker = spawn_log_worker(db.clone(), receiver);
+    for entry in [
+        LogEntry {
+            log_type: LogType::Server,
+            level: "info".into(),
+            message: "Database started".into(),
+            target: "herta_server::startup".into(),
+            method: None,
+            path: None,
+            status_code: None,
+            referer: None,
+            remote_ip: None,
+            user_agent: None,
+            auth_type: None,
+            user_id: None,
+            user_collection: None,
+        },
+        LogEntry {
+            log_type: LogType::Request,
+            level: "error".into(),
+            message: "GET /admin failed".into(),
+            target: "herta_api::request".into(),
+            method: Some("GET".into()),
+            path: Some("/admin".into()),
+            status_code: Some(500),
+            referer: Some("https://example.test".into()),
+            remote_ip: Some("192.0.2.10".into()),
+            user_agent: Some("admin-browser".into()),
+            auth_type: Some("admin".into()),
+            user_id: Some("_admins:one".into()),
+            user_collection: Some("_admins".into()),
+        },
+        LogEntry {
+            log_type: LogType::Request,
+            level: "warn".into(),
+            message: "GET /health -> 429".into(),
+            target: "herta_api::request".into(),
+            method: Some("GET".into()),
+            path: Some("/health".into()),
+            status_code: Some(429),
+            referer: None,
+            remote_ip: Some("192.0.2.11".into()),
+            user_agent: Some("probe".into()),
+            auth_type: Some("anonymous".into()),
+            user_id: None,
+            user_collection: None,
+        },
+    ] {
+        sender.send(entry).await.unwrap();
+    }
+    drop(sender);
+    timeout(Duration::from_secs(2), worker)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let manager = LogManager::new(&db);
+    let (page, total) = manager
+        .list(&LogQuery {
+            per_page: Some(2),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(total, 3);
+    assert_eq!(page.len(), 2);
+    let (repeat, _) = manager.list(&LogQuery::default()).await.unwrap();
+    let (repeat_again, _) = manager.list(&LogQuery::default()).await.unwrap();
+    assert_eq!(repeat[0]["id"], repeat_again[0]["id"]);
+
+    let (errors, total) = manager
+        .list(&LogQuery {
+            level: Some("ERROR".into()),
+            log_type: Some("REQUEST".into()),
+            keyword: Some("ADMIN-BROWSER".into()),
+            target: Some("herta_api::request".into()),
+            path: Some("/admin".into()),
+            status_code: Some(500),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(total, 1);
+    assert_eq!(errors[0]["message"], "GET /admin failed");
+
+    let (_, total) = manager
+        .list(&LogQuery {
+            from: Some("2000-01-01T00:00:00Z".into()),
+            to: Some("2100-01-01T00:00:00Z".into()),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(total, 3);
+    let (_, total) = manager
+        .list(&LogQuery {
+            to: Some("2000-01-01T00:00:00Z".into()),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(total, 0);
+
+    for invalid in [
+        LogQuery {
+            page: Some(0),
+            ..Default::default()
+        },
+        LogQuery {
+            per_page: Some(501),
+            ..Default::default()
+        },
+        LogQuery {
+            level: Some("verbose".into()),
+            ..Default::default()
+        },
+        LogQuery {
+            from: Some("not-a-date".into()),
+            ..Default::default()
+        },
+        LogQuery {
+            from: Some("2026-01-02T00:00:00Z".into()),
+            to: Some("2026-01-01T00:00:00Z".into()),
+            ..Default::default()
+        },
+    ] {
+        assert!(manager.list(&invalid).await.is_err());
+    }
 }
 
 fn posts_collection() -> CollectionDef {

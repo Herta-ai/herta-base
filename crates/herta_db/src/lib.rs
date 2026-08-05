@@ -8,7 +8,7 @@ pub mod schema;
 pub mod validation;
 
 pub use client::DbClient;
-pub use log::{LogEntry, LogSender, LogType, log_channel, spawn_log_worker};
+pub use log::{LogEntry, LogManager, LogQuery, LogSender, LogType, log_channel, spawn_log_worker};
 pub use models::*;
 pub use realtime::{RealtimeAction, RealtimeEvent, RealtimeManager, RealtimeSubscription};
 pub use record::RecordManager;

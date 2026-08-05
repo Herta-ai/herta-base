@@ -10,7 +10,7 @@ use salvo::{oapi::swagger_ui::SwaggerUi, prelude::*};
 
 use crate::{
     docs::OpenApiCache,
-    handlers::{auth, collections, docs, realtime, records},
+    handlers::{auth, collections, docs, logs, realtime, records},
 };
 
 #[derive(Clone)]
@@ -140,6 +140,7 @@ pub fn build_router_with_logger(
         .push(Router::with_path("login").post(auth::login_admin))
         .push(Router::with_path("refresh").post(auth::refresh_admin))
         .push(Router::with_path("me").get(auth::me_admin));
+    let admin_logs = Router::with_path("api/admin/logs").get(logs::list);
 
     let mut root = Router::new();
     if let Some(logger) = request_logger {
@@ -151,6 +152,7 @@ pub fn build_router_with_logger(
         .push(default_auth)
         .push(collection_auth)
         .push(admin_auth)
+        .push(admin_logs)
         .push(Router::with_path("api-doc/openapi.json").get(docs::openapi))
         .push(SwaggerUi::new("/api-doc/openapi.json").into_router("/swagger-ui"))
 }
