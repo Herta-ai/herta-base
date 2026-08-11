@@ -160,6 +160,17 @@ impl<'a> RecordManager<'a> {
     pub async fn create_authorized(
         &self,
         collection: &str,
+        data: Value,
+        context: &RuleContext,
+    ) -> HbResult<Value> {
+        self.create_authorized_with_id(collection, &Uuid::now_v7().to_string(), data, context)
+            .await
+    }
+
+    pub async fn create_authorized_with_id(
+        &self,
+        collection: &str,
+        id: &str,
         mut data: Value,
         context: &RuleContext,
     ) -> HbResult<Value> {
@@ -168,12 +179,25 @@ impl<'a> RecordManager<'a> {
             .await?;
         validate_record(&schema, &mut data, true)?;
         check_create_rule(self.db, &schema.rules.create, context, &data).await?;
-        let id = Uuid::now_v7().to_string();
         let mut value = self
-            .write_record(&schema, &id, data, true, None, context)
+            .write_record(&schema, id, data, true, None, context)
             .await?;
         sanitize_record(&schema, &mut value);
         Ok(value)
+    }
+
+    pub async fn preflight_create_authorized(
+        &self,
+        collection: &str,
+        mut data: Value,
+        context: &RuleContext,
+    ) -> HbResult<CollectionDef> {
+        let schema = SchemaManager::new(self.db)
+            .get_collection(collection)
+            .await?;
+        validate_record(&schema, &mut data, true)?;
+        check_create_rule(self.db, &schema.rules.create, context, &data).await?;
+        Ok(schema)
     }
 
     pub async fn update(&self, collection: &str, id: &str, data: Value) -> HbResult<Value> {
@@ -198,6 +222,42 @@ impl<'a> RecordManager<'a> {
             .await?;
         sanitize_record(&schema, &mut value);
         Ok(value)
+    }
+
+    pub async fn preflight_update_authorized(
+        &self,
+        collection: &str,
+        id: &str,
+        mut data: Value,
+        context: &RuleContext,
+    ) -> HbResult<CollectionDef> {
+        let schema = SchemaManager::new(self.db)
+            .get_collection(collection)
+            .await?;
+        validate_record(&schema, &mut data, false)?;
+        if data.as_object().is_none_or(Map::is_empty) {
+            return Err(HbError::validation("update body cannot be empty"));
+        }
+        let rule = compile_rule(&schema.rules.update, context, true)?;
+        let mut response = self
+            .db
+            .inner()
+            .query(format!(
+                "SELECT id FROM ONLY $record WHERE deleted_at IS NONE AND ({rule})"
+            ))
+            .bind(("record", record_id(collection, id)))
+            .bind(("hb_auth", context.auth.clone()))
+            .bind(("hb_request", json_request(&context.request_body)))
+            .await
+            .map_err(database_error)?
+            .check()
+            .map_err(database_error)?;
+        let records: Vec<Value> = response.take(0).map_err(database_error)?;
+        if records.iter().any(|record| !record.is_null()) {
+            Ok(schema)
+        } else {
+            Err(HbError::Forbidden)
+        }
     }
 
     async fn write_record(
@@ -225,6 +285,10 @@ impl<'a> RecordManager<'a> {
         let mut bindings = Vec::new();
         for (index, (field_name, value)) in object.iter().enumerate() {
             validate_identifier("field name", field_name)?;
+            if value.is_null() {
+                assignments.push(format!("{} = NONE", quote_identifier(field_name)));
+                continue;
+            }
             let binding_name = format!("value_{index}");
             assignments.push(format!(
                 "{} = ${binding_name}",

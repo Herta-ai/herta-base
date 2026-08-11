@@ -99,6 +99,13 @@ pub async fn delete(
     SchemaManager::new(&state.db)
         .delete_collection(&name)
         .await?;
+    if let Err(error) = state
+        .storage
+        .delete_prefix(&format!("records/{name}"))
+        .await
+    {
+        tracing::warn!(collection = %name, error = %error, "failed to clean collection file prefix");
+    }
     state.docs.refresh(state).await?;
     res.render(Json(ApiResponse::ok(
         json!({"name": name, "deleted": true}),

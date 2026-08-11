@@ -4,6 +4,7 @@ use herta_db::{
     CollectionDef, CollectionType, DbClient, FieldDef, FieldType, LogEntry, SchemaManager,
     SchemaMode, log_channel,
 };
+use herta_storage::ObjectStoreStorage;
 use http_body_util::BodyExt;
 use salvo::{
     http::StatusCode,
@@ -17,7 +18,13 @@ use tokio::time::{Duration, timeout};
 async fn request_logger_records_metadata_only() {
     let db = DbClient::memory().await.unwrap();
     let config = HbConfig::default();
-    let state = ApiState::new(db, config).await.unwrap();
+    let state = ApiState::new_with_storage(
+        db,
+        config,
+        std::sync::Arc::new(ObjectStoreStorage::memory()),
+    )
+    .await
+    .unwrap();
     let (sender, mut receiver) = log_channel();
     let service = Service::new(build_router_with_logger(Some(
         herta_api::handlers::logging::RequestLogger::new(sender),
@@ -101,7 +108,13 @@ async fn service_with_settings(
     config.auth.access_token_ttl_seconds = access_token_ttl_seconds;
     config.realtime.max_connections = max_connections;
     config.realtime.max_connections_per_ip = per_ip;
-    let state = ApiState::new(db, config).await.unwrap();
+    let state = ApiState::new_with_storage(
+        db,
+        config,
+        std::sync::Arc::new(ObjectStoreStorage::memory()),
+    )
+    .await
+    .unwrap();
     Service::new(build_router()).hoop(affix_state::inject(state))
 }
 
@@ -133,7 +146,13 @@ async fn realtime_service(access_token_ttl_seconds: u64, heartbeat_seconds: u64)
         })
         .await
         .unwrap();
-    let state = ApiState::new(db, config).await.unwrap();
+    let state = ApiState::new_with_storage(
+        db,
+        config,
+        std::sync::Arc::new(ObjectStoreStorage::memory()),
+    )
+    .await
+    .unwrap();
     Service::new(build_router()).hoop(affix_state::inject(state))
 }
 
@@ -268,6 +287,29 @@ async fn admin_logs_endpoint_requires_admin_and_applies_filters() {
     assert_eq!(body["error"]["error"], "HB_VALIDATION_ERROR");
 }
 
+fn multipart_body(
+    data: Option<&str>,
+    files: &[(&str, &str, &str, &str)],
+) -> (String, &'static str) {
+    const BOUNDARY: &str = "hertabase-phase5-boundary";
+    let mut body = String::new();
+    if let Some(data) = data {
+        body.push_str(&format!(
+            "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"data\"\r\nContent-Type: application/json\r\n\r\n{data}\r\n"
+        ));
+    }
+    for (field, filename, content_type, content) in files {
+        body.push_str(&format!(
+            "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"{field}\"; filename=\"{filename}\"\r\nContent-Type: {content_type}\r\n\r\n{content}\r\n"
+        ));
+    }
+    body.push_str(&format!("--{BOUNDARY}--\r\n"));
+    (
+        body,
+        "multipart/form-data; boundary=hertabase-phase5-boundary",
+    )
+}
+
 #[tokio::test]
 async fn collection_record_and_openapi_flow() {
     let service = service().await;
@@ -375,6 +417,204 @@ async fn collection_record_and_openapi_flow() {
         .await;
     let document: Value = response.take_json().await.unwrap();
     assert!(document["paths"]["/api/collections/posts/records"].is_null());
+}
+
+#[tokio::test]
+async fn record_file_upload_token_download_replace_and_clear_flow() {
+    let service = service().await;
+    let admin = admin_token(&service).await;
+    let mut response = TestClient::post("http://localhost/_/collections")
+        .bearer_auth(&admin)
+        .json(&json!({
+            "name": "assets",
+            "type": "base",
+            "schema_mode": "strict",
+            "fields": [
+                {"name": "title", "type": "text", "required": true},
+                {"name": "avatar", "type": "file", "options": {
+                    "maxSelect": 1, "maxSize": 1024,
+                    "mimeTypes": ["text/plain"], "extensions": ["txt"]
+                }},
+                {"name": "attachments", "type": "file", "options": {
+                    "maxSelect": 2, "mimeTypes": ["text/plain"], "extensions": ["txt"]
+                }}
+            ],
+            "indexes": []
+        }))
+        .send(&service)
+        .await;
+    let status = response.status_code;
+    let collection_body: Value = response.take_json().await.unwrap();
+    assert_eq!(status, Some(StatusCode::CREATED), "{collection_body}");
+
+    let mut response = TestClient::post("http://localhost/api/collections/assets/records")
+        .bearer_auth(&admin)
+        .json(&json!({"title": "forged", "avatar": "client-name.txt"}))
+        .send(&service)
+        .await;
+    assert_eq!(
+        response.status_code,
+        Some(StatusCode::UNSUPPORTED_MEDIA_TYPE)
+    );
+    let forged: Value = response.take_json().await.unwrap();
+    assert_eq!(forged["error"]["error"], "HB_UNSUPPORTED_MEDIA_TYPE");
+
+    let (body, content_type) = multipart_body(
+        Some(r#"{"title":"one"}"#),
+        &[
+            ("avatar", "hello.txt", "text/plain", "hello world"),
+            ("attachments", "one.txt", "text/plain", "first"),
+            ("attachments", "two.txt", "text/plain", "second"),
+        ],
+    );
+    let mut response = TestClient::post("http://localhost/api/collections/assets/records")
+        .bearer_auth(&admin)
+        .add_header("content-type", content_type, true)
+        .body(body)
+        .send(&service)
+        .await;
+    let status = response.status_code;
+    let created: Value = response.take_json().await.unwrap();
+    assert_eq!(status, Some(StatusCode::CREATED), "{created}");
+    let record_id = created["data"]["id"].as_str().unwrap();
+    let raw_id = record_id.split_once(':').unwrap().1;
+    let avatar = created["data"]["avatar"].as_str().unwrap().to_owned();
+    assert!(avatar.ends_with(".txt"));
+    assert_eq!(created["data"]["attachments"].as_array().unwrap().len(), 2);
+
+    let mut openapi = TestClient::get("http://localhost/api-doc/openapi.json")
+        .send(&service)
+        .await;
+    let openapi: Value = openapi.take_json().await.unwrap();
+    assert!(openapi["paths"]["/api/collections/assets/records"]["post"]["requestBody"]
+        ["content"]["multipart/form-data"]
+        .is_object());
+    assert_eq!(
+        openapi["components"]["schemas"]["assetsRecord"]["properties"]["attachments"]["type"],
+        "array"
+    );
+
+    let file_url = format!("http://localhost/api/files/assets/{raw_id}/avatar/{avatar}");
+    let mut response = TestClient::get(&file_url)
+        .bearer_auth(&admin)
+        .send(&service)
+        .await;
+    assert_eq!(response.status_code, Some(StatusCode::OK));
+    assert_eq!(
+        response.headers().get("content-type").unwrap(),
+        "text/plain"
+    );
+    assert_eq!(
+        response.headers().get("x-content-type-options").unwrap(),
+        "nosniff"
+    );
+    let etag = response
+        .headers()
+        .get("etag")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(response.take_bytes(None).await.unwrap(), "hello world");
+
+    let mut response = TestClient::head(&file_url)
+        .bearer_auth(&admin)
+        .send(&service)
+        .await;
+    assert_eq!(response.status_code, Some(StatusCode::OK));
+    assert_eq!(response.headers().get("content-length").unwrap(), "11");
+    assert!(response.take_bytes(None).await.unwrap().is_empty());
+
+    let mut response = TestClient::get(&file_url)
+        .bearer_auth(&admin)
+        .add_header("range", "bytes=0-4", true)
+        .send(&service)
+        .await;
+    assert_eq!(response.status_code, Some(StatusCode::PARTIAL_CONTENT));
+    assert_eq!(
+        response.headers().get("content-range").unwrap(),
+        "bytes 0-4/11"
+    );
+    assert_eq!(response.take_bytes(None).await.unwrap(), "hello");
+
+    let mut response = TestClient::get(&file_url)
+        .bearer_auth(&admin)
+        .add_header("range", "bytes=99-", true)
+        .send(&service)
+        .await;
+    assert_eq!(
+        response.status_code,
+        Some(StatusCode::RANGE_NOT_SATISFIABLE)
+    );
+    assert_eq!(
+        response.headers().get("content-range").unwrap(),
+        "bytes */11"
+    );
+    let range_error: Value = response.take_json().await.unwrap();
+    assert_eq!(range_error["error"]["error"], "HB_RANGE_NOT_SATISFIABLE");
+
+    let response = TestClient::get(&file_url)
+        .bearer_auth(&admin)
+        .add_header("if-none-match", &etag, true)
+        .send(&service)
+        .await;
+    assert_eq!(response.status_code, Some(StatusCode::NOT_MODIFIED));
+
+    let mut response = TestClient::post("http://localhost/api/files/token")
+        .bearer_auth(&admin)
+        .json(&json!({"collection": "assets", "recordId": raw_id, "field": "avatar"}))
+        .send(&service)
+        .await;
+    assert_eq!(response.status_code, Some(StatusCode::OK));
+    let token: Value = response.take_json().await.unwrap();
+    let file_token = token["data"]["token"].as_str().unwrap();
+    let mut response = TestClient::get(format!("{file_url}?token={file_token}"))
+        .send(&service)
+        .await;
+    assert_eq!(response.status_code, Some(StatusCode::OK));
+    assert_eq!(response.take_bytes(None).await.unwrap(), "hello world");
+    let mut response = TestClient::get(format!("{file_url}?token={file_token}"))
+        .bearer_auth("invalid")
+        .send(&service)
+        .await;
+    assert_eq!(response.status_code, Some(StatusCode::UNAUTHORIZED));
+    let _: Value = response.take_json().await.unwrap();
+
+    let (body, content_type) = multipart_body(
+        None,
+        &[("avatar", "replacement.txt", "text/plain", "replacement")],
+    );
+    let mut response = TestClient::patch(format!(
+        "http://localhost/api/collections/assets/records/{raw_id}"
+    ))
+    .bearer_auth(&admin)
+    .add_header("content-type", content_type, true)
+    .body(body)
+    .send(&service)
+    .await;
+    let status = response.status_code;
+    let replaced: Value = response.take_json().await.unwrap();
+    assert_eq!(status, Some(StatusCode::OK), "{replaced}");
+    let replacement = replaced["data"]["avatar"].as_str().unwrap().to_owned();
+    assert_ne!(replacement, avatar);
+    let mut old = TestClient::get(&file_url)
+        .bearer_auth(&admin)
+        .send(&service)
+        .await;
+    assert_eq!(old.status_code, Some(StatusCode::NOT_FOUND));
+    let _: Value = old.take_json().await.unwrap();
+
+    let mut response = TestClient::patch(format!(
+        "http://localhost/api/collections/assets/records/{raw_id}"
+    ))
+    .bearer_auth(&admin)
+    .json(&json!({"avatar": []}))
+    .send(&service)
+    .await;
+    let status = response.status_code;
+    let cleared: Value = response.take_json().await.unwrap();
+    assert_eq!(status, Some(StatusCode::OK), "{cleared}");
+    assert!(cleared["data"]["avatar"].is_null());
 }
 
 #[tokio::test]

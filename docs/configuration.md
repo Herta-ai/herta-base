@@ -76,8 +76,14 @@ HertaBase 通过基于 `clap` 构筑的 CLI 工具进行管理：
 
 **文件存储 (Phase 5)**
 
-* `HB_STORAGE_TYPE`：存储策略 `local` 或 `s3`。
-* `HB_S3_ENDPOINT`, `HB_S3_BUCKET`, `HB_S3_ACCESS_KEY`, `HB_S3_SECRET_KEY`：S3 云存储认证信息。
+* `HB_STORAGE_TYPE`：`local`（默认）或 `s3`。
+* `HB_STORAGE_MAX_FILE_SIZE`：全局单文件字节上限，默认 `10485760`。
+* `HB_STORAGE_FILE_TOKEN_TTL_SECONDS`：文件令牌有效期，默认 `300`，范围 1 到 86400 秒。
+* `HB_S3_ENDPOINT`, `HB_S3_BUCKET`, `HB_S3_REGION`, `HB_S3_PREFIX`：S3 endpoint、bucket、region 和对象前缀。
+* `HB_S3_FORCE_PATH_STYLE`, `HB_S3_ALLOW_HTTP`：兼容 S3 服务的 path-style 与开发环境 HTTP 开关。
+* `HB_S3_ACCESS_KEY`, `HB_S3_SECRET_KEY`, `HB_S3_SESSION_TOKEN`：S3 凭据，仅允许通过环境变量提供。
+
+生产模式拒绝 HTTP S3 endpoint。LocalFS 固定写入 `HB_DATA_DIR/storage`。完整说明见 [文件存储与上传](storage.md)。
 
 **邮件服务**
 
@@ -202,9 +208,17 @@ tls = "starttls"
 
 [storage]
 type = "s3"
+max_file_size = 10485760
+file_token_ttl_seconds = 300
+
+[storage.s3]
 endpoint = "https://s3.us-east-1.amazonaws.com"
 bucket = "hertabase-assets"
-# access_key / secret_key 推荐经环境变量注入
+region = "us-east-1"
+prefix = "hertabase"
+force_path_style = false
+allow_http = false
+# access key / secret key 只能经环境变量注入
 ```
 
 ## 5. 数据目录结构

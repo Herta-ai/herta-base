@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod collections;
 pub mod docs;
+pub mod files;
 pub mod logging;
 pub mod logs;
 pub mod realtime;

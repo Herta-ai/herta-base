@@ -79,8 +79,10 @@ impl Writer for ApiFailure {
 
 pub fn parse_error(error: impl std::fmt::Display) -> ApiFailure {
     let message = error.to_string();
-    if message.to_ascii_lowercase().contains("size")
-        && message.to_ascii_lowercase().contains("limit")
+    let lower = message.to_ascii_lowercase();
+    if lower.contains("too large")
+        || lower.contains("payload") && lower.contains("large")
+        || lower.contains("size") && lower.contains("limit")
     {
         ApiFailure(HbError::PayloadTooLarge)
     } else {

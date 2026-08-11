@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use herta_core::HbResult;
 use herta_db::{
-    CollectionDef, CollectionType, FieldDef, FieldType, SchemaManager, relation_is_many,
+    CollectionDef, CollectionType, FieldDef, FieldType, SchemaManager, file_is_many,
+    relation_is_many,
 };
 use serde_json::{Map, Value, json};
 use tokio::sync::RwLock;
@@ -145,6 +146,29 @@ fn base_paths() -> Map<String, Value> {
             }
         }),
     );
+    paths.insert(
+        "/api/files/token".into(),
+        json!({"post": {
+            "summary": "Issue a short-lived file token",
+            "security": [{"bearerAuth": []}],
+            "requestBody": json_body("FileTokenRequest"),
+            "responses": success_response("FileTokenEnvelope")
+        }}),
+    );
+    paths.insert(
+        "/api/files/{collection}/{recordId}/{field}/{filename}".into(),
+        json!({
+            "parameters": [
+                path_parameter("collection"), path_parameter("recordId"),
+                path_parameter("field"), path_parameter("filename"),
+                {"name": "token", "in": "query", "required": false, "schema": {"type": "string"}},
+                {"name": "Range", "in": "header", "required": false, "schema": {"type": "string"}},
+                {"name": "If-None-Match", "in": "header", "required": false, "schema": {"type": "string"}}
+            ],
+            "get": file_download_operation("Download a record file"),
+            "head": file_download_operation("Read record file metadata")
+        }),
+    );
     paths
 }
 
@@ -183,6 +207,26 @@ fn base_schemas() -> Map<String, Value> {
             "required": ["refreshToken"],
             "properties": {"refreshToken": {"type": "string"}}
         }),
+    );
+    schemas.insert(
+        "FileTokenRequest".into(),
+        json!({
+            "type": "object",
+            "required": ["collection", "recordId", "field"],
+            "properties": {
+                "collection": {"type": "string"},
+                "recordId": {"type": "string"},
+                "field": {"type": "string"}
+            }
+        }),
+    );
+    schemas.insert(
+        "FileTokenEnvelope".into(),
+        envelope(json!({
+            "type": "object",
+            "required": ["token", "expiresIn"],
+            "properties": {"token": {"type": "string"}, "expiresIn": {"type": "integer"}}
+        })),
     );
     schemas.insert(
         "AuthUser".into(),
@@ -311,7 +355,7 @@ fn add_collection_paths(paths: &mut Map<String, Value>, collection: &CollectionD
             "post": {
                 "summary": format!("Create a {} record", collection.name),
                 "security": [{}, {"bearerAuth": []}],
-                "requestBody": json_body(&create),
+                "requestBody": record_body(collection, &create, true),
                 "responses": success_response(&envelope_name)
             }
         }),
@@ -329,7 +373,7 @@ fn add_collection_paths(paths: &mut Map<String, Value>, collection: &CollectionD
             "patch": {
                 "summary": format!("Update a {} record", collection.name),
                 "security": [{}, {"bearerAuth": []}],
-                "requestBody": json_body(&update),
+                "requestBody": record_body(collection, &update, false),
                 "responses": success_response(&envelope_name)
             },
             "delete": {
@@ -362,18 +406,32 @@ fn add_collection_schemas(schemas: &mut Map<String, Value>, collection: &Collect
         json!({"type": "object", "readOnly": true, "additionalProperties": true}),
     );
     let mut request_properties = Map::new();
+    let mut update_properties = Map::new();
     let mut required = Vec::new();
     for field in &collection.fields {
         let schema = field_schema(field);
         record_properties.insert(field.name.clone(), schema.clone());
-        request_properties.insert(field.name.clone(), schema);
-        if field.required {
+        if field.field_type != FieldType::File {
+            request_properties.insert(field.name.clone(), schema);
+        } else {
+            update_properties.insert(
+                field.name.clone(),
+                json!({
+                    "oneOf": [
+                        {"type": "null"},
+                        {"type": "array", "maxItems": 0}
+                    ]
+                }),
+            );
+        }
+        if field.required && field.field_type != FieldType::File {
             required.push(Value::String(field.name.clone()));
         }
     }
     let record_name = format!("{}Record", collection.name);
     let create_name = format!("{}Create", collection.name);
     let update_name = format!("{}Update", collection.name);
+    update_properties.extend(request_properties.clone());
     schemas.insert(
         record_name.clone(),
         json!({"type": "object", "properties": record_properties}),
@@ -384,7 +442,7 @@ fn add_collection_schemas(schemas: &mut Map<String, Value>, collection: &Collect
     );
     schemas.insert(
         update_name,
-        json!({"type": "object", "properties": request_properties.clone()}),
+        json!({"type": "object", "properties": update_properties}),
     );
     schemas.insert(
         format!("{}Envelope", collection.name),
@@ -435,7 +493,11 @@ fn add_auth_collection_paths(paths: &mut Map<String, Value>, collection: &Collec
 
 fn field_schema(field: &FieldDef) -> Value {
     match field.field_type {
-        FieldType::Text | FieldType::File => json!({"type": "string"}),
+        FieldType::Text => json!({"type": "string"}),
+        FieldType::File if file_is_many(field.options.as_ref()) => {
+            json!({"type": "array", "items": {"type": "string"}, "readOnly": true})
+        }
+        FieldType::File => json!({"type": "string", "readOnly": true}),
         FieldType::Number => json!({"type": "number"}),
         FieldType::Bool => json!({"type": "boolean"}),
         FieldType::Datetime => json!({"type": "string", "format": "date-time"}),
@@ -495,6 +557,60 @@ fn auth_operation(summary: &str, body: &str, secured: bool) -> Value {
 
 fn json_body(schema: &str) -> Value {
     json!({"required": true, "content": {"application/json": {"schema": {"$ref": format!("#/components/schemas/{schema}")}}}})
+}
+
+fn record_body(collection: &CollectionDef, data_schema: &str, create: bool) -> Value {
+    let mut properties = Map::new();
+    properties.insert(
+        "data".into(),
+        json!({"$ref": format!("#/components/schemas/{data_schema}")}),
+    );
+    let mut required = Vec::new();
+    for field in collection
+        .fields
+        .iter()
+        .filter(|field| field.field_type == FieldType::File)
+    {
+        let schema = if file_is_many(field.options.as_ref()) {
+            json!({
+                "type": "array",
+                "maxItems": field.options.as_ref().and_then(|value| value.get("maxSelect")).and_then(Value::as_u64).unwrap_or(1),
+                "items": {"type": "string", "format": "binary"}
+            })
+        } else {
+            json!({"type": "string", "format": "binary"})
+        };
+        properties.insert(field.name.clone(), schema);
+        if create && field.required {
+            required.push(Value::String(field.name.clone()));
+        }
+    }
+    json!({
+        "required": true,
+        "content": {
+            "application/json": {"schema": {"$ref": format!("#/components/schemas/{data_schema}")}},
+            "multipart/form-data": {
+                "schema": {"type": "object", "required": required, "properties": properties},
+                "encoding": {"data": {"contentType": "application/json"}}
+            }
+        }
+    })
+}
+
+fn file_download_operation(summary: &str) -> Value {
+    json!({
+        "summary": summary,
+        "security": [{}, {"bearerAuth": []}],
+        "responses": {
+            "200": {"description": "File content", "content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}}},
+            "206": {"description": "Partial file content"},
+            "304": {"description": "Not modified"},
+            "401": {"description": "Authentication required"},
+            "403": {"description": "Access forbidden"},
+            "404": {"description": "File not found"},
+            "416": {"description": "Range not satisfiable"}
+        }
+    })
 }
 
 fn success_response(schema: &str) -> Value {

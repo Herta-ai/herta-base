@@ -39,6 +39,8 @@ hertabase/
     └── data/
 ```
 
+`herta_storage` 只负责逻辑 key 安全、对象读写、范围读取与前缀删除；它不理解 Collection Rule 或记录字段。`herta_api` 负责 multipart 编排、文件令牌、记录成员关系校验和失败补偿，`herta_db` 负责 file 字段的单值/数组 schema 与记录校验，`herta_auth` 负责与账户 `token_key` 绑定的文件 JWT。完整边界见 [文件存储与上传](storage.md)。
+
 ---
 
 ## 二、 核心配置文件编写

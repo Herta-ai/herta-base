@@ -46,12 +46,17 @@ HertaBase 项目的开发生命周期分为 7 个核心阶段（Phases），按�
 * **Step 1: 原生实时查询**。利用 SurrealDB 的 `LIVE SELECT` 功能捕获底层数据变更流。
 * **Step 2: SSE 转发**。建立客户端与 Salvo 的 Server-Sent Events (SSE) 连接，将数据变更流低延迟分发到对应订阅的客户端。
 
-### Phase 5: 文件存储模块 — *预计 2-3 周*
+### Phase 5: 文件存储模块 — *已实现*
 
 **目标：** 提供标准化的文件上传与存储能力。
 
 * **Step 1: 抽象存储接口**。定义通用的 `Storage` trait 以规范文件操作协议。
 * **Step 2: 存储适配器**。实现基于本地文件系统的 `LocalFS` 适配器（持久化到本地数据目录）以及兼容 `S3` 的云存储适配器。
+* **Step 3: 记录绑定上传**。记录 POST/PATCH 支持 multipart，file 字段支持单值和多值、大小、MIME 与扩展名限制。
+* **Step 4: 私有文件访问**。实现短期文件令牌、GET/HEAD、单 Range、ETag/304 和安全下载响应头。
+* **Step 5: 一致性补偿**。数据库失败回收新对象，替换后 best-effort 清理旧对象，Collection 删除后清理存储前缀。
+
+完整协议见 [文件存储与上传](storage.md)。`$app.files` 仍属于 Phase 3，网页部署文件属于 Phase 6，均不在本阶段范围内。
 
 ### Phase 6: 管理后台与单体打包 — *预计 4 周*
 

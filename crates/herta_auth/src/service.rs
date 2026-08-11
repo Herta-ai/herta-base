@@ -13,7 +13,7 @@ use argon2::{
 };
 use email_address::EmailAddress;
 use herta_core::{AuthConfig, HbConfig, HbError, HbResult};
-use herta_db::{CollectionType, DbClient, SchemaManager, validation::validate_record};
+use herta_db::{CollectionType, DbClient, FieldType, SchemaManager, validation::validate_record};
 use jsonwebtoken::{
     Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode, errors::ErrorKind,
 };
@@ -36,6 +36,36 @@ pub struct TokenClaims {
     pub exp: u64,
     pub jti: String,
     pub family: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FileTokenClaims {
+    pub sub: String,
+    pub account_collection: String,
+    pub email: String,
+    pub admin: bool,
+    pub token_key: String,
+    pub typ: String,
+    pub iat: u64,
+    pub exp: u64,
+    pub jti: String,
+    pub collection: String,
+    pub record_id: String,
+    pub field: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct FileToken {
+    pub token: String,
+    pub expires_in: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileTokenScope {
+    pub collection: String,
+    pub record_id: String,
+    pub field: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -143,6 +173,7 @@ pub struct AuthResponse {
 pub struct AuthService {
     db: DbClient,
     config: Arc<AuthConfig>,
+    file_token_ttl_seconds: u64,
     secret: Arc<Vec<u8>>,
     rate_limits: Arc<Mutex<HashMap<String, VecDeque<u64>>>>,
 }
@@ -153,6 +184,7 @@ impl AuthService {
         let service = Self {
             db,
             config: Arc::new(config.auth.clone()),
+            file_token_ttl_seconds: config.storage.file_token_ttl_seconds,
             secret: Arc::new(secret),
             rate_limits: Arc::new(Mutex::new(HashMap::new())),
         };
@@ -210,6 +242,22 @@ impl AuthService {
         let mut data = credentials.profile;
         for protected in AUTH_PROTECTED_FIELDS {
             data.remove(protected);
+        }
+        for field in definition
+            .fields
+            .iter()
+            .filter(|field| field.field_type == FieldType::File)
+        {
+            if let Some(value) = data.get(&field.name) {
+                if value.is_null() || value.as_array().is_some_and(Vec::is_empty) {
+                    data.remove(&field.name);
+                } else {
+                    return Err(HbError::UnsupportedMediaType(format!(
+                        "file field '{}' must be uploaded as multipart",
+                        field.name
+                    )));
+                }
+            }
         }
         let mut profile = Value::Object(data.clone());
         validate_record(&definition, &mut profile, true)?;
@@ -394,6 +442,104 @@ impl AuthService {
         Ok(Authentication {
             identity,
             expires_at,
+        })
+    }
+
+    pub fn issue_file_token(
+        &self,
+        identity: &AuthIdentity,
+        collection: &str,
+        record_id: &str,
+        field: &str,
+    ) -> HbResult<FileToken> {
+        let (sub, account_collection, email, admin, token_key) = match identity {
+            AuthIdentity::User {
+                id,
+                collection,
+                email,
+                token_key,
+                ..
+            } => (
+                id.as_str(),
+                collection.as_str(),
+                email.as_str(),
+                false,
+                token_key.as_str(),
+            ),
+            AuthIdentity::Admin {
+                id,
+                email,
+                token_key,
+                ..
+            } => (
+                id.as_str(),
+                "_admins",
+                email.as_str(),
+                true,
+                token_key.as_str(),
+            ),
+            AuthIdentity::Anonymous => return Err(HbError::AuthRequired),
+        };
+        let issued = now();
+        let claims = FileTokenClaims {
+            sub: sub.into(),
+            account_collection: account_collection.into(),
+            email: email.into(),
+            admin,
+            token_key: token_key.into(),
+            typ: "file".into(),
+            iat: issued,
+            exp: issued + self.file_token_ttl_seconds,
+            jti: Uuid::now_v7().to_string(),
+            collection: collection.into(),
+            record_id: record_id.into(),
+            field: field.into(),
+        };
+        Ok(FileToken {
+            token: encode(
+                &Header::new(Algorithm::HS256),
+                &claims,
+                &EncodingKey::from_secret(&self.secret),
+            )
+            .map_err(|_| HbError::Internal)?,
+            expires_in: self.file_token_ttl_seconds,
+        })
+    }
+
+    pub async fn verify_file_token(&self, token: &str) -> HbResult<FileTokenScope> {
+        let mut validation = Validation::new(Algorithm::HS256);
+        validation.set_required_spec_claims(&["exp", "iat", "sub"]);
+        let claims =
+            decode::<FileTokenClaims>(token, &DecodingKey::from_secret(&self.secret), &validation)
+                .map_err(|error| match error.kind() {
+                    ErrorKind::ExpiredSignature => HbError::TokenExpired,
+                    _ => HbError::AuthRequired,
+                })?
+                .claims;
+        if claims.typ != "file" {
+            return Err(HbError::AuthRequired);
+        }
+        let account_claims = TokenClaims {
+            sub: claims.sub,
+            collection: claims.account_collection,
+            role: String::new(),
+            email: claims.email,
+            admin: claims.admin,
+            token_key: claims.token_key.clone(),
+            typ: "access".into(),
+            iat: claims.iat,
+            exp: claims.exp,
+            jti: claims.jti,
+            family: None,
+        };
+        let account = self.load_account(&account_claims).await?;
+        if account.get("token_key").and_then(Value::as_str) != Some(claims.token_key.as_str()) {
+            return Err(HbError::AuthRequired);
+        }
+        Ok(FileTokenScope {
+            collection: claims.collection,
+            record_id: claims.record_id,
+            field: claims.field,
         })
     }
 
@@ -855,5 +1001,99 @@ fn database_error(error: impl std::fmt::Display) -> HbError {
         HbError::Conflict("email is already registered".into())
     } else {
         HbError::Database(message)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn admin_service() -> (DbClient, AuthService, AuthIdentity) {
+        let db = DbClient::memory().await.unwrap();
+        let mut config = HbConfig::default();
+        config.database.engine = "memory".into();
+        config.auth.bootstrap_admin_email = Some("admin@example.com".into());
+        config.auth.bootstrap_admin_password = Some("correct horse battery staple".into());
+        let service = AuthService::new(db.clone(), &config).await.unwrap();
+        let response = service
+            .login(
+                "_admins",
+                Credentials {
+                    email: "admin@example.com".into(),
+                    password: "correct horse battery staple".into(),
+                    profile: Map::new(),
+                },
+                true,
+            )
+            .await
+            .unwrap();
+        let identity = service.authenticate(&response.access_token).await.unwrap();
+        (db, service, identity)
+    }
+
+    #[tokio::test]
+    async fn file_tokens_expire_when_the_account_token_key_changes() {
+        let (db, service, identity) = admin_service().await;
+        let token = service
+            .issue_file_token(&identity, "assets", "record", "avatar")
+            .unwrap();
+        assert_eq!(
+            service.verify_file_token(&token.token).await.unwrap(),
+            FileTokenScope {
+                collection: "assets".into(),
+                record_id: "record".into(),
+                field: "avatar".into(),
+            }
+        );
+        db.inner()
+            .query("UPDATE `_admins` SET token_key = $token_key")
+            .bind(("token_key", Uuid::now_v7().to_string()))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+        assert!(matches!(
+            service.verify_file_token(&token.token).await,
+            Err(HbError::AuthRequired)
+        ));
+    }
+
+    #[tokio::test]
+    async fn expired_file_tokens_report_token_expired() {
+        let (_db, service, identity) = admin_service().await;
+        let (sub, email, token_key) = match identity {
+            AuthIdentity::Admin {
+                id,
+                email,
+                token_key,
+                ..
+            } => (id, email, token_key),
+            _ => unreachable!(),
+        };
+        let issued = now().saturating_sub(120);
+        let claims = FileTokenClaims {
+            sub,
+            account_collection: "_admins".into(),
+            email,
+            admin: true,
+            token_key,
+            typ: "file".into(),
+            iat: issued,
+            exp: issued + 1,
+            jti: Uuid::now_v7().to_string(),
+            collection: "assets".into(),
+            record_id: "record".into(),
+            field: "avatar".into(),
+        };
+        let token = encode(
+            &Header::new(Algorithm::HS256),
+            &claims,
+            &EncodingKey::from_secret(&service.secret),
+        )
+        .unwrap();
+        assert!(matches!(
+            service.verify_file_token(&token).await,
+            Err(HbError::TokenExpired)
+        ));
     }
 }

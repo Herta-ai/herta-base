@@ -48,7 +48,10 @@ HertaBase 致力于打造安全的后端基础设施，其架构遵循以下核�
 ## 6. 输入校验 (Input Validation)
 
 * **负载限制**：严格限制 HTTP Request Body Size，防范 OOM 与带宽耗尽攻击。
-* **文件上传限制**：通过 Storage 模块（**Phase 5**）校验文件 MIME 类型、扩展名及最大尺寸。
+* **文件上传限制**：Phase 5 在写最终对象前校验 part 名称、数量、单文件大小、声明 MIME、扩展名、记录 schema 和 Collection Rule；JSON 请求不能伪造非空文件引用。
+* **路径隔离**：存储 key 拒绝绝对路径、空段、`.`、`..`、反斜杠和 NUL。LocalFS 被限制在 `HB_DATA_DIR/storage`，S3 bucket 保持私有。
+* **文件令牌**：短期令牌只绑定一个集合、记录和字段，并绑定账户 `token_key`。Authorization 请求头优先于查询令牌，凭据轮换会立即撤销文件令牌。
+* **下载加固**：下载重新校验记录字段成员关系，默认私有缓存并发送 `nosniff`；HTML、SVG、脚本、CSS 和 Wasm 等主动内容强制下载。
 * **请求净化**：路由层面对所有 URL Path Params 与 Query Params 进行强类型转换与非法字符清洗。
 
 ## 7. 日志与审计 (Logging and Auditing)

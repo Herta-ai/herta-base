@@ -115,7 +115,9 @@ pub enum FieldType {
 impl FieldType {
     pub fn surreal_kind(&self, options: Option<&Value>) -> String {
         match self {
-            Self::Text | Self::File | Self::Select | Self::Email | Self::Url => "string".into(),
+            Self::Text | Self::Select | Self::Email | Self::Url => "string".into(),
+            Self::File if file_is_many(options) => "array<string>".into(),
+            Self::File => "string".into(),
             Self::Number => "number".into(),
             Self::Bool => "bool".into(),
             Self::Datetime => "datetime".into(),
@@ -189,4 +191,12 @@ pub fn relation_is_many(options: Option<&Value>) -> bool {
         .and_then(|value| value.get("maxSelect"))
         .and_then(Value::as_u64)
         .is_none_or(|max| max != 1)
+}
+
+pub fn file_is_many(options: Option<&Value>) -> bool {
+    options
+        .and_then(|value| value.get("maxSelect"))
+        .and_then(Value::as_u64)
+        .unwrap_or(1)
+        > 1
 }

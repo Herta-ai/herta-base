@@ -37,6 +37,8 @@
   - `HB_COLLECTION_NOT_FOUND` (404) — 指定的数据集合（Collection）不存在。
   - `HB_CONFLICT` (409) — 唯一性约束冲突。
   - `HB_PAYLOAD_TOO_LARGE` (413) — 上传载荷或请求体超过系统限制。
+  - `HB_UNSUPPORTED_MEDIA_TYPE` (415) — 文件 MIME、扩展名或目标字段不允许。
+  - `HB_RANGE_NOT_SATISFIABLE` (416) — 文件 Range 非法、包含多个范围或超出对象长度。
   - `HB_RATE_LIMITED` (429) — 请求过于频繁，触发限流。
 
 - **服务端错误 (5xx)**

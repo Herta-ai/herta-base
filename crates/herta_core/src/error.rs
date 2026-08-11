@@ -22,6 +22,10 @@ pub enum HbError {
     Conflict(String),
     #[error("Request payload too large")]
     PayloadTooLarge,
+    #[error("Unsupported media type: {0}")]
+    UnsupportedMediaType(String),
+    #[error("Requested byte range cannot be satisfied")]
+    RangeNotSatisfiable,
     #[error("Authentication required")]
     AuthRequired,
     #[error("Authentication token has expired")]
@@ -34,6 +38,8 @@ pub enum HbError {
     AccountLocked,
     #[error("Database error: {0}")]
     Database(String),
+    #[error("Storage error: {0}")]
+    Storage(String),
     #[error("Internal error")]
     Internal,
 }
@@ -52,11 +58,13 @@ impl HbError {
             Self::NotFound | Self::CollectionNotFound(_) => 404,
             Self::Conflict(_) => 409,
             Self::PayloadTooLarge => 413,
+            Self::UnsupportedMediaType(_) => 415,
+            Self::RangeNotSatisfiable => 416,
             Self::AuthRequired | Self::TokenExpired => 401,
             Self::Forbidden => 403,
             Self::RateLimited => 429,
             Self::AccountLocked => 423,
-            Self::Database(_) | Self::Internal => 500,
+            Self::Database(_) | Self::Storage(_) | Self::Internal => 500,
         }
     }
 
@@ -69,12 +77,15 @@ impl HbError {
             Self::CollectionNotFound(_) => "HB_COLLECTION_NOT_FOUND",
             Self::Conflict(_) => "HB_CONFLICT",
             Self::PayloadTooLarge => "HB_PAYLOAD_TOO_LARGE",
+            Self::UnsupportedMediaType(_) => "HB_UNSUPPORTED_MEDIA_TYPE",
+            Self::RangeNotSatisfiable => "HB_RANGE_NOT_SATISFIABLE",
             Self::AuthRequired => "HB_AUTH_REQUIRED",
             Self::TokenExpired => "HB_TOKEN_EXPIRED",
             Self::Forbidden => "HB_FORBIDDEN",
             Self::RateLimited => "HB_RATE_LIMITED",
             Self::AccountLocked => "HB_ACCOUNT_LOCKED",
             Self::Database(_) => "HB_DB_ERROR",
+            Self::Storage(_) => "HB_STORAGE_ERROR",
             Self::Internal => "HB_INTERNAL_ERROR",
         }
     }
@@ -82,7 +93,8 @@ impl HbError {
     pub fn public_message(&self, dev_mode: bool) -> String {
         match self {
             Self::Database(message) if dev_mode => format!("Database error: {message}"),
-            Self::Database(_) | Self::Internal => "Internal server error".into(),
+            Self::Storage(message) if dev_mode => format!("Storage error: {message}"),
+            Self::Database(_) | Self::Storage(_) | Self::Internal => "Internal server error".into(),
             _ => self.to_string(),
         }
     }

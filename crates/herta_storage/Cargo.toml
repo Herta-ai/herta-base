@@ -1,0 +1,19 @@
+[package]
+name = "herta_storage"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+bytes.workspace = true
+chrono.workspace = true
+futures-util.workspace = true
+herta_core = { path = "../herta_core" }
+object_store.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile = "3.27.0"

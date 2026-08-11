@@ -7,7 +7,7 @@ use serde_json::{Map, Value, json};
 
 use crate::models::{
     CollectionDef, FieldDef, FieldType, IndexDef, SchemaMode, UpdateCollectionRequest,
-    relation_is_many,
+    file_is_many, relation_is_many,
 };
 
 const SYSTEM_FIELDS: [&str; 4] = ["id", "created_at", "updated_at", "deleted_at"];
@@ -227,6 +227,7 @@ fn validate_field(field: &FieldDef) -> HbResult<()> {
                 ));
             }
         }
+        FieldType::File => validate_file_options(field)?,
         _ => {}
     }
     Ok(())
@@ -290,7 +291,15 @@ fn validate_field_value(field: &FieldDef, value: &Value) -> HbResult<()> {
         return Ok(());
     }
     let valid = match field.field_type {
-        FieldType::Text | FieldType::File => value.is_string(),
+        FieldType::Text => value.is_string(),
+        FieldType::File if file_is_many(field.options.as_ref()) => {
+            value.as_array().is_some_and(|values| {
+                (!values.is_empty() || !field.required)
+                    && values.len() <= file_max_select(field)
+                    && values.iter().all(valid_file_reference)
+            })
+        }
+        FieldType::File => valid_file_reference(value),
         FieldType::Number => value.is_number(),
         FieldType::Bool => value.is_boolean(),
         FieldType::Datetime => value.as_str().is_some_and(|value| value.contains('T')),
@@ -331,6 +340,96 @@ fn validate_field_value(field: &FieldDef, value: &Value) -> HbResult<()> {
     } else {
         Err(field_error(&field.name, "has an invalid value"))
     }
+}
+
+fn validate_file_options(field: &FieldDef) -> HbResult<()> {
+    if field
+        .options
+        .as_ref()
+        .and_then(|value| value.get("maxSelect"))
+        .is_some_and(|value| value.as_u64().is_none())
+    {
+        return Err(field_error(&field.name, "maxSelect must be an integer"));
+    }
+    let max_select = file_max_select(field);
+    if !(1..=100).contains(&max_select) {
+        return Err(field_error(
+            &field.name,
+            "maxSelect must be between 1 and 100",
+        ));
+    }
+    if let Some(max_size) = field
+        .options
+        .as_ref()
+        .and_then(|value| value.get("maxSize"))
+        && max_size.as_u64().is_none_or(|value| value == 0)
+    {
+        return Err(field_error(
+            &field.name,
+            "maxSize must be a positive integer",
+        ));
+    }
+    validate_string_array_option(field, "mimeTypes", |value| {
+        value.parse::<mime::Mime>().is_ok()
+    })?;
+    validate_string_array_option(field, "extensions", |value| {
+        !value.is_empty()
+            && value.len() <= 32
+            && !value.starts_with('.')
+            && value
+                .chars()
+                .all(|character| character.is_ascii_alphanumeric())
+    })?;
+    Ok(())
+}
+
+fn validate_string_array_option(
+    field: &FieldDef,
+    name: &str,
+    predicate: impl Fn(&str) -> bool,
+) -> HbResult<()> {
+    let Some(value) = field.options.as_ref().and_then(|value| value.get(name)) else {
+        return Ok(());
+    };
+    let Some(values) = value.as_array() else {
+        return Err(field_error(
+            &field.name,
+            &format!("{name} must be a string array"),
+        ));
+    };
+    if values.is_empty()
+        || values
+            .iter()
+            .any(|value| value.as_str().is_none_or(|value| !predicate(value)))
+    {
+        return Err(field_error(
+            &field.name,
+            &format!("{name} contains an invalid value"),
+        ));
+    }
+    Ok(())
+}
+
+pub fn file_max_select(field: &FieldDef) -> usize {
+    field
+        .options
+        .as_ref()
+        .and_then(|value| value.get("maxSelect"))
+        .and_then(Value::as_u64)
+        .unwrap_or(1) as usize
+}
+
+pub fn valid_file_reference(value: &Value) -> bool {
+    value.as_str().is_some_and(|value| {
+        !value.is_empty()
+            && value.len() <= 255
+            && !value.starts_with('.')
+            && value != "."
+            && value != ".."
+            && value.chars().all(|character| {
+                character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_')
+            })
+    })
 }
 
 fn valid_relation_id(value: &Value, target: &str) -> bool {
@@ -402,5 +501,59 @@ mod tests {
     #[test]
     fn identifiers_reject_surrealql_fragments() {
         assert!(validate_identifier("field", "name; DELETE posts").is_err());
+    }
+
+    #[test]
+    fn file_fields_validate_single_and_multiple_references() {
+        let single = FieldDef {
+            name: "avatar".into(),
+            field_type: FieldType::File,
+            required: true,
+            options: None,
+        };
+        assert!(validate_field_value(&single, &json!("safe.png")).is_ok());
+        assert!(validate_field_value(&single, &json!("../unsafe.png")).is_err());
+
+        let multiple = FieldDef {
+            name: "attachments".into(),
+            field_type: FieldType::File,
+            required: true,
+            options: Some(json!({"maxSelect": 2})),
+        };
+        assert!(validate_field_value(&multiple, &json!(["one.pdf", "two.pdf"])).is_ok());
+        assert!(validate_field_value(&multiple, &json!([])).is_err());
+        assert!(validate_field_value(&multiple, &json!(["one", "two", "three"])).is_err());
+    }
+
+    #[test]
+    fn file_options_enforce_cardinality_size_mime_and_extension_contracts() {
+        let valid = FieldDef {
+            name: "assets".into(),
+            field_type: FieldType::File,
+            required: false,
+            options: Some(json!({
+                "maxSelect": 3,
+                "maxSize": 1024,
+                "mimeTypes": ["image/png"],
+                "extensions": ["png"]
+            })),
+        };
+        assert!(validate_field(&valid).is_ok());
+        assert_eq!(
+            valid.field_type.surreal_kind(valid.options.as_ref()),
+            "array<string>"
+        );
+
+        for options in [
+            json!({"maxSelect": 0}),
+            json!({"maxSelect": "two"}),
+            json!({"maxSize": 0}),
+            json!({"mimeTypes": ["not a mime"]}),
+            json!({"extensions": [".png"]}),
+        ] {
+            let mut invalid = valid.clone();
+            invalid.options = Some(options);
+            assert!(validate_field(&invalid).is_err());
+        }
     }
 }

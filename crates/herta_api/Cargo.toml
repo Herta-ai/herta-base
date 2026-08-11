@@ -11,6 +11,9 @@ futures-util.workspace = true
 herta_auth = { path = "../herta_auth" }
 herta_core = { path = "../herta_core" }
 herta_db = { path = "../herta_db" }
+herta_storage = { path = "../herta_storage" }
+mime.workspace = true
+mime-infer.workspace = true
 salvo.workspace = true
 serde.workspace = true
 serde_json.workspace = true

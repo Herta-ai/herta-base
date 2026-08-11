@@ -12,6 +12,61 @@ pub struct HbConfig {
     pub log: LogConfig,
     pub auth: AuthConfig,
     pub realtime: RealtimeConfig,
+    pub storage: StorageConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct StorageConfig {
+    #[serde(rename = "type")]
+    pub storage_type: String,
+    pub max_file_size: usize,
+    pub file_token_ttl_seconds: u64,
+    pub s3: S3Config,
+}
+
+impl Default for StorageConfig {
+    fn default() -> Self {
+        Self {
+            storage_type: "local".into(),
+            max_file_size: 10 * 1024 * 1024,
+            file_token_ttl_seconds: 5 * 60,
+            s3: S3Config::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct S3Config {
+    pub endpoint: Option<String>,
+    pub bucket: String,
+    pub region: String,
+    pub prefix: String,
+    pub force_path_style: bool,
+    pub allow_http: bool,
+    #[serde(skip)]
+    pub access_key: Option<String>,
+    #[serde(skip)]
+    pub secret_key: Option<String>,
+    #[serde(skip)]
+    pub session_token: Option<String>,
+}
+
+impl Default for S3Config {
+    fn default() -> Self {
+        Self {
+            endpoint: None,
+            bucket: String::new(),
+            region: "us-east-1".into(),
+            prefix: "hertabase".into(),
+            force_path_style: true,
+            allow_http: false,
+            access_key: None,
+            secret_key: None,
+            session_token: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -241,6 +296,39 @@ impl HbConfig {
             "HB_REALTIME_HEARTBEAT_SECONDS",
             &mut self.realtime.heartbeat_seconds,
         )?;
+        if let Ok(value) = std::env::var("HB_STORAGE_TYPE") {
+            self.storage.storage_type = value;
+        }
+        apply_usize_env("HB_STORAGE_MAX_FILE_SIZE", &mut self.storage.max_file_size)?;
+        apply_u64_env(
+            "HB_STORAGE_FILE_TOKEN_TTL_SECONDS",
+            &mut self.storage.file_token_ttl_seconds,
+        )?;
+        if let Ok(value) = std::env::var("HB_S3_ENDPOINT") {
+            self.storage.s3.endpoint = (!value.trim().is_empty()).then_some(value);
+        }
+        if let Ok(value) = std::env::var("HB_S3_BUCKET") {
+            self.storage.s3.bucket = value;
+        }
+        if let Ok(value) = std::env::var("HB_S3_REGION") {
+            self.storage.s3.region = value;
+        }
+        if let Ok(value) = std::env::var("HB_S3_PREFIX") {
+            self.storage.s3.prefix = value;
+        }
+        if let Ok(value) = std::env::var("HB_S3_FORCE_PATH_STYLE") {
+            self.storage.s3.force_path_style = value
+                .parse()
+                .context("HB_S3_FORCE_PATH_STYLE must be true or false")?;
+        }
+        if let Ok(value) = std::env::var("HB_S3_ALLOW_HTTP") {
+            self.storage.s3.allow_http = value
+                .parse()
+                .context("HB_S3_ALLOW_HTTP must be true or false")?;
+        }
+        self.storage.s3.access_key = std::env::var("HB_S3_ACCESS_KEY").ok();
+        self.storage.s3.secret_key = std::env::var("HB_S3_SECRET_KEY").ok();
+        self.storage.s3.session_token = std::env::var("HB_S3_SESSION_TOKEN").ok();
         self.auth.jwt_secret = std::env::var("HB_JWT_SECRET").ok();
         self.auth.bootstrap_admin_email = std::env::var("HB_BOOTSTRAP_ADMIN_EMAIL").ok();
         self.auth.bootstrap_admin_password = std::env::var("HB_BOOTSTRAP_ADMIN_PASSWORD").ok();
@@ -290,6 +378,46 @@ impl HbConfig {
         {
             bail!("realtime connection limits and heartbeat must be greater than zero");
         }
+        if !matches!(self.storage.storage_type.as_str(), "local" | "s3") {
+            bail!("storage.type must be either 'local' or 's3'");
+        }
+        if self.storage.max_file_size == 0 {
+            bail!("storage.max_file_size must be greater than zero");
+        }
+        if !(1..=86_400).contains(&self.storage.file_token_ttl_seconds) {
+            bail!("storage.file_token_ttl_seconds must be between 1 and 86400");
+        }
+        if self.storage.storage_type == "s3" {
+            if self.storage.s3.bucket.trim().is_empty() {
+                bail!("storage.s3.bucket is required when storage.type is 's3'");
+            }
+            if self.storage.s3.region.trim().is_empty() {
+                bail!("storage.s3.region cannot be empty");
+            }
+            if self.storage.s3.access_key.is_some() != self.storage.s3.secret_key.is_some() {
+                bail!("HB_S3_ACCESS_KEY and HB_S3_SECRET_KEY must be provided together");
+            }
+            if self.storage.s3.prefix.contains('\\')
+                || self.storage.s3.prefix.contains('\0')
+                || self.storage.s3.prefix.split('/').any(|part| part == "..")
+            {
+                bail!("storage.s3.prefix contains an invalid path segment");
+            }
+            if let Some(endpoint) = &self.storage.s3.endpoint {
+                let endpoint =
+                    url::Url::parse(endpoint).context("storage.s3.endpoint must be a valid URL")?;
+                if !matches!(endpoint.scheme(), "http" | "https") {
+                    bail!("storage.s3.endpoint must use http or https");
+                }
+                if endpoint.scheme() == "http"
+                    && (!self.storage.s3.allow_http || !self.server.dev_mode)
+                {
+                    bail!(
+                        "HTTP S3 endpoints require storage.s3.allow_http=true and server.dev_mode=true"
+                    );
+                }
+            }
+        }
         Ok(())
     }
 }
@@ -336,6 +464,8 @@ mod tests {
         assert_eq!(config.server.host, "0.0.0.0");
         assert_eq!(config.database.engine, "surrealkv");
         assert_eq!(config.realtime.heartbeat_seconds, 30);
+        assert_eq!(config.storage.storage_type, "local");
+        assert_eq!(config.storage.file_token_ttl_seconds, 300);
     }
 
     #[test]
@@ -358,5 +488,18 @@ mod tests {
         let mut config = HbConfig::default();
         config.log.server_persist_level = "verbose".into();
         assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn s3_requires_a_bucket_and_rejects_http_in_production() {
+        let mut config = HbConfig::default();
+        config.storage.storage_type = "s3".into();
+        assert!(config.validate().is_err());
+        config.storage.s3.bucket = "files".into();
+        config.storage.s3.endpoint = Some("http://127.0.0.1:9000".into());
+        config.storage.s3.allow_http = true;
+        assert!(config.validate().is_err());
+        config.server.dev_mode = true;
+        assert!(config.validate().is_ok());
     }
 }

@@ -162,15 +162,31 @@ HertaBase 采用 RESTful 风格的 API 设计理念，致力于提供清晰、�
 
 基于 Phase 5（文件存储模块）的实现，兼容 LocalFS 与 S3。
 
-### POST /api/files/upload
+文件与 Collection 记录字段绑定，没有独立的 `/api/files/upload` 资源。记录 `POST/PATCH` 同时接受 JSON 和 multipart。
 
-- **描述**: 上传文件，返回存储元数据。
-- **所需权限**: 由 API Rules 动态决定（通常需要认证用户）
+### POST/PATCH /api/collections/{collection}/records[/{id}]
 
-### GET /api/files/{fileId}
+- **Content-Type**: `multipart/form-data`
+- **data part**: 可选的 JSON 对象，承载非文件字段。
+- **file part**: part 名称必须等于 file 字段名；多文件字段重复同名 part。
+- **PATCH**: 缺席保留，`null`/`[]` 清空，新上传整体替换。
 
-- **描述**: 获取/下载文件内容。
-- **所需权限**: 由文件权限决定
+JSON CRUD 保持兼容，但 JSON 中的非空 file 字段值返回 415，客户端不能伪造存储引用。
+
+### POST /api/files/token
+
+- **描述**: 为已通过记录 `view` rule 的 `collection + recordId + field` 签发短期文件令牌。
+- **请求体**: `{"collection":"posts","recordId":"...","field":"cover"}`。
+- **所需权限**: 已认证用户；令牌绑定账户 `token_key`。
+
+### GET/HEAD /api/files/{collection}/{recordId}/{field}/{filename}
+
+- **描述**: 代理读取记录字段中的文件，支持单 Range、ETag/304 和 HEAD。
+- **认证**: `Authorization: Bearer <access-token>` 或 `?token=<file-token>`；同时存在时请求头优先。
+- **响应头**: `Content-Length`、`Content-Type`、`Content-Disposition`、`Accept-Ranges`、`ETag`、私有缓存和 `nosniff`。
+- **安全**: 文件名必须仍存在于指定记录字段；主动内容强制下载。
+
+完整契约与一致性策略见 [文件存储与上传](storage.md)。
 
 ## 7. 管理端接口 (Admin API)
 
