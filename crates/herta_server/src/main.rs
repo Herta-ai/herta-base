@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 mod db_log_layer;
+mod ui;
 
 use herta_api::{ApiState, build_router_with_logger};
 use herta_core::HbConfig;
@@ -108,11 +109,12 @@ async fn main() -> anyhow::Result<()> {
                 None
             };
             let state = ApiState::new(db, config.clone()).await?;
-            let service = Service::new(build_router_with_logger(request_logger))
-                .hoop(affix_state::inject(state));
+            let router = build_router_with_logger(request_logger).push(ui::router());
+            let service = Service::new(router).hoop(affix_state::inject(state));
             let address = format!("{}:{}", config.server.host, config.server.port);
             let acceptor = TcpListener::new(address.clone()).bind().await;
             tracing::info!(%address, "server listening");
+            tracing::info!(url = %format!("http://{address}/webui/"), "Admin UI");
             tracing::info!(url = %format!("http://{address}/swagger-ui/"), "Swagger UI");
             Server::new(acceptor).serve(service).await;
         }

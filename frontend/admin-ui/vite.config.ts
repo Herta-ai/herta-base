@@ -7,6 +7,7 @@ import path from 'node:path'
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: '/webui/',
   plugins: [
     tanstackRouter({
       autoCodeSplitting: true,

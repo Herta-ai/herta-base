@@ -62,4 +62,4 @@ node_modules/
 
 # os
 .DS_Store
-lib
+/lib/

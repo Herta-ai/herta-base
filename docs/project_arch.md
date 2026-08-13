@@ -28,7 +28,7 @@ hertabase/
 │   └── herta_server/        # CLI 入口、前端静态资源嵌入 (rust-embed)
 │
 ├── frontend/                # 🌐 前端项目 (PNPM Workspace)
-│   └── admin-ui/            # Vue 管理后台 SPA
+│   └── admin-ui/            # React/Vite 管理后台 SPA
 │
 ├── packages/                # 📦 JS/TS 包 (PNPM Workspace)
 │   ├── @hb/sdk/             # (可选) 面向最终用户的 JS SDK
@@ -86,14 +86,11 @@ packages:
   "private": true,
   "scripts": {
     "dev:ui": "pnpm --filter @hb/admin-ui dev",
-    "dev:server": "cargo watch -x 'run -p herta_server'",
-    "dev": "turbo run dev",
+    "dev:server": "cargo run -p herta_server serve",
+    "dev": "pnpm dev:ui",
     "build:ui": "pnpm --filter @hb/admin-ui build",
     "build:server": "cargo build --release",
-    "build": "turbo run build"
-  },
-  "devDependencies": {
-    "turbo": "^2.10.7"
+    "build": "pnpm build:ui && pnpm build:server"
   }
 }
 ```
@@ -109,24 +106,26 @@ packages:
 
 ### 2. 前端打包与 Rust 静态嵌入流程
 
-通过 `rust-embed` 将前端 Svelte 代码打包进 Rust 二进制文件。
+通过 `rust-embed` 将 React/Vite 前端产物打包进 Rust 二进制文件，并由 Salvo 在
+`/webui/` 下提供静态资源和 SPA history fallback。
 
 **构建流程：**
 
-1. 执行 `pnpm build:ui`，在 `frontend/admin-ui/build` 或 `dist` 生成静态 HTML/JS/CSS。
+1. 执行 `pnpm build:ui`，在 `frontend/admin-ui/dist` 生成静态 HTML/JS/CSS。
 2. 在 `crates/herta_server` 中，引入 `rust-embed` 库。
 3. 代码实现如下：
 
    ```rust
    // crates/herta_server/src/ui.rs
-   use rust_embed::RustEmbed;
+   use rust_embed::Embed;
 
-   #[derive(RustEmbed)]
-   #[folder = "../../frontend/admin-ui/dist"] 
-   pub struct AdminUiAssets;
+   #[derive(Embed)]
+   #[folder = "../../frontend/admin-ui/dist/"]
+   struct AdminUiAssets;
    ```
 
-4. **构建顺序**：系统确保先执行 JS 构建，再执行 Cargo 构建，以避免 Cargo 找不到目标目录。
+4. **构建顺序**：使用根目录 `pnpm build` 或 `just build`，确保先执行 UI 构建，再执行
+   Cargo release 构建。直接执行 `cargo build -p herta_server` 前必须已有 `dist` 目录。
 
 ### 3. `@hb/types` 包的作用
 
@@ -160,7 +159,7 @@ HertaBase 允许在 `hb_hooks` 目录下编写应用级 JS 扩展。脚本在启
 
 ### 4. 开发环境的热更新联动
 
-- **前端热更新**：`admin-ui` 使用 Vite 启动监听（默认 `http://localhost:5173`）。
+- **前端热更新**：`admin-ui` 使用 Vite 启动监听（默认入口 `http://localhost:5173/webui/`）。
 - **后端热更新**：使用 `cargo-watch` 监听 Rust 服务（默认 `http://localhost:8080`）。
 - **API 代理**：在 `admin-ui` 的 `vite.config.ts` 中配置 proxy，将对 `/api/*` 的请求代理到 Rust 服务器。该模式保障了前后端分离的热更新体验，最终 Release 阶段再合并发布。
 

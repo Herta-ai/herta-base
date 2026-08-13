@@ -1,34 +1,24 @@
-# React + TypeScript + Vite
+# HertaBase Admin UI
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React、Vite 和 TanStack Router 实现的 HertaBase 管理后台。生产构建使用 `/webui/` 作为
+资源和客户端路由基路径，并由 `herta_server` 通过 `rust-embed` 编入单一二进制。
 
-Currently, two official plugins are available:
+## Development
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+从仓库根目录启动前端开发服务器：
 
-## React Compiler
-
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
-
-Note: This will impact Vite dev & build performances.
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+pnpm dev:ui
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+浏览器访问 `http://localhost:5173/webui/`。Vite 会将 `/api/*` 和 `/_/*` 请求代理到
+`http://127.0.0.1:8080`，因此需要另行启动开发 server。
+
+## Build
+
+```bash
+pnpm build:ui
+```
+
+产物写入 `frontend/admin-ui/dist`。构建完整单一二进制应从仓库根目录运行 `pnpm build`
+或 `just build`，以确保 UI 先于 Rust server 构建。

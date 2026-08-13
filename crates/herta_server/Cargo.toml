@@ -15,6 +15,7 @@ clap.workspace = true
 herta_api = { path = "../herta_api" }
 herta_core = { path = "../herta_core" }
 herta_db = { path = "../herta_db" }
+rust-embed.workspace = true
 salvo.workspace = true
 tokio.workspace = true
 tracing.workspace = true

@@ -11,6 +11,7 @@ import { I18nProvider } from './lib/i18n'
 
 const router = createRouter({
   routeTree,
+  basepath: '/webui',
   context: { queryClient },
 })
 

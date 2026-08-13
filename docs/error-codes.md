@@ -73,5 +73,5 @@ HertaBase 的标准 HTTP 状态码与具体的 `error` 字符串深度绑定。�
 - Phase 3: JS 扩展运行时 — rquickjs AsyncRuntime 集成，Rust→JS FFI 映射，生命周期 Hook 挂载与执行
 - Phase 4: 实时订阅引擎 — 基于 SurrealDB LIVE SELECT + Salvo SSE 的数据变更推送
 - Phase 5: 文件存储模块 — 抽象 Storage trait，LocalFS + S3 兼容云存储适配器
-- Phase 6: 管理后台与单体打包 — Vue Admin UI 开发，rust-embed 静态嵌入，Salvo 静态文件服务
+- Phase 6: 管理后台与单体打包 — React Admin UI 开发，rust-embed 静态嵌入，Salvo 静态文件服务
 - Phase 7: 生产加固与分布式 — CLI 工具 (clap)，结构化日志 (tracing)，RocksDB→TiKV 集群支持

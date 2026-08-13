@@ -31,7 +31,7 @@ cargo build
 
 我们推荐使用 **Visual Studio Code** 进行开发，并安装以下插件：
 - **rust-analyzer**: Rust 语言支持
-- **Svelte for VS Code**: Svelte/Vue 支持
+- **ES7+ React/Redux/React-Native snippets**: React 开发支持
 - **ESLint**: 代码检查
 - **Prettier**: 代码格式化
 - **Even Better TOML**: TOML 文件支持
@@ -51,7 +51,7 @@ hertabase/
 │   └── herta_server/        # CLI 入口、前端静态资源嵌入 (rust-embed)
 │
 ├── frontend/                # 前端项目 (PNPM Workspace)
-│   └── admin-ui/            # Vue 管理后台 SPA
+│   └── admin-ui/            # React/Vite 管理后台 SPA
 │
 ├── packages/                # JS/TS 包 (PNPM Workspace)
 │   ├── @hb/sdk/             # (可选) 面向最终用户的 JS SDK
@@ -75,11 +75,11 @@ hertabase/
   ```bash
   pnpm --filter @hb/admin-ui dev
   ```
-- **全栈开发**: 
+- **全栈开发**：在两个终端分别运行
   ```bash
-  pnpm dev
+  pnpm dev:server:mem
+  pnpm dev:ui
   ```
-  *(通过 turbo 并发启动前后端服务)*
 
 ## 代码风格与规范
 
@@ -90,9 +90,9 @@ hertabase/
   cargo clippy -- -D warnings
   ```
 
-### TypeScript / Svelte
-- 使用 **Prettier** 进行代码格式化。
-- 使用 **ESLint** 进行代码质量检查。
+### TypeScript / React
+- 使用项目现有格式配置进行代码格式化。
+- 使用 **Oxlint** 进行代码质量检查。
 - 请在提交前运行 `pnpm lint`。
 
 ### 提交信息规范 (Commit Messages)

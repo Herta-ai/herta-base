@@ -28,6 +28,12 @@ HertaBase 设计为零依赖的单体可执行文件（在单体架构模式下�
 - 环境变量如 `HB_PORT=8080`
 - 在相同目录下存放 `hertabase.toml` 以持久化配置。
 
+从源码构建单文件发行版时，使用根目录 `pnpm build` 或 `just build`。这两个命令会先生成
+`frontend/admin-ui/dist`，再编译包含管理后台资源的 release 二进制。若直接运行
+`cargo build -p herta_server`，必须先执行 `pnpm build:ui`。
+
+服务启动后，内置管理后台位于 `/webui/`；`/webui` 会以 `308` 重定向到规范路径。
+
 ## 3. Docker 部署
 
 ### 官方 Docker 镜像
@@ -41,9 +47,16 @@ docker pull ghcr.io/herta-ai/hertabase:latest
 ### Dockerfile 示例（多阶段构建）
 
 ```dockerfile
-FROM rust:1.80 AS builder
+FROM node:24-bookworm-slim AS ui-builder
+WORKDIR /usr/src/hertabase
+RUN corepack enable
+COPY . .
+RUN pnpm install --frozen-lockfile && pnpm build:ui
+
+FROM rust:1.97 AS builder
 WORKDIR /usr/src/hertabase
 COPY . .
+COPY --from=ui-builder /usr/src/hertabase/frontend/admin-ui/dist ./frontend/admin-ui/dist
 RUN cargo build --release --bin hertabase
 
 FROM debian:bookworm-slim
@@ -173,5 +186,5 @@ api.example.com {
 - Phase 3: JS 扩展运行时 — rquickjs AsyncRuntime 集成，Rust→JS FFI 映射，生命周期 Hook 挂载与执行
 - Phase 4: 实时订阅引擎 — 基于 SurrealDB LIVE SELECT + Salvo SSE 的数据变更推送
 - Phase 5: 文件存储模块 — 抽象 Storage trait，LocalFS + S3 兼容云存储适配器
-- Phase 6: 管理后台与单体打包 — Vue Admin UI 开发，rust-embed 静态嵌入，Salvo 静态文件服务
+- Phase 6: 管理后台与单体打包 — React Admin UI 开发，rust-embed 静态嵌入，Salvo 静态文件服务
 - Phase 7: 生产加固与分布式 — CLI 工具 (clap)，结构化日志 (tracing)，RocksDB→TiKV 集群支持
