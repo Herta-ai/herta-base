@@ -797,9 +797,9 @@ fn normalize_email(value: &str) -> HbResult<String> {
 }
 
 fn validate_password(password: &str) -> HbResult<()> {
-    if password.chars().count() < 12 {
+    if password.chars().count() < 6 {
         return Err(HbError::validation(
-            "password must contain at least 12 characters",
+            "password must contain at least 6 characters",
         ));
     }
     Ok(())
