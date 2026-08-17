@@ -267,7 +267,6 @@ impl AuthService {
         data.insert("verified".into(), Value::Bool(false));
         data.insert("role".into(), Value::String("user".into()));
         data.insert("failed_attempts".into(), json!(0));
-        data.insert("locked_until".into(), Value::Null);
 
         let table = quote_table(collection)?;
         let sql = format!("CREATE ONLY type::record('{table}', $id) CONTENT $data RETURN AFTER");
@@ -761,7 +760,6 @@ impl AuthService {
             "verified": true,
             "role": "admin",
             "failed_attempts": 0,
-            "locked_until": Value::Null,
         });
         let response = self
             .db
