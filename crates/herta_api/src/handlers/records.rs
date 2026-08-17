@@ -95,7 +95,7 @@ pub async fn update(
     let state = state(depot)?;
     let identity = identity(req, state).await?;
     let collection = path(req, "collection")?;
-    let id = path(req, "id")?;
+    let id = normalize_record_id(&collection, &path(req, "id")?)?;
     let record = if is_multipart(req) {
         update_multipart(req, state, &collection, &id, &identity).await?
     } else {
@@ -145,6 +145,30 @@ fn state(depot: &Depot) -> Result<&ApiState, ApiFailure> {
 fn path(req: &Request, name: &str) -> Result<String, ApiFailure> {
     req.param::<String>(name)
         .ok_or_else(|| parse_error(format!("missing path parameter '{name}'")))
+}
+
+fn normalize_record_id(collection: &str, value: &str) -> herta_core::HbResult<String> {
+    let key = match value.split_once(':') {
+        Some((table, key)) if table == collection => key,
+        Some(_) => return Err(herta_core::HbError::NotFound),
+        None => value,
+    };
+    normalize_record_key(key)
+        .map(str::to_owned)
+        .ok_or(herta_core::HbError::NotFound)
+}
+
+fn normalize_record_key(value: &str) -> Option<&str> {
+    let value = value
+        .strip_prefix('`')
+        .and_then(|value| value.strip_suffix('`'))
+        .unwrap_or(value);
+    (!value.is_empty()
+        && value.len() <= 255
+        && value
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_')))
+    .then_some(value)
 }
 
 fn is_multipart(req: &Request) -> bool {
@@ -538,4 +562,21 @@ async fn compensate_new_objects(state: &ApiState, keys: &[String]) {
 
 fn storage_key(collection: &str, record_id: &str, field: &str, filename: &str) -> String {
     format!("records/{collection}/{record_id}/{field}/{filename}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_record_id;
+
+    #[test]
+    fn normalizes_bare_full_and_backtick_record_paths() {
+        assert_eq!(normalize_record_id("posts", "one").unwrap(), "one");
+        assert_eq!(normalize_record_id("posts", "posts:one").unwrap(), "one");
+        assert_eq!(
+            normalize_record_id("posts", "posts:`two-three`").unwrap(),
+            "two-three"
+        );
+        assert!(normalize_record_id("posts", "other:one").is_err());
+        assert!(normalize_record_id("posts", "posts:bad:key").is_err());
+    }
 }

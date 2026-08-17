@@ -1,5 +1,6 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
+use surrealdb::types::RecordId;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CollectionDef {
@@ -67,6 +68,7 @@ impl<'de> Deserialize<'de> for ApiRule {
 pub struct RuleContext {
     pub admin: bool,
     pub auth: Value,
+    pub auth_record: Option<RecordId>,
     pub request_body: Value,
 }
 

@@ -71,6 +71,7 @@ impl<'a> RealtimeManager<'a> {
             .inner()
             .query(sql)
             .bind(("hb_auth", context.auth.clone()))
+            .bind(("hb_auth_record", context.auth_record.clone()))
             .bind(("hb_request", json!({"body": context.request_body})));
         if let Some(filter) = compiled_filter {
             for (name, value) in filter.bindings {

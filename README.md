@@ -152,6 +152,20 @@ hertabase/
 
 ---
 
+## 🧪 测试
+
+Rust 测试只需要 Rust/Cargo。博客进程级集成测试还需要 Node.js 20+ 和 pnpm：它会先构建 release `hertabase`，动态选择端口启动内存数据库，并在测试结束时清理进程树。
+
+```bash
+pnpm test:rust
+pnpm test:integration
+pnpm test
+```
+
+详细场景和运行约束见 [`packages/integration-tests/blog-demo/README.md`](packages/integration-tests/blog-demo/README.md)。
+
+---
+
 ## 🗺️ 开发路线图 (Roadmap)
 
 项目分为 7 个主要阶段推进，详细内容请参考 [开发路线图](docs/roadmap.md)。

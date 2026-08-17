@@ -23,7 +23,7 @@ HertaBase 的标准鉴权流程如下：
 3. **令牌刷新 (Token Refresh)**：使用 Refresh Token 换取新的 Access Token 与 Refresh Token。
 4. **JWT 结构**：
    * **Header**：包含算法信息 (如 `{"alg": "HS256", "typ": "JWT"}`)。
-   * **Payload**：包含实体信息，如 `user_id` (用户标识), `collection` (所属集合), `role` (角色, 若有), 以及 `exp` (过期时间)。
+   * **Payload**：包含实体信息；`sub` 是完整 `collection:key` 用户 ID，并包含 `collection`, `role`, `email`, `admin` 与 `exp` 等字段。
    * **Signature**：使用 HS256 和系统密钥签名。Claims 包含 `sub`, `collection`, `role`, `email`, `admin`, `token_key`, `typ`, `iat`, `exp`, `jti`。
 
 ### 鉴权流程图 (文字描述)
@@ -43,13 +43,14 @@ API Rules 是 HertaBase 安全模型的核心，负责针对不同操作进行�
 
 * **规则定义**：规则配置于每个 Collection 上，并细化至具体的数据操作：`list` (列表), `view` (单条记录), `create` (创建), `update` (更新), `delete` (删除)。
 * **规则语法**：采用完全兼容 SurrealQL 的布尔表达式。
-* **内置变量**：`$auth` 是当前身份（匿名时为 `null`），`$record` 是当前/拟创建记录，`$request.body` 是写请求体。
+* **内置变量**：`$auth` 是当前身份（匿名时为 `null`），`$record` 是当前/拟创建记录，`$request.body` 是写请求体。`$auth.id` 始终是完整 ID 字符串；`$auth.record` 是同一身份的原生 RecordId，用于 relation 比较。创建规则中的 relation 字段也会在求值前转换为原生 RecordId。
 * **特殊规则值**：
   * `""` (空字符串)：拒绝所有访问 (Deny All)。
   * `true`：允许所有访问 (公开访问, Allow All)。
   * `null`：仅限 Admin 管理员访问 (默认安全策略)。
 * **规则示例**：
-  * 仅所有者可访问：`$auth.id = $record.user_id`
+  * relation 所有者：`$record.author = $auth.record`
+  * 文本所有者：`$record.owner_id = $auth.id`
   * 基于角色的访问：`$auth.role = 'moderator'`
 
 ## 6. 安全措施 (Security Measures)

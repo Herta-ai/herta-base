@@ -217,6 +217,9 @@ pub fn rule_context(identity: &AuthIdentity, body: Value) -> RuleContext {
     RuleContext {
         admin: identity.is_admin(),
         auth: identity.as_rule_value(),
+        auth_record: identity
+            .record_id()
+            .and_then(|id| herta_db::record::parse_record_id(id).ok()),
         request_body: body,
     }
 }

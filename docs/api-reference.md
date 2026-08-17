@@ -68,7 +68,7 @@ HertaBase 采用 RESTful 风格的 API 设计理念，致力于提供清晰、�
       "refreshToken": "eyJhbGciOiJIUzI1NiIsInR...",
       "tokenType": "Bearer",
       "expiresIn": 900,
-      "user": { "id": "user_123", "email": "user@example.com" }
+      "user": { "id": "_users:user_123", "email": "user@example.com" }
     },
     "meta": {},
     "error": null
@@ -102,7 +102,7 @@ HertaBase 采用 RESTful 风格的 API 设计理念，致力于提供清晰、�
   ```json
   {
     "data": [
-      { "id": "post_1", "title": "Hello HertaBase" }
+      { "id": "posts:post_1", "title": "Hello HertaBase" }
     ],
     "meta": { "total": 1, "page": 1, "perPage": 20 },
     "error": null
@@ -113,8 +113,12 @@ HertaBase 采用 RESTful 风格的 API 设计理念，致力于提供清晰、�
 
 ### GET /api/collections/{collection}/records/{id}
 
-- **描述**: 获取单条记录。
+- **描述**: 获取单条记录。`{id}` 可使用完整 `collection:key`（URL 编码后传入）或裸 `key`；完整 ID 的集合名不匹配时返回 404。PATCH、DELETE 和文件记录路径使用相同约定。
 - **所需权限**: 由 API Rules 动态决定
+
+Relation 字段的请求和响应均使用完整 `target:key`。单值 relation 存储为原生 `record<target>`，多值 relation 存储为 `array<record<target>>`；裸 key、空 ID、错误目标集合、畸形 ID、超过 `maxSelect` 的数组和必填空数组返回 400 `HB_VALIDATION_ERROR`。
+
+规则表达式中 `$auth.id` 是认证主体的完整 ID 字符串，适合与文本 owner 字段比较；`$auth.record` 是同一主体的原生 RecordId，应用于 relation 比较，例如 `$record.author = $auth.record`。创建规则中的 relation 字段也以原生 RecordId 求值。管理员仍绕过业务规则，但不能读取或继续修改软删除记录。
 
 ### POST /api/collections/{collection}/records
 

@@ -1,3 +1,4 @@
+use herta_core::HbError;
 use herta_db::{
     ApiRule, CollectionDef, CollectionType, DbClient, FieldDef, FieldType, ListParams, LogEntry,
     LogManager, LogQuery, LogType, RealtimeAction, RealtimeManager, RecordManager, RuleContext,
@@ -212,11 +213,17 @@ async fn collection_and_record_lifecycle() {
         .create("posts", json!({"title": "Hello", "status": "active"}))
         .await
         .unwrap();
-    let id = created["id"]
-        .as_str()
-        .unwrap()
-        .strip_prefix("posts:")
-        .unwrap();
+    let full_id = created["id"].as_str().unwrap();
+    let id = full_id.strip_prefix("posts:").unwrap();
+    assert_eq!(
+        records.get("posts", full_id, None).await.unwrap()["id"],
+        full_id
+    );
+    assert_eq!(records.get("posts", id, None).await.unwrap()["id"], full_id);
+    assert!(matches!(
+        records.get("posts", &format!("other:{id}"), None).await,
+        Err(HbError::NotFound)
+    ));
 
     let params = ListParams {
         filter: Some("status IN ['active'] AND title CONTAINS 'Hell'".into()),
@@ -248,8 +255,311 @@ async fn collection_and_record_lifecycle() {
         .unwrap();
     assert_eq!(updated["summary"], "short");
 
-    records.delete("posts", id).await.unwrap();
-    assert!(records.get("posts", id, None).await.is_err());
+    records.delete("posts", full_id).await.unwrap();
+    assert!(matches!(
+        records.get("posts", full_id, None).await,
+        Err(HbError::NotFound)
+    ));
+    assert!(matches!(
+        records
+            .update("posts", full_id, json!({"summary": "too late"}))
+            .await,
+        Err(HbError::Forbidden)
+    ));
+    assert!(matches!(
+        records.delete("posts", full_id).await,
+        Err(HbError::Forbidden)
+    ));
+    let (remaining, total) = records.list("posts", &ListParams::default()).await.unwrap();
+    assert_eq!(total, 0);
+    assert!(remaining.is_empty());
+}
+
+#[tokio::test]
+async fn auth_record_rules_cover_owner_crud() {
+    let db = DbClient::memory().await.unwrap();
+    let schema = SchemaManager::new(&db);
+    schema
+        .create_collection(&CollectionDef {
+            name: "owners".into(),
+            collection_type: CollectionType::Base,
+            schema_mode: SchemaMode::Strict,
+            fields: vec![FieldDef {
+                name: "name".into(),
+                field_type: FieldType::Text,
+                required: true,
+                options: None,
+            }],
+            indexes: vec![],
+            rules: Default::default(),
+        })
+        .await
+        .unwrap();
+    let owner_rule = ApiRule::Expression("$record.owner = $auth.record".into());
+    schema
+        .create_collection(&CollectionDef {
+            name: "documents".into(),
+            collection_type: CollectionType::Base,
+            schema_mode: SchemaMode::Strict,
+            fields: vec![
+                FieldDef {
+                    name: "title".into(),
+                    field_type: FieldType::Text,
+                    required: true,
+                    options: None,
+                },
+                FieldDef {
+                    name: "owner".into(),
+                    field_type: FieldType::Relation,
+                    required: true,
+                    options: Some(json!({"collection": "owners", "maxSelect": 1})),
+                },
+            ],
+            indexes: vec![],
+            rules: herta_db::CollectionRules {
+                list: owner_rule.clone(),
+                view: owner_rule.clone(),
+                create: owner_rule.clone(),
+                update: owner_rule.clone(),
+                delete: owner_rule,
+            },
+        })
+        .await
+        .unwrap();
+
+    let records = RecordManager::new(&db);
+    let owner = records
+        .create("owners", json!({"name": "Owner"}))
+        .await
+        .unwrap();
+    let stranger = records
+        .create("owners", json!({"name": "Stranger"}))
+        .await
+        .unwrap();
+    let owner_id = owner["id"].as_str().unwrap();
+    let stranger_id = stranger["id"].as_str().unwrap();
+    let context = |id: &str| RuleContext {
+        admin: false,
+        auth: json!({"id": id, "admin": false}),
+        auth_record: Some(herta_db::record::parse_record_id(id).unwrap()),
+        request_body: serde_json::Value::Null,
+    };
+    let owner_context = context(owner_id);
+    let stranger_context = context(stranger_id);
+
+    assert!(matches!(
+        records
+            .create_authorized(
+                "documents",
+                json!({"title": "Forged", "owner": owner_id}),
+                &stranger_context,
+            )
+            .await,
+        Err(HbError::Forbidden)
+    ));
+    let document = records
+        .create_authorized(
+            "documents",
+            json!({"title": "Owned", "owner": owner_id}),
+            &owner_context,
+        )
+        .await
+        .unwrap();
+    let document_id = document["id"].as_str().unwrap();
+    assert_eq!(document["owner"], owner_id);
+
+    let (owned, total) = records
+        .list_authorized("documents", &ListParams::default(), &owner_context)
+        .await
+        .unwrap();
+    assert_eq!(total, 1);
+    assert_eq!(owned[0]["id"], document_id);
+    let (hidden, total) = records
+        .list_authorized("documents", &ListParams::default(), &stranger_context)
+        .await
+        .unwrap();
+    assert_eq!(total, 0);
+    assert!(hidden.is_empty());
+    assert!(
+        records
+            .get_authorized("documents", document_id, None, &owner_context)
+            .await
+            .is_ok()
+    );
+    assert!(matches!(
+        records
+            .get_authorized("documents", document_id, None, &stranger_context)
+            .await,
+        Err(HbError::NotFound)
+    ));
+    assert!(matches!(
+        records
+            .update_authorized(
+                "documents",
+                document_id,
+                json!({"title": "Denied"}),
+                &stranger_context,
+            )
+            .await,
+        Err(HbError::Forbidden)
+    ));
+    assert!(matches!(
+        records
+            .delete_authorized("documents", document_id, &stranger_context)
+            .await,
+        Err(HbError::Forbidden)
+    ));
+    assert_eq!(
+        records
+            .update_authorized(
+                "documents",
+                document_id,
+                json!({"title": "Updated"}),
+                &owner_context,
+            )
+            .await
+            .unwrap()["title"],
+        "Updated"
+    );
+    records
+        .delete_authorized("documents", document_id, &owner_context)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn create_rules_can_follow_native_relation_paths() {
+    let db = DbClient::memory().await.unwrap();
+    let schema = SchemaManager::new(&db);
+    schema
+        .create_collection(&CollectionDef {
+            name: "authors".into(),
+            collection_type: CollectionType::Base,
+            schema_mode: SchemaMode::Strict,
+            fields: vec![FieldDef {
+                name: "name".into(),
+                field_type: FieldType::Text,
+                required: true,
+                options: None,
+            }],
+            indexes: vec![],
+            rules: Default::default(),
+        })
+        .await
+        .unwrap();
+    schema
+        .create_collection(&CollectionDef {
+            name: "rule_posts".into(),
+            collection_type: CollectionType::Base,
+            schema_mode: SchemaMode::Strict,
+            fields: vec![
+                FieldDef {
+                    name: "is_public".into(),
+                    field_type: FieldType::Bool,
+                    required: true,
+                    options: None,
+                },
+                FieldDef {
+                    name: "author".into(),
+                    field_type: FieldType::Relation,
+                    required: true,
+                    options: Some(json!({"collection": "authors", "maxSelect": 1})),
+                },
+            ],
+            indexes: vec![],
+            rules: Default::default(),
+        })
+        .await
+        .unwrap();
+    schema
+        .create_collection(&CollectionDef {
+            name: "rule_comments".into(),
+            collection_type: CollectionType::Base,
+            schema_mode: SchemaMode::Strict,
+            fields: vec![
+                FieldDef {
+                    name: "post".into(),
+                    field_type: FieldType::Relation,
+                    required: true,
+                    options: Some(json!({"collection": "rule_posts", "maxSelect": 1})),
+                },
+                FieldDef {
+                    name: "author".into(),
+                    field_type: FieldType::Relation,
+                    required: true,
+                    options: Some(json!({"collection": "authors", "maxSelect": 1})),
+                },
+            ],
+            indexes: vec![],
+            rules: herta_db::CollectionRules {
+                create: ApiRule::Expression(
+                    "$record.author = $auth.record AND ($record.post.is_public = true OR $record.post.author = $auth.record)".into(),
+                ),
+                ..Default::default()
+            },
+        })
+        .await
+        .unwrap();
+
+    let records = RecordManager::new(&db);
+    let owner = records
+        .create("authors", json!({"name": "Owner"}))
+        .await
+        .unwrap();
+    let stranger = records
+        .create("authors", json!({"name": "Stranger"}))
+        .await
+        .unwrap();
+    let owner_id = owner["id"].as_str().unwrap();
+    let stranger_id = stranger["id"].as_str().unwrap();
+    let public_post = records
+        .create("rule_posts", json!({"is_public": true, "author": owner_id}))
+        .await
+        .unwrap();
+    let private_post = records
+        .create(
+            "rule_posts",
+            json!({"is_public": false, "author": owner_id}),
+        )
+        .await
+        .unwrap();
+    let context = |id: &str| RuleContext {
+        admin: false,
+        auth: json!({"id": id, "admin": false}),
+        auth_record: Some(herta_db::record::parse_record_id(id).unwrap()),
+        request_body: serde_json::Value::Null,
+    };
+
+    assert!(
+        records
+            .create_authorized(
+                "rule_comments",
+                json!({"post": public_post["id"], "author": stranger_id}),
+                &context(stranger_id),
+            )
+            .await
+            .is_ok()
+    );
+    assert!(matches!(
+        records
+            .create_authorized(
+                "rule_comments",
+                json!({"post": private_post["id"], "author": stranger_id}),
+                &context(stranger_id),
+            )
+            .await,
+        Err(HbError::Forbidden)
+    ));
+    assert!(
+        records
+            .create_authorized(
+                "rule_comments",
+                json!({"post": private_post["id"], "author": owner_id}),
+                &context(owner_id),
+            )
+            .await
+            .is_ok()
+    );
 }
 
 #[tokio::test]
@@ -356,6 +666,84 @@ async fn expands_relation_records_without_replacing_relation_ids() {
         .unwrap();
     assert_eq!(restricted["author"], user_id);
     assert!(restricted["expand"]["author"].is_null());
+}
+
+#[tokio::test]
+async fn filters_unauthorized_records_from_relation_array_expansion() {
+    let db = DbClient::memory().await.unwrap();
+    let schema = SchemaManager::new(&db);
+    schema
+        .create_collection(&CollectionDef {
+            name: "profiles".into(),
+            collection_type: CollectionType::Base,
+            schema_mode: SchemaMode::Strict,
+            fields: vec![
+                FieldDef {
+                    name: "name".into(),
+                    field_type: FieldType::Text,
+                    required: true,
+                    options: None,
+                },
+                FieldDef {
+                    name: "visible".into(),
+                    field_type: FieldType::Bool,
+                    required: true,
+                    options: None,
+                },
+            ],
+            indexes: vec![],
+            rules: herta_db::CollectionRules {
+                view: ApiRule::Expression("$record.visible = true".into()),
+                ..Default::default()
+            },
+        })
+        .await
+        .unwrap();
+    schema
+        .create_collection(&CollectionDef {
+            name: "teams".into(),
+            collection_type: CollectionType::Base,
+            schema_mode: SchemaMode::Strict,
+            fields: vec![FieldDef {
+                name: "members".into(),
+                field_type: FieldType::Relation,
+                required: true,
+                options: Some(json!({"collection": "profiles", "maxSelect": 2})),
+            }],
+            indexes: vec![],
+            rules: herta_db::CollectionRules {
+                view: ApiRule::Boolean(true),
+                ..Default::default()
+            },
+        })
+        .await
+        .unwrap();
+    let records = RecordManager::new(&db);
+    let visible = records
+        .create("profiles", json!({"name": "Visible", "visible": true}))
+        .await
+        .unwrap();
+    let hidden = records
+        .create("profiles", json!({"name": "Hidden", "visible": false}))
+        .await
+        .unwrap();
+    let member_ids = json!([visible["id"], hidden["id"]]);
+    let team = records
+        .create("teams", json!({"members": member_ids.clone()}))
+        .await
+        .unwrap();
+    let expanded = records
+        .get_authorized(
+            "teams",
+            team["id"].as_str().unwrap(),
+            Some("members"),
+            &RuleContext::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(expanded["members"], member_ids);
+    assert_eq!(expanded["expand"]["members"].as_array().unwrap().len(), 1);
+    assert_eq!(expanded["expand"]["members"][0]["id"], visible["id"]);
 }
 
 #[tokio::test]

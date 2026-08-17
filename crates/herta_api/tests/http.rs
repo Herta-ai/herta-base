@@ -394,6 +394,39 @@ async fn collection_record_and_openapi_flow() {
             .unwrap()
             .starts_with("posts:")
     );
+    let full_id = created["data"]["id"].as_str().unwrap().to_owned();
+    let bare_id = full_id.strip_prefix("posts:").unwrap();
+    for id in [&full_id, bare_id] {
+        let mut response = TestClient::get(format!(
+            "http://localhost/api/collections/posts/records/{id}"
+        ))
+        .bearer_auth(&admin)
+        .send(&service)
+        .await;
+        assert_eq!(response.status_code, Some(StatusCode::OK));
+        let body: Value = response.take_json().await.unwrap();
+        assert_eq!(body["data"]["id"], full_id);
+    }
+    let mut response = TestClient::get(format!(
+        "http://localhost/api/collections/posts/records/other:{bare_id}"
+    ))
+    .bearer_auth(&admin)
+    .send(&service)
+    .await;
+    assert_eq!(response.status_code, Some(StatusCode::NOT_FOUND));
+    let body: Value = response.take_json().await.unwrap();
+    assert_eq!(body["error"]["error"], "HB_NOT_FOUND");
+
+    let mut response = TestClient::patch(format!(
+        "http://localhost/api/collections/posts/records/{full_id}"
+    ))
+    .bearer_auth(&admin)
+    .json(&json!({"summary": "updated through a full id"}))
+    .send(&service)
+    .await;
+    assert_eq!(response.status_code, Some(StatusCode::OK));
+    let updated: Value = response.take_json().await.unwrap();
+    assert_eq!(updated["data"]["summary"], "updated through a full id");
 
     let mut response = TestClient::get(
         "http://localhost/api/collections/posts/records?filter=status%20IN%20%5B%27active%27%5D",
@@ -404,6 +437,43 @@ async fn collection_record_and_openapi_flow() {
     let listed: Value = response.take_json().await.unwrap();
     assert_eq!(listed["meta"]["total"], 1);
     assert_eq!(listed["data"].as_array().unwrap().len(), 1);
+
+    let record_url = format!("http://localhost/api/collections/posts/records/{full_id}");
+    let mut response = TestClient::delete(&record_url)
+        .bearer_auth(&admin)
+        .send(&service)
+        .await;
+    assert_eq!(response.status_code, Some(StatusCode::OK));
+    let _: Value = response.take_json().await.unwrap();
+    for mut response in [
+        TestClient::patch(&record_url)
+            .bearer_auth(&admin)
+            .json(&json!({"summary": "too late"}))
+            .send(&service)
+            .await,
+        TestClient::delete(&record_url)
+            .bearer_auth(&admin)
+            .send(&service)
+            .await,
+    ] {
+        assert_eq!(response.status_code, Some(StatusCode::FORBIDDEN));
+        let body: Value = response.take_json().await.unwrap();
+        assert_eq!(body["error"]["error"], "HB_FORBIDDEN");
+    }
+    let mut response = TestClient::get(&record_url)
+        .bearer_auth(&admin)
+        .send(&service)
+        .await;
+    assert_eq!(response.status_code, Some(StatusCode::NOT_FOUND));
+    let body: Value = response.take_json().await.unwrap();
+    assert_eq!(body["error"]["error"], "HB_NOT_FOUND");
+    let mut response = TestClient::get("http://localhost/api/collections/posts/records")
+        .bearer_auth(&admin)
+        .send(&service)
+        .await;
+    let empty: Value = response.take_json().await.unwrap();
+    assert_eq!(empty["meta"]["total"], 0);
+    assert!(empty["data"].as_array().unwrap().is_empty());
 
     let mut response = TestClient::delete("http://localhost/_/collections/posts")
         .bearer_auth(&admin)

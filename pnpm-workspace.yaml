@@ -1,6 +1,7 @@
 packages:
   - 'frontend/*'
   - 'packages/*'
+  - 'packages/integration-tests/*'
 
 allowBuilds:
   core-js: true

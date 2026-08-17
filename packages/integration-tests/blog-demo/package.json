@@ -1,0 +1,17 @@
+{
+  "name": "blog-demo-integration",
+  "version": "1.0.0",
+  "description": "Integration tests for blog scenario",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "pretest": "cargo build --release --bin hertabase --manifest-path ../../../Cargo.toml",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "axios": "^1.19.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}

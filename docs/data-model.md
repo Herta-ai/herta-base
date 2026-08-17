@@ -30,7 +30,7 @@ Phase 3 的 JS 扩展来自 `hb_hooks/`，编译结果和注册表驻留内存�
 | `datetime` | 日期和时间 | `datetime` |
 | `json` | 任意 JSON 对象或数组 | `object` / `array` |
 | `file` | 记录绑定的服务端文件引用 | `string` 或 `array<string>`，由 `maxSelect` 决定 |
-| `relation` | 关联记录引用 | `record` |
+| `relation` | 关联记录引用 | `record<collection>` 或 `array<record<collection>>` |
 | `select` | 枚举选项 | `string` / `array` (带约束校验) |
 | `email` | 电子邮件地址 | `string` (带格式校验) |
 | `url` | 网址链接 | `string` (带格式校验) |
@@ -53,16 +53,16 @@ Phase 3 的 JS 扩展来自 `hb_hooks/`，编译结果和注册表驻留内存�
 
 HertaBase 为每条记录自动生成和维护以下系统级基础字段：
 
-- `id`: 记录的唯一标识，格式为 `collection_name:random_string` (完全对应 SurrealDB 的 Record ID)。
+- `id`: 记录的唯一标识，格式为 `collection_name:random_string` (完全对应 SurrealDB 的 Record ID)。所有 API 响应、鉴权用户、JWT `sub` 和实时事件都返回完整 ID。
 - `created_at`: 记录创建时间的 ISO 8601 字符串或时间戳。
 - `updated_at`: 记录最后更新时间的 ISO 8601 字符串或时间戳。
-- `deleted_at`: 软删除时间（默认为 `null`，非 `null` 表示记录已被软删除）。系统默认查询会自动过滤已软删除的记录，并提供软删除恢复与硬删除（彻底物理删除）支持。
+- `deleted_at`: 软删除时间（默认为 `null`，非 `null` 表示记录已被软删除）。系统查询和普通 CRUD 会过滤已软删除记录；当前没有恢复或公开硬删除接口。
 
 ## 6. 关联查询 (Relations)
 
 得益于 SurrealDB 的图数据库特性，HertaBase 在处理数据关联时非常高效。
 
-- **关系类型**: 原生支持一对一 (One-to-one)、一对多 (One-to-many) 与多对多 (Many-to-many) 关系。
+- **关系类型**: 原生支持 `record<target>` 单值和 `array<record<target>>` 多值关系。写入必须使用完整的 `target:key`，不能使用裸 key、空 ID、错误集合或畸形 ID；`maxSelect` 限制多值数组长度，必填多值关系不能为空。响应会将原生 RecordId 归一化为完整字符串，并在 `expand` 中保留原关系 ID。
 - **图数据边 (Graph Edges)**: HertaBase 可以利用 SurrealDB 提供的边 (Edges) 来定义记录之间的关系，从而突破传统关系型数据库在多对多连接查询时的性能瓶颈。
 - **Eager Loading (`expand` 参数)**: 客户端通过 API 请求时，只需在请求体中附加 `?expand=author,comments.user` 等参数，`herta_db` 层会自动将其转换为相应的 SurrealQL 并获取完整数据结构，无需发起多次请求。
 
@@ -103,9 +103,9 @@ HertaBase 为每条记录自动生成和维护以下系统级基础字段：
   ],
   "rules": {
     "list": true,
-    "view": "$auth.id = $record.author",
-    "create": "$auth.id = $record.author",
-    "update": "$auth.id = $record.author",
+    "view": "$record.author = $auth.record",
+    "create": "$record.author = $auth.record",
+    "update": "$record.author = $auth.record",
     "delete": null
   }
 }
@@ -113,4 +113,6 @@ HertaBase 为每条记录自动生成和维护以下系统级基础字段：
 
 ## 9. 结构迁移 (Migration)
 
-字段和索引更新仍是只追加的；PATCH 可以整体替换 `rules`。规则的 `null` 表示仅管理员，`false` 或空字符串表示拒绝，`true` 表示公开，字符串是经过 AST 校验的 SurrealQL 标量布尔表达式。
+字段和索引更新仍是只追加的；PATCH 可以整体替换 `rules`。规则的 `null` 表示仅管理员，`false` 或空字符串表示拒绝，`true` 表示公开，字符串是经过 AST 校验的 SurrealQL 标量布尔表达式。规则上下文中 `$auth.id` 是完整 ID 字符串，兼容文本比较；`$auth.record` 是原生 `RecordId`，用于 relation 比较。创建规则中的 `$record` 已将 relation 字段转换为原生 RecordId。
+
+记录路径 `{id}` 同时接受完整 `collection:key` 和裸 `key`。完整 ID 的集合名必须与路径集合一致，否则返回 404。普通列表和 CRUD 默认过滤 `deleted_at` 非空的软删除记录；软删除后没有恢复接口，更新和重复删除都会被拒绝。

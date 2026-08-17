@@ -6,7 +6,7 @@ use std::{
 
 use herta_core::{HbError, HbResult};
 use serde_json::{Map, Value};
-use surrealdb::types::RecordId;
+use surrealdb::types::{Object, RecordId, Value as SurrealValue};
 use uuid::Uuid;
 
 use crate::{
@@ -77,6 +77,7 @@ impl<'a> RecordManager<'a> {
             .bind(("limit", params.per_page()))
             .bind(("offset", (params.page() - 1) * params.per_page()))
             .bind(("hb_auth", context.auth.clone()))
+            .bind(("hb_auth_record", context.auth_record.clone()))
             .bind(("hb_request", json_request(&context.request_body)));
         if let Some(filter) = compiled_filter {
             for (name, value) in filter.bindings {
@@ -127,8 +128,9 @@ impl<'a> RecordManager<'a> {
             .query(format!(
                 "SELECT * FROM ONLY $record WHERE deleted_at IS NONE AND ({rule})"
             ))
-            .bind(("record", record_id(collection, id)))
+            .bind(("record", route_record_id(collection, id)?))
             .bind(("hb_auth", context.auth.clone()))
+            .bind(("hb_auth_record", context.auth_record.clone()))
             .bind(("hb_request", json_request(&context.request_body)))
             .await
             .map_err(database_error)?
@@ -178,7 +180,7 @@ impl<'a> RecordManager<'a> {
             .get_collection(collection)
             .await?;
         validate_record(&schema, &mut data, true)?;
-        check_create_rule(self.db, &schema.rules.create, context, &data).await?;
+        check_create_rule(self.db, &schema, context, &data).await?;
         let mut value = self
             .write_record(&schema, id, data, true, None, context)
             .await?;
@@ -196,7 +198,7 @@ impl<'a> RecordManager<'a> {
             .get_collection(collection)
             .await?;
         validate_record(&schema, &mut data, true)?;
-        check_create_rule(self.db, &schema.rules.create, context, &data).await?;
+        check_create_rule(self.db, &schema, context, &data).await?;
         Ok(schema)
     }
 
@@ -245,8 +247,9 @@ impl<'a> RecordManager<'a> {
             .query(format!(
                 "SELECT id FROM ONLY $record WHERE deleted_at IS NONE AND ({rule})"
             ))
-            .bind(("record", record_id(collection, id)))
+            .bind(("record", route_record_id(collection, id)?))
             .bind(("hb_auth", context.auth.clone()))
+            .bind(("hb_auth_record", context.auth_record.clone()))
             .bind(("hb_request", json_request(&context.request_body)))
             .await
             .map_err(database_error)?
@@ -327,8 +330,9 @@ impl<'a> RecordManager<'a> {
             .db
             .inner()
             .query(sql)
-            .bind(("record", record_id(&schema.name, id)))
+            .bind(("record", route_record_id(&schema.name, id)?))
             .bind(("hb_auth", context.auth.clone()))
+            .bind(("hb_auth_record", context.auth_record.clone()))
             .bind(("hb_request", json_request(&context.request_body)));
         for binding in bindings {
             query = match binding {
@@ -376,8 +380,9 @@ impl<'a> RecordManager<'a> {
                 "UPDATE ONLY $record SET deleted_at = time::now(), updated_at = time::now() \
                  WHERE deleted_at IS NONE AND ({rule}) RETURN AFTER"
             ))
-            .bind(("record", record_id(collection, id)))
+            .bind(("record", route_record_id(collection, id)?))
             .bind(("hb_auth", context.auth.clone()))
+            .bind(("hb_auth_record", context.auth_record.clone()))
             .bind(("hb_request", json_request(&context.request_body)))
             .await
             .map_err(database_error)?
@@ -520,8 +525,11 @@ impl<'a> RecordManager<'a> {
         let Some(id) = value.get("id").and_then(Value::as_str) else {
             return Ok(None);
         };
-        let id = id.split_once(':').map_or(id, |(_, id)| id);
         let schema = SchemaManager::new(self.db).get_collection(target).await?;
+        let id = parse_record_id(id)?;
+        if id.table.as_str() != target {
+            return Ok(None);
+        }
         let rule = match compile_rule(&schema.rules.view, context, true) {
             Ok(rule) => rule,
             Err(HbError::Forbidden) => return Ok(None),
@@ -533,8 +541,9 @@ impl<'a> RecordManager<'a> {
             .query(format!(
                 "SELECT id FROM ONLY $record WHERE deleted_at IS NONE AND ({rule})"
             ))
-            .bind(("record", record_id(target, id)))
+            .bind(("record", id))
             .bind(("hb_auth", context.auth.clone()))
+            .bind(("hb_auth_record", context.auth_record.clone()))
             .bind(("hb_request", json_request(&context.request_body)))
             .await
             .map_err(database_error)?
@@ -596,6 +605,7 @@ fn admin_context() -> RuleContext {
     RuleContext {
         admin: true,
         auth: serde_json::json!({"admin": true, "role": "admin"}),
+        auth_record: None,
         request_body: Value::Null,
     }
 }
@@ -618,6 +628,7 @@ pub(crate) fn compile_rule(
         ApiRule::Expression(expression) if expression.trim().is_empty() => Err(HbError::Forbidden),
         ApiRule::Expression(expression) => {
             let mut compiled = expression
+                .replace("$auth.record", "$hb_auth_record")
                 .replace("$auth", "$hb_auth")
                 .replace("$request", "$hb_request");
             if current_record {
@@ -637,11 +648,11 @@ pub(crate) fn compile_rule(
 
 async fn check_create_rule(
     db: &DbClient,
-    rule: &ApiRule,
+    schema: &CollectionDef,
     context: &RuleContext,
     record: &Value,
 ) -> HbResult<()> {
-    let expression = compile_rule(rule, context, false)?;
+    let expression = compile_rule(&schema.rules.create, context, false)?;
     if expression == "true" {
         return Ok(());
     }
@@ -649,7 +660,8 @@ async fn check_create_rule(
         .inner()
         .query(format!("RETURN ({expression})"))
         .bind(("hb_auth", context.auth.clone()))
-        .bind(("hb_record", record.clone()))
+        .bind(("hb_auth_record", context.auth_record.clone()))
+        .bind(("hb_record", native_record_value(schema, record)?))
         .bind(("hb_request", json_request(&context.request_body)))
         .await
         .map_err(database_error)?
@@ -661,6 +673,44 @@ async fn check_create_rule(
     } else {
         Err(HbError::Forbidden)
     }
+}
+
+fn native_record_value(schema: &CollectionDef, record: &Value) -> HbResult<SurrealValue> {
+    let object = record
+        .as_object()
+        .ok_or_else(|| HbError::validation("record body must be a JSON object"))?;
+    let mut native = Object::new();
+    for (name, value) in object {
+        let Some(field) = schema.fields.iter().find(|field| field.name == *name) else {
+            native.insert(name.clone(), value.clone());
+            continue;
+        };
+        if field.field_type != FieldType::Relation || value.is_null() {
+            native.insert(name.clone(), value.clone());
+            continue;
+        }
+        if relation_is_many(field.options.as_ref()) {
+            let values = value
+                .as_array()
+                .ok_or_else(|| HbError::validation("relation value must be an array"))?
+                .iter()
+                .map(|value| {
+                    value
+                        .as_str()
+                        .ok_or_else(|| HbError::validation("relation value must be a record id"))
+                        .and_then(parse_record_id)
+                })
+                .collect::<HbResult<Vec<_>>>()?;
+            native.insert(name.clone(), values);
+        } else {
+            let id = value
+                .as_str()
+                .ok_or_else(|| HbError::validation("relation value must be a record id"))
+                .and_then(parse_record_id)?;
+            native.insert(name.clone(), id);
+        }
+    }
+    Ok(SurrealValue::Object(native))
 }
 
 fn sanitize_records(schema: &CollectionDef, records: &mut [Value]) {
@@ -736,8 +786,49 @@ fn compile_sort(sort: Option<&str>, allowed: &HashSet<String>) -> HbResult<Strin
     Ok(format!("ORDER BY {}", fields.join(", ")))
 }
 
-fn parse_record_id(value: &str) -> HbResult<RecordId> {
-    RecordId::parse_simple(value).map_err(|_| HbError::validation("invalid relation record id"))
+pub fn parse_record_id(value: &str) -> HbResult<RecordId> {
+    let (table, key) = value
+        .split_once(':')
+        .ok_or_else(|| HbError::validation("invalid relation record id"))?;
+    let key = key
+        .strip_prefix('`')
+        .and_then(|key| key.strip_suffix('`'))
+        .unwrap_or(key);
+    if table.is_empty()
+        || !table
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '_')
+        || key.is_empty()
+        || key.len() > 255
+        || !key
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
+    {
+        return Err(HbError::validation("invalid relation record id"));
+    }
+    Ok(RecordId::new(table, key))
+}
+
+fn route_record_id(collection: &str, value: &str) -> HbResult<RecordId> {
+    let (table, key) = value
+        .split_once(':')
+        .map_or((collection, value), |parts| parts);
+    if table != collection {
+        return Err(HbError::NotFound);
+    }
+    let key = key
+        .strip_prefix('`')
+        .and_then(|key| key.strip_suffix('`'))
+        .unwrap_or(key);
+    if key.is_empty()
+        || key.len() > 255
+        || !key
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
+    {
+        return Err(HbError::NotFound);
+    }
+    Ok(record_id(collection, key))
 }
 
 #[derive(Debug, Clone)]
@@ -852,5 +943,20 @@ mod tests {
         let mut value = serde_json::json!({"id": {"table": "posts", "key": "one"}});
         normalize_value(&mut value);
         assert_eq!(value["id"], "posts:one");
+    }
+
+    #[test]
+    fn normalizes_record_id_strings_and_backtick_forms() {
+        let mut value = serde_json::json!({
+            "string": "posts:one",
+            "quoted": "posts:`two-three`",
+            "object": {"table": "posts", "key": "four"},
+            "numeric": {"table": "posts", "key": 5}
+        });
+        normalize_value(&mut value);
+        assert_eq!(value["string"], "posts:one");
+        assert_eq!(value["quoted"], "posts:two-three");
+        assert_eq!(value["object"], "posts:four");
+        assert_eq!(value["numeric"], "posts:5");
     }
 }

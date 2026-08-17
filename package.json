@@ -14,7 +14,9 @@
     "lint": "pnpm lint:ui && pnpm lint:server",
     "lint:ui": "pnpm --filter @hb/admin-ui lint",
     "lint:server": "cargo clippy --workspace -- -D warnings",
-    "test": "cargo test --workspace"
+    "test:rust": "cargo test --workspace",
+    "test:integration": "pnpm --filter blog-demo-integration test",
+    "test": "pnpm test:rust && pnpm test:integration"
   },
   "devDependencies": {
     "typescript": "^5.0.0"

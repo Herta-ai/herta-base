@@ -168,6 +168,7 @@ fn validate_rule(rule: &crate::models::ApiRule) -> HbResult<()> {
         }
     }
     let parsed_expression = expression
+        .replace("$auth.record", "$hb_auth_record")
         .replace("$auth", "$hb_auth")
         .replace("$record", "$hb_record")
         .replace("$request", "$hb_request");
@@ -203,10 +204,15 @@ fn validate_field(field: &FieldDef) -> HbResult<()> {
                 .options
                 .as_ref()
                 .and_then(|value| value.get("maxSelect"))
-                .and_then(Value::as_u64)
-                && max == 0
             {
-                return Err(HbError::validation("relation maxSelect must be positive"));
+                let max = max.as_u64().ok_or_else(|| {
+                    HbError::validation("relation maxSelect must be a positive integer")
+                })?;
+                if max == 0 {
+                    return Err(HbError::validation(
+                        "relation maxSelect must be a positive integer",
+                    ));
+                }
             }
         }
         FieldType::Select => {
@@ -327,7 +333,9 @@ fn validate_field_value(field: &FieldDef, value: &Value) -> HbResult<()> {
                 .unwrap_or_default();
             if relation_is_many(field.options.as_ref()) {
                 value.as_array().is_some_and(|values| {
-                    values.iter().all(|value| valid_relation_id(value, target))
+                    (!values.is_empty() || !field.required)
+                        && values.len() <= relation_max_select(field)
+                        && values.iter().all(|value| valid_relation_id(value, target))
                 })
             } else {
                 valid_relation_id(value, target)
@@ -436,7 +444,30 @@ fn valid_relation_id(value: &Value, target: &str) -> bool {
     value
         .as_str()
         .and_then(|value| value.split_once(':'))
-        .is_some_and(|(table, id)| table == target && !id.is_empty())
+        .is_some_and(|(table, id)| table == target && valid_relation_key(id))
+}
+
+fn valid_relation_key(value: &str) -> bool {
+    let value = value
+        .strip_prefix('`')
+        .and_then(|value| value.strip_suffix('`'))
+        .unwrap_or(value);
+    !value.is_empty()
+        && value.len() <= 255
+        && value
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
+}
+
+fn relation_max_select(field: &FieldDef) -> usize {
+    field
+        .options
+        .as_ref()
+        .and_then(|value| value.get("maxSelect"))
+        .and_then(Value::as_u64)
+        .unwrap_or(usize::MAX as u64)
+        .try_into()
+        .unwrap_or(usize::MAX)
 }
 
 fn field_error(field: &str, reason: &str) -> HbError {
@@ -555,5 +586,51 @@ mod tests {
             invalid.options = Some(options);
             assert!(validate_field(&invalid).is_err());
         }
+    }
+
+    #[test]
+    fn relation_fields_enforce_target_format_required_and_cardinality() {
+        let single = FieldDef {
+            name: "owner".into(),
+            field_type: FieldType::Relation,
+            required: true,
+            options: Some(json!({"collection": "users", "maxSelect": 1})),
+        };
+        assert!(validate_field_value(&single, &json!("users:one")).is_ok());
+        assert!(validate_field_value(&single, &json!("users:`one`")).is_ok());
+        for invalid in [
+            json!(""),
+            json!("one"),
+            json!("posts:one"),
+            json!("users:"),
+            json!("users:one:two"),
+            json!("users:not valid"),
+        ] {
+            assert!(validate_field_value(&single, &invalid).is_err());
+        }
+
+        let many = FieldDef {
+            name: "members".into(),
+            field_type: FieldType::Relation,
+            required: true,
+            options: Some(json!({"collection": "users", "maxSelect": 2})),
+        };
+        assert!(validate_field_value(&many, &json!(["users:one", "users:two"])).is_ok());
+        assert!(validate_field_value(&many, &json!([])).is_err());
+        assert!(
+            validate_field_value(&many, &json!(["users:one", "users:two", "users:three"]),)
+                .is_err()
+        );
+        assert!(validate_field_value(&many, &json!(["users:one", "posts:two"])).is_err());
+
+        let optional = FieldDef {
+            required: false,
+            ..many.clone()
+        };
+        assert!(validate_field_value(&optional, &json!([])).is_ok());
+
+        let mut malformed_options = many;
+        malformed_options.options = Some(json!({"collection": "users", "maxSelect": "2"}));
+        assert!(validate_field(&malformed_options).is_err());
     }
 }

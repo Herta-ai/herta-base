@@ -126,6 +126,13 @@ impl AuthIdentity {
             }),
         }
     }
+
+    pub fn record_id(&self) -> Option<&str> {
+        match self {
+            Self::Anonymous => None,
+            Self::User { id, .. } | Self::Admin { id, .. } => Some(id),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -963,16 +970,23 @@ fn normalize_id(value: &mut Value) {
 }
 
 fn id_string(value: &Value) -> Option<String> {
-    if let Some(value) = value.as_str() {
-        return Some(value.to_owned());
+    let raw = if let Some(value) = value.as_str() {
+        value.to_owned()
+    } else {
+        let table = value.get("table")?.as_str()?;
+        let key = value
+            .get("key")?
+            .as_str()
+            .map(str::to_owned)
+            .or_else(|| value.get("key")?.as_u64().map(|key| key.to_string()))?;
+        format!("{table}:{key}")
+    };
+    if let Some((table, key)) = raw.split_once(':') {
+        if key.starts_with('`') && key.ends_with('`') && key.len() >= 2 {
+            return Some(format!("{table}:{}", &key[1..key.len() - 1]));
+        }
     }
-    let table = value.get("table")?.as_str()?;
-    let key = value
-        .get("key")?
-        .as_str()
-        .map(str::to_owned)
-        .or_else(|| value.get("key")?.as_u64().map(|key| key.to_string()))?;
-    Some(format!("{table}:{key}"))
+    Some(raw)
 }
 
 fn quote_table(table: &str) -> HbResult<&str> {
@@ -1093,5 +1107,22 @@ mod tests {
             service.verify_file_token(&token).await,
             Err(HbError::TokenExpired)
         ));
+    }
+
+    #[test]
+    fn normalizes_full_record_ids_without_losing_the_collection() {
+        assert_eq!(id_string(&json!("users:one")).as_deref(), Some("users:one"));
+        assert_eq!(
+            id_string(&json!("users:`two-three`")).as_deref(),
+            Some("users:two-three")
+        );
+        assert_eq!(
+            id_string(&json!({"table": "users", "key": "four"})).as_deref(),
+            Some("users:four")
+        );
+        assert_eq!(
+            id_string(&json!({"table": "users", "key": 5})).as_deref(),
+            Some("users:5")
+        );
     }
 }
