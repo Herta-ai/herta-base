@@ -1,19 +1,33 @@
 import { Directions } from '@jetbrains/ring-ui-built/components/popup/popup.consts';
 import Tooltip from '@jetbrains/ring-ui-built/components/tooltip/tooltip';
 import { useQuery } from '@tanstack/react-query';
-import { createFileRoute, Outlet, useNavigate, useLocation, Link } from '@tanstack/react-router';
+import {
+  createFileRoute,
+  Outlet,
+  useNavigate,
+  useLocation,
+  Link,
+  redirect,
+} from '@tanstack/react-router';
 import { useStore } from '@tanstack/react-store';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import { ThemedWrapper } from '../components/ThemedWrapper';
+import { CommandPalette } from '../components/ui/CommandPalette';
 import { hbApi } from '../lib/api';
 import { useI18n } from '../lib/i18n';
 import { appStore } from '../store/app';
-import { authStore, clearAuthSession } from '../store/auth';
+import { authStore, clearAuthSession, getAccessToken } from '../store/auth';
 
 import './jetbrains-ide.css';
 
 export const Route = createFileRoute('/_admin')({
+  beforeLoad: () => {
+    const isAuthed = authStore.state.isAuthenticated || Boolean(getAccessToken());
+    if (!isAuthed) {
+      throw redirect({ to: '/login' });
+    }
+  },
   component: AdminLayout,
 });
 
@@ -24,8 +38,31 @@ function AdminLayout() {
 
   const isDark = useStore(appStore, (state) => state.dark);
   const auth = useStore(authStore, (state) => state);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
-  // 认证守护
+  // 双击 Shift 或 Ctrl/Cmd + K 激活 Command Palette
+  useEffect(() => {
+    let lastShiftTime = 0;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
+      } else if (e.key === 'Shift') {
+        const now = Date.now();
+        if (now - lastShiftTime < 350) {
+          e.preventDefault();
+          setCommandPaletteOpen((prev) => !prev);
+          lastShiftTime = 0;
+        } else {
+          lastShiftTime = now;
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // 认证守护兜底
   useEffect(() => {
     if (!auth.isAuthenticated) {
       navigate({ to: '/login' });
@@ -141,7 +178,7 @@ function AdminLayout() {
           </div>
 
           {/* Search Everywhere Box */}
-          <div className="jb-search-everywhere" onClick={() => navigate({ to: '/collections' })}>
+          <div className="jb-search-everywhere" onClick={() => setCommandPaletteOpen(true)}>
             <span className="i-ph:magnifying-glass-bold text-13px" />
             <span>Search Collections & Records</span>
             <span className="jb-kbd">Shift Shift</span>
@@ -621,6 +658,12 @@ function AdminLayout() {
           </div>
         </footer>
       </div>
+
+      <CommandPalette
+        open={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        collections={collections}
+      />
     </ThemedWrapper>
   );
 }

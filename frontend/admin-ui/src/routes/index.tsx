@@ -1,23 +1,15 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useEffect } from 'react';
+import { createFileRoute, redirect } from '@tanstack/react-router';
 
-import { authStore } from '../store/auth';
+import { authStore, getAccessToken } from '../store/auth';
 
 export const Route = createFileRoute('/')({
-  component: IndexRedirect,
-});
-
-function IndexRedirect() {
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const isAuthed = authStore.state.isAuthenticated;
+  beforeLoad: () => {
+    const isAuthed = authStore.state.isAuthenticated || Boolean(getAccessToken());
     if (isAuthed) {
-      navigate({ to: '/collections' });
+      throw redirect({ to: '/collections' });
     } else {
-      navigate({ to: '/login' });
+      throw redirect({ to: '/login' });
     }
-  }, [navigate]);
-
-  return null;
-}
+  },
+  component: () => null,
+});

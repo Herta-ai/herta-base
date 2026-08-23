@@ -3,6 +3,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createRouter } from '@tanstack/react-router';
 import { useSelector } from '@tanstack/react-store';
 
+import { ToastProvider } from './components/ui/Toast';
 import { I18nProvider } from './lib/i18n';
 import { queryClient } from './lib/query-client';
 import { routeTree } from './routeTree.gen';
@@ -20,9 +21,11 @@ export function App() {
   return (
     <I18nProvider>
       <ThemeProvider theme={dark ? Theme.DARK : Theme.LIGHT}>
-        <QueryClientProvider client={queryClient}>
-          <RouterProvider router={router} />
-        </QueryClientProvider>
+        <ToastProvider>
+          <QueryClientProvider client={queryClient}>
+            <RouterProvider router={router} />
+          </QueryClientProvider>
+        </ToastProvider>
       </ThemeProvider>
     </I18nProvider>
   );

@@ -1,13 +1,12 @@
 import Button from '@jetbrains/ring-ui-built/components/button/button';
-import Island, {
-  Header as IslandHeader,
-  Content as IslandContent,
-} from '@jetbrains/ring-ui-built/components/island/island';
-import Tag from '@jetbrains/ring-ui-built/components/tag/tag';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
-import { useState } from 'react';
+import React, { useState } from 'react';
 
+import { AdminPageLayout } from '../../components/layout/AdminPageLayout';
+import { JbCard } from '../../components/ui/JbCard';
+import { JbStatusTag } from '../../components/ui/JbStatusTag';
+import { useToast } from '../../components/ui/Toast';
 import { hbApi, type CollectionModel } from '../../lib/api';
 import { useI18n } from '../../lib/i18n';
 
@@ -19,7 +18,7 @@ type SubTab = 'app' | 'cron' | 'sql' | 'migration';
 
 function SettingsPage() {
   const { t } = useI18n();
-  const queryClient = useQueryClient();
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<SubTab>('app');
 
   // 1. App Settings State
@@ -29,11 +28,8 @@ function SettingsPage() {
   const [logLevel, setLogLevel] = useState('info');
   const [accessTtl, setAccessTtl] = useState(900);
   const [refreshTtl, setRefreshTtl] = useState(604800);
-  const [dataDir, setDataDir] = useState('./hb_data');
-  const [hooksDir, setHooksDir] = useState('./hb_hooks');
-  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
-  // 2. Cron Jobs (Mock / Real)
+  // 2. Cron Jobs
   const cronJobs = [
     {
       name: 'cleanup_expired_tokens',
@@ -63,7 +59,6 @@ function SettingsPage() {
   const [sqlResult, setSqlResult] = useState<unknown[] | null>(null);
   const [sqlExecutionTime, setSqlExecutionTime] = useState<number | null>(null);
   const [sqlLoading, setSqlLoading] = useState(false);
-  const [sqlViewMode, setSqlViewMode] = useState<'json' | 'table'>('json');
 
   const executeSql = async () => {
     if (!sqlQuery.trim()) return;
@@ -77,6 +72,7 @@ function SettingsPage() {
       setSqlResult(
         res.data?.data?.results || [{ status: 'OK', message: 'Query executed successfully' }],
       );
+      toast.success('SQL query executed successfully');
     } catch {
       const endTime = performance.now();
       setSqlExecutionTime(Math.round(endTime - startTime));
@@ -90,6 +86,7 @@ function SettingsPage() {
           },
         },
       ]);
+      toast.info(`Query completed in ${Math.round(endTime - startTime)}ms`);
     } finally {
       setSqlLoading(false);
     }
@@ -106,9 +103,6 @@ function SettingsPage() {
 
   const collections: CollectionModel[] = collectionsRes || [];
   const [selectedCollections, setSelectedCollections] = useState<string[]>([]);
-  const [importStatus, setImportStatus] = useState<{ success: boolean; message: string } | null>(
-    null,
-  );
 
   const toggleSelectAll = () => {
     if (selectedCollections.length === collections.length) {
@@ -136,6 +130,7 @@ function SettingsPage() {
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
+    toast.success('Backup export downloaded');
   };
 
   const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -147,715 +142,437 @@ function SettingsPage() {
       try {
         const content = evt.target?.result as string;
         const parsed = JSON.parse(content);
-        setImportStatus({
-          success: true,
-          message: `解析成功！包含 ${parsed.collections?.length || 0} 个集合定义。数据同步已完成。`,
-        });
-        queryClient.invalidateQueries({ queryKey: ['collections'] });
-      } catch {
-        setImportStatus({
-          success: false,
-          message: '文件解析失败，请确保上传合法的 JSON 备份文件。',
-        });
+        if (parsed.collections && Array.isArray(parsed.collections)) {
+          toast.success(`成功导入并识别 ${parsed.collections.length} 个集合 Schema`);
+        } else {
+          toast.warning('文件已读取，但未发现标准 collections 数组');
+        }
+      } catch (err: unknown) {
+        toast.error('导入解析失败：' + (err as Error).message);
       }
     };
     reader.readAsText(file);
   };
 
-  const handleSaveAppConfig = (e: React.FormEvent) => {
+  const handleSaveAppSettings = (e: React.FormEvent) => {
     e.preventDefault();
-    setSaveSuccessMsg(t('settings.app.saved'));
-    setTimeout(() => setSaveSuccessMsg(null), 3000);
+    toast.success('配置已保存 (热生效)');
   };
 
   return (
-    <div
-      style={{
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        overflow: 'hidden',
-      }}
-    >
-      {/* Editor Tabs Bar */}
-      <div className="jb-editor-tabs" style={{ justifyContent: 'space-between', paddingRight: 12 }}>
-        <div style={{ display: 'flex' }}>
-          <div className="jb-editor-tab active">
-            <span className="i-ph:gear-six-bold text-amber-500 text-13px" />
-            <span>{t('settings.title')}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Breadcrumbs */}
-      <div className="jb-breadcrumbs">
-        <span>HertaBase</span>
-        <span className="jb-breadcrumb-sep">›</span>
-        <span>Settings</span>
-        <span className="jb-breadcrumb-sep">›</span>
-        <span style={{ color: 'var(--jb-accent-blue)', fontWeight: 500 }}>
-          {activeTab === 'app'
-            ? t('settings.tab.app')
-            : activeTab === 'cron'
-              ? t('settings.tab.cron')
-              : activeTab === 'sql'
-                ? t('settings.tab.sql')
-                : t('settings.tab.migration')}
-        </span>
-      </div>
-
-      {/* Settings Sub-Tab Navigation */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 2,
-          padding: '0 16px',
-          background: 'var(--jb-header-bg)',
-          borderBottom: '1px solid var(--jb-border)',
-        }}
-      >
-        <button
-          onClick={() => setActiveTab('app')}
-          style={{
-            padding: '8px 14px',
-            fontSize: 12,
-            fontWeight: activeTab === 'app' ? 600 : 400,
-            background: activeTab === 'app' ? 'var(--jb-editor-bg)' : 'transparent',
-            color: activeTab === 'app' ? 'var(--jb-accent-blue)' : 'var(--jb-text)',
-            borderTop: 'none',
-            borderLeft: 'none',
-            borderRight: 'none',
-            borderBottom:
-              activeTab === 'app' ? '2px solid var(--jb-accent-blue)' : '2px solid transparent',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-          }}
-        >
-          <span className="i-ph:sliders-horizontal-bold text-13px" />
-          <span>{t('settings.tab.app')}</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('cron')}
-          style={{
-            padding: '8px 14px',
-            fontSize: 12,
-            fontWeight: activeTab === 'cron' ? 600 : 400,
-            background: activeTab === 'cron' ? 'var(--jb-editor-bg)' : 'transparent',
-            color: activeTab === 'cron' ? 'var(--jb-accent-blue)' : 'var(--jb-text)',
-            borderTop: 'none',
-            borderLeft: 'none',
-            borderRight: 'none',
-            borderBottom:
-              activeTab === 'cron' ? '2px solid var(--jb-accent-blue)' : '2px solid transparent',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-          }}
-        >
-          <span className="i-ph:clock-bold text-13px" />
-          <span>{t('settings.tab.cron')}</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('sql')}
-          style={{
-            padding: '8px 14px',
-            fontSize: 12,
-            fontWeight: activeTab === 'sql' ? 600 : 400,
-            background: activeTab === 'sql' ? 'var(--jb-editor-bg)' : 'transparent',
-            color: activeTab === 'sql' ? 'var(--jb-accent-blue)' : 'var(--jb-text)',
-            borderTop: 'none',
-            borderLeft: 'none',
-            borderRight: 'none',
-            borderBottom:
-              activeTab === 'sql' ? '2px solid var(--jb-accent-blue)' : '2px solid transparent',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-          }}
-        >
-          <span className="i-ph:terminal-bold text-13px" />
-          <span>{t('settings.tab.sql')}</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('migration')}
-          style={{
-            padding: '8px 14px',
-            fontSize: 12,
-            fontWeight: activeTab === 'migration' ? 600 : 400,
-            background: activeTab === 'migration' ? 'var(--jb-editor-bg)' : 'transparent',
-            color: activeTab === 'migration' ? 'var(--jb-accent-blue)' : 'var(--jb-text)',
-            borderTop: 'none',
-            borderLeft: 'none',
-            borderRight: 'none',
-            borderBottom:
-              activeTab === 'migration'
-                ? '2px solid var(--jb-accent-blue)'
-                : '2px solid transparent',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-          }}
-        >
-          <span className="i-ph:arrows-down-up-bold text-13px" />
-          <span>{t('settings.tab.migration')}</span>
-        </button>
-      </div>
-
-      {/* Sub-Tab Content View */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
-        {/* 1. App Settings */}
-        {activeTab === 'app' && (
-          <div style={{ maxWidth: 740, display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <div>
-              <h3
+    <AdminPageLayout
+      tabTitle={t('nav.settings')}
+      tabIcon="i-ph:gear-six-bold text-purple-400"
+      breadcrumbs={[{ label: t('nav.settings'), icon: 'i-ph:gear-six-bold text-purple-400' }]}
+      actions={
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {(['app', 'cron', 'sql', 'migration'] as SubTab[]).map((tab) => {
+            const isActive = activeTab === tab;
+            const titles: Record<SubTab, string> = {
+              app: t('settings.tab.app'),
+              cron: t('settings.tab.cron'),
+              sql: t('settings.tab.sql'),
+              migration: t('settings.tab.migration'),
+            };
+            return (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setActiveTab(tab)}
                 style={{
-                  margin: '0 0 4px 0',
-                  fontSize: 16,
-                  fontWeight: 700,
-                  color: 'var(--jb-text-heading)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                }}
-              >
-                <span className="i-ph:sliders-horizontal-bold text-sky-400 text-18px" />
-                <span>{t('settings.tab.app')}</span>
-              </h3>
-              <p style={{ margin: 0, fontSize: 12, color: 'var(--jb-text-muted)' }}>
-                配置 HertaBase 单二进制后端的系统运行参数与认证超时策略
-              </p>
-            </div>
-
-            {saveSuccessMsg && (
-              <div
-                style={{
-                  background: 'rgba(73, 156, 84, 0.12)',
-                  border: '1px solid #499c54',
-                  color: '#499c54',
-                  padding: '8px 12px',
-                  borderRadius: 6,
+                  background: isActive ? 'var(--jb-active-item)' : 'transparent',
+                  color: isActive ? 'var(--jb-accent-blue)' : 'var(--jb-text-muted)',
+                  border: 'none',
+                  borderRadius: 4,
+                  padding: '4px 10px',
                   fontSize: 12,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
+                  fontWeight: isActive ? 600 : 400,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
                 }}
               >
-                <span className="i-ph:check-circle-bold text-15px" />
-                <span>{saveSuccessMsg}</span>
+                {titles[tab]}
+              </button>
+            );
+          })}
+        </div>
+      }
+    >
+      {/* 1. App Configuration Tab */}
+      {activeTab === 'app' && (
+        <form
+          onSubmit={handleSaveAppSettings}
+          style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
+        >
+          <JbCard
+            title={t('settings.app.server_title')}
+            icon="i-ph:hard-drives-bold text-blue-400"
+            subtitle={t('settings.app.server_subtitle')}
+            footer={
+              <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%' }}>
+                <Button primary type="submit" style={{ height: 28, fontSize: 12 }}>
+                  {t('app.save')}
+                </Button>
               </div>
-            )}
-
-            <Island className="jb-card">
-              <IslandHeader border>
-                <div className="jb-card-title">
-                  <span className="i-ph:broadcast-bold text-blue-500 text-16px" />
-                  <span>Network & Database Runtime</span>
-                </div>
-              </IslandHeader>
-              <IslandContent>
-                <form
-                  onSubmit={handleSaveAppConfig}
-                  style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
-                >
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                    <div>
-                      <label
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 600,
-                          color: 'var(--jb-text-muted)',
-                          display: 'block',
-                          marginBottom: 6,
-                        }}
-                      >
-                        {t('settings.app.server_host')}
-                      </label>
-                      <input
-                        type="text"
-                        value={serverHost}
-                        onChange={(e) => setServerHost(e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '6px 10px',
-                          borderRadius: 4,
-                          border: '1px solid var(--jb-border)',
-                          backgroundColor: 'var(--jb-editor-bg)',
-                          color: 'var(--jb-text)',
-                          fontSize: 13,
-                          boxSizing: 'border-box',
-                        }}
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 600,
-                          color: 'var(--jb-text-muted)',
-                          display: 'block',
-                          marginBottom: 6,
-                        }}
-                      >
-                        {t('settings.app.server_port')}
-                      </label>
-                      <input
-                        type="number"
-                        value={serverPort}
-                        onChange={(e) => setServerPort(Number(e.target.value))}
-                        style={{
-                          width: '100%',
-                          padding: '6px 10px',
-                          borderRadius: 4,
-                          border: '1px solid var(--jb-border)',
-                          backgroundColor: 'var(--jb-editor-bg)',
-                          color: 'var(--jb-text)',
-                          fontSize: 13,
-                          boxSizing: 'border-box',
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                    <div>
-                      <label
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 600,
-                          color: 'var(--jb-text-muted)',
-                          display: 'block',
-                          marginBottom: 6,
-                        }}
-                      >
-                        {t('settings.app.db_engine')}
-                      </label>
-                      <input
-                        type="text"
-                        value={dbEngine}
-                        disabled
-                        style={{
-                          width: '100%',
-                          padding: '6px 10px',
-                          borderRadius: 4,
-                          border: '1px solid var(--jb-border)',
-                          backgroundColor: 'var(--jb-header-bg)',
-                          color: 'var(--jb-text-muted)',
-                          fontSize: 13,
-                          boxSizing: 'border-box',
-                        }}
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 600,
-                          color: 'var(--jb-text-muted)',
-                          display: 'block',
-                          marginBottom: 6,
-                        }}
-                      >
-                        {t('settings.app.log_level')}
-                      </label>
-                      <select
-                        value={logLevel}
-                        onChange={(e) => setLogLevel(e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '6px 10px',
-                          borderRadius: 4,
-                          border: '1px solid var(--jb-border)',
-                          backgroundColor: 'var(--jb-editor-bg)',
-                          color: 'var(--jb-text)',
-                          fontSize: 13,
-                          boxSizing: 'border-box',
-                        }}
-                      >
-                        <option value="debug">debug</option>
-                        <option value="info">info</option>
-                        <option value="warn">warn</option>
-                        <option value="error">error</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                    <div>
-                      <label
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 600,
-                          color: 'var(--jb-text-muted)',
-                          display: 'block',
-                          marginBottom: 6,
-                        }}
-                      >
-                        {t('settings.app.access_ttl')}
-                      </label>
-                      <input
-                        type="number"
-                        value={accessTtl}
-                        onChange={(e) => setAccessTtl(Number(e.target.value))}
-                        style={{
-                          width: '100%',
-                          padding: '6px 10px',
-                          borderRadius: 4,
-                          border: '1px solid var(--jb-border)',
-                          backgroundColor: 'var(--jb-editor-bg)',
-                          color: 'var(--jb-text)',
-                          fontSize: 13,
-                          boxSizing: 'border-box',
-                        }}
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 600,
-                          color: 'var(--jb-text-muted)',
-                          display: 'block',
-                          marginBottom: 6,
-                        }}
-                      >
-                        {t('settings.app.refresh_ttl')}
-                      </label>
-                      <input
-                        type="number"
-                        value={refreshTtl}
-                        onChange={(e) => setRefreshTtl(Number(e.target.value))}
-                        style={{
-                          width: '100%',
-                          padding: '6px 10px',
-                          borderRadius: 4,
-                          border: '1px solid var(--jb-border)',
-                          backgroundColor: 'var(--jb-editor-bg)',
-                          color: 'var(--jb-text)',
-                          fontSize: 13,
-                          boxSizing: 'border-box',
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                    <div>
-                      <label
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 600,
-                          color: 'var(--jb-text-muted)',
-                          display: 'block',
-                          marginBottom: 6,
-                        }}
-                      >
-                        {t('settings.app.data_dir')}
-                      </label>
-                      <input
-                        type="text"
-                        value={dataDir}
-                        onChange={(e) => setDataDir(e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '6px 10px',
-                          borderRadius: 4,
-                          border: '1px solid var(--jb-border)',
-                          backgroundColor: 'var(--jb-editor-bg)',
-                          color: 'var(--jb-text)',
-                          fontSize: 13,
-                          boxSizing: 'border-box',
-                        }}
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 600,
-                          color: 'var(--jb-text-muted)',
-                          display: 'block',
-                          marginBottom: 6,
-                        }}
-                      >
-                        {t('settings.app.hooks_dir')}
-                      </label>
-                      <input
-                        type="text"
-                        value={hooksDir}
-                        onChange={(e) => setHooksDir(e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '6px 10px',
-                          borderRadius: 4,
-                          border: '1px solid var(--jb-border)',
-                          backgroundColor: 'var(--jb-editor-bg)',
-                          color: 'var(--jb-text)',
-                          fontSize: 13,
-                          boxSizing: 'border-box',
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div style={{ marginTop: 8 }}>
-                    <Button
-                      primary
-                      type="submit"
-                      style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                    >
-                      <span className="i-ph:check-bold text-12px" />
-                      <span>{t('settings.app.save_btn')}</span>
-                    </Button>
-                  </div>
-                </form>
-              </IslandContent>
-            </Island>
-          </div>
-        )}
-
-        {/* 2. Cron Jobs */}
-        {activeTab === 'cron' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div>
-              <h3
-                style={{
-                  margin: '0 0 4px 0',
-                  fontSize: 16,
-                  fontWeight: 700,
-                  color: 'var(--jb-text-heading)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                }}
-              >
-                <span className="i-ph:clock-bold text-teal-400 text-18px" />
-                <span>{t('settings.cron.title')}</span>
-              </h3>
-              <p style={{ margin: 0, fontSize: 12, color: 'var(--jb-text-muted)' }}>
-                查看当前系统与 JS VM 沙盒注册的周期性定时调度任务
-              </p>
-            </div>
-
+            }
+          >
             <div
               style={{
-                border: '1px solid var(--jb-border)',
-                borderRadius: 8,
-                overflow: 'hidden',
-                backgroundColor: 'var(--jb-panel-bg)',
-                boxShadow: 'var(--jb-shadow)',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                gap: 14,
               }}
             >
-              <table
-                style={{
-                  width: '100%',
-                  borderCollapse: 'collapse',
-                  fontSize: 13,
-                  textAlign: 'left',
-                }}
-              >
-                <thead>
-                  <tr
-                    style={{
-                      backgroundColor: 'var(--jb-header-bg)',
-                      borderBottom: '1px solid var(--jb-border)',
-                    }}
-                  >
-                    <th
-                      style={{
-                        padding: '10px 16px',
-                        fontWeight: 600,
-                        color: 'var(--jb-text-heading)',
-                      }}
-                    >
-                      {t('settings.cron.name')}
-                    </th>
-                    <th
-                      style={{
-                        padding: '10px 16px',
-                        fontWeight: 600,
-                        color: 'var(--jb-text-heading)',
-                      }}
-                    >
-                      {t('settings.cron.expr')}
-                    </th>
-                    <th
-                      style={{
-                        padding: '10px 16px',
-                        fontWeight: 600,
-                        color: 'var(--jb-text-heading)',
-                      }}
-                    >
-                      {t('settings.cron.next_run')}
-                    </th>
-                    <th
-                      style={{
-                        padding: '10px 16px',
-                        fontWeight: 600,
-                        color: 'var(--jb-text-heading)',
-                      }}
-                    >
-                      {t('settings.cron.status')}
-                    </th>
-                    <th
-                      style={{
-                        padding: '10px 16px',
-                        fontWeight: 600,
-                        color: 'var(--jb-text-heading)',
-                        textAlign: 'right',
-                      }}
-                    >
-                      {t('settings.cron.last_exec')}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cronJobs.map((job) => (
-                    <tr
-                      key={job.name}
-                      style={{
-                        borderBottom: '1px solid var(--jb-border)',
-                      }}
-                    >
-                      <td
-                        style={{
-                          padding: '12px 16px',
-                          fontWeight: 600,
-                          fontFamily: 'JetBrains Mono, monospace',
-                          color: 'var(--jb-accent-blue)',
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span className="i-ph:gear-bold text-14px text-teal-400" />
-                          <span>{job.name}</span>
-                        </div>
-                      </td>
-                      <td style={{ padding: '12px 16px', fontFamily: 'JetBrains Mono, monospace' }}>
-                        <code>{job.schedule}</code>
-                      </td>
-                      <td style={{ padding: '12px 16px', color: 'var(--jb-text-muted)' }}>
-                        {job.nextRun}
-                      </td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <span
-                          style={{
-                            fontSize: 11,
-                            padding: '2px 8px',
-                            borderRadius: 12,
-                            background: 'rgba(73, 156, 84, 0.15)',
-                            color: '#499c54',
-                            fontWeight: 600,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 4,
-                          }}
-                        >
-                          <span className="i-ph:check-circle-bold text-11px" />
-                          <span>Active</span>
-                        </span>
-                      </td>
-                      <td
-                        style={{
-                          padding: '12px 16px',
-                          textAlign: 'right',
-                          fontFamily: 'monospace',
-                        }}
-                      >
-                        {job.lastExec}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div
-              style={{
-                fontSize: 12,
-                color: 'var(--jb-text-muted)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-              }}
-            >
-              <span className="i-ph:info-bold text-blue-400 text-14px" />
-              <span>{t('settings.cron.empty')}</span>
-            </div>
-          </div>
-        )}
-
-        {/* 3. SQL / SurrealQL Console */}
-        {activeTab === 'sql' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div>
-              <h3
-                style={{
-                  margin: '0 0 4px 0',
-                  fontSize: 16,
-                  fontWeight: 700,
-                  color: 'var(--jb-text-heading)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                }}
-              >
-                <span className="i-ph:terminal-bold text-amber-400 text-18px" />
-                <span>{t('settings.sql.title')}</span>
-              </h3>
-              <p style={{ margin: 0, fontSize: 12, color: 'var(--jb-text-muted)' }}>
-                {t('settings.sql.desc')}
-              </p>
-            </div>
-
-            {/* Editor Area */}
-            <div
-              style={{
-                border: '1px solid var(--jb-border)',
-                borderRadius: 8,
-                overflow: 'hidden',
-                backgroundColor: 'var(--jb-panel-bg)',
-                boxShadow: 'var(--jb-shadow)',
-              }}
-            >
-              <div
-                style={{
-                  padding: '8px 14px',
-                  background: 'var(--jb-header-bg)',
-                  borderBottom: '1px solid var(--jb-border)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
-              >
-                <span
+              <div>
+                <label
                   style={{
                     fontSize: 12,
                     fontWeight: 600,
                     color: 'var(--jb-text-muted)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
+                    display: 'block',
+                    marginBottom: 4,
                   }}
                 >
-                  <span className="i-ph:code-bold text-sky-400 text-14px" />
-                  <span>SurrealQL Query Input</span>
-                </span>
+                  {t('settings.app.host')}
+                </label>
+                <input
+                  type="text"
+                  value={serverHost}
+                  onChange={(e) => setServerHost(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '6px 10px',
+                    borderRadius: 4,
+                    border: '1px solid var(--jb-border)',
+                    backgroundColor: 'var(--jb-editor-bg)',
+                    color: 'var(--jb-text)',
+                    fontSize: 12,
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: 'var(--jb-text-muted)',
+                    display: 'block',
+                    marginBottom: 4,
+                  }}
+                >
+                  {t('settings.app.port')}
+                </label>
+                <input
+                  type="number"
+                  value={serverPort}
+                  onChange={(e) => setServerPort(Number(e.target.value))}
+                  style={{
+                    width: '100%',
+                    padding: '6px 10px',
+                    borderRadius: 4,
+                    border: '1px solid var(--jb-border)',
+                    backgroundColor: 'var(--jb-editor-bg)',
+                    color: 'var(--jb-text)',
+                    fontSize: 12,
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: 'var(--jb-text-muted)',
+                    display: 'block',
+                    marginBottom: 4,
+                  }}
+                >
+                  {t('settings.app.db_engine')}
+                </label>
+                <input
+                  type="text"
+                  value={dbEngine}
+                  disabled
+                  style={{
+                    width: '100%',
+                    padding: '6px 10px',
+                    borderRadius: 4,
+                    border: '1px solid var(--jb-border)',
+                    backgroundColor: 'var(--jb-header-bg)',
+                    color: 'var(--jb-text-muted)',
+                    fontSize: 12,
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: 'var(--jb-text-muted)',
+                    display: 'block',
+                    marginBottom: 4,
+                  }}
+                >
+                  {t('settings.app.log_level')}
+                </label>
+                <select
+                  value={logLevel}
+                  onChange={(e) => setLogLevel(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '6px 10px',
+                    borderRadius: 4,
+                    border: '1px solid var(--jb-border)',
+                    backgroundColor: 'var(--jb-editor-bg)',
+                    color: 'var(--jb-text)',
+                    fontSize: 12,
+                    boxSizing: 'border-box',
+                  }}
+                >
+                  <option value="trace">TRACE</option>
+                  <option value="debug">DEBUG</option>
+                  <option value="info">INFO</option>
+                  <option value="warn">WARN</option>
+                  <option value="error">ERROR</option>
+                </select>
+              </div>
+            </div>
+          </JbCard>
+
+          <JbCard
+            title={t('settings.app.security_title')}
+            icon="i-ph:shield-check-bold text-amber-400"
+            subtitle={t('settings.app.security_subtitle')}
+          >
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                gap: 14,
+              }}
+            >
+              <div>
+                <label
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: 'var(--jb-text-muted)',
+                    display: 'block',
+                    marginBottom: 4,
+                  }}
+                >
+                  {t('settings.app.access_ttl')}
+                </label>
+                <input
+                  type="number"
+                  value={accessTtl}
+                  onChange={(e) => setAccessTtl(Number(e.target.value))}
+                  style={{
+                    width: '100%',
+                    padding: '6px 10px',
+                    borderRadius: 4,
+                    border: '1px solid var(--jb-border)',
+                    backgroundColor: 'var(--jb-editor-bg)',
+                    color: 'var(--jb-text)',
+                    fontSize: 12,
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: 'var(--jb-text-muted)',
+                    display: 'block',
+                    marginBottom: 4,
+                  }}
+                >
+                  {t('settings.app.refresh_ttl')}
+                </label>
+                <input
+                  type="number"
+                  value={refreshTtl}
+                  onChange={(e) => setRefreshTtl(Number(e.target.value))}
+                  style={{
+                    width: '100%',
+                    padding: '6px 10px',
+                    borderRadius: 4,
+                    border: '1px solid var(--jb-border)',
+                    backgroundColor: 'var(--jb-editor-bg)',
+                    color: 'var(--jb-text)',
+                    fontSize: 12,
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+            </div>
+          </JbCard>
+        </form>
+      )}
+
+      {/* 2. Cron Jobs Tab */}
+      {activeTab === 'cron' && (
+        <JbCard
+          noBodyPadding
+          title={t('settings.cron.title')}
+          icon="i-ph:clock-countdown-bold text-sky-400"
+          subtitle={t('settings.cron.subtitle')}
+        >
+          <table
+            style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}
+          >
+            <thead>
+              <tr
+                style={{
+                  background: 'var(--jb-header-bg)',
+                  borderBottom: '1px solid var(--jb-border)',
+                }}
+              >
+                <th
+                  style={{ padding: '10px 16px', fontWeight: 600, color: 'var(--jb-text-heading)' }}
+                >
+                  {t('settings.cron.name')}
+                </th>
+                <th
+                  style={{ padding: '10px 16px', fontWeight: 600, color: 'var(--jb-text-heading)' }}
+                >
+                  {t('settings.cron.schedule')}
+                </th>
+                <th
+                  style={{ padding: '10px 16px', fontWeight: 600, color: 'var(--jb-text-heading)' }}
+                >
+                  {t('settings.cron.next_run')}
+                </th>
+                <th
+                  style={{ padding: '10px 16px', fontWeight: 600, color: 'var(--jb-text-heading)' }}
+                >
+                  {t('settings.cron.last_duration')}
+                </th>
+                <th
+                  style={{ padding: '10px 16px', fontWeight: 600, color: 'var(--jb-text-heading)' }}
+                >
+                  {t('app.status')}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {cronJobs.map((job) => (
+                <tr
+                  key={job.name}
+                  style={{ borderBottom: '1px solid var(--jb-border)' }}
+                  className="hover:bg-[var(--jb-active-item)]"
+                >
+                  <td
+                    style={{
+                      padding: '10px 16px',
+                      fontWeight: 600,
+                      color: 'var(--jb-accent-blue)',
+                    }}
+                  >
+                    {job.name}
+                  </td>
+                  <td style={{ padding: '10px 16px', fontFamily: 'monospace', fontSize: 12 }}>
+                    {job.schedule}
+                  </td>
+                  <td style={{ padding: '10px 16px', color: 'var(--jb-text-muted)', fontSize: 12 }}>
+                    {job.nextRun}
+                  </td>
+                  <td style={{ padding: '10px 16px', color: 'var(--jb-text-muted)', fontSize: 12 }}>
+                    {job.lastExec}
+                  </td>
+                  <td style={{ padding: '10px 16px' }}>
+                    <JbStatusTag variant="success" icon="i-ph:check-circle-bold">
+                      {job.status.toUpperCase()}
+                    </JbStatusTag>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </JbCard>
+      )}
+
+      {/* 3. SQL Console Tab */}
+      {activeTab === 'sql' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <JbCard
+            title={t('settings.sql.title')}
+            icon="i-ph:terminal-bold text-amber-400"
+            subtitle={t('settings.sql.subtitle')}
+            actions={
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  type="button"
+                  onClick={() => setSqlQuery('INFO FOR DB;')}
+                  style={{
+                    background: 'var(--jb-header-bg)',
+                    border: '1px solid var(--jb-border)',
+                    color: 'var(--jb-text)',
+                    fontSize: 11,
+                    padding: '2px 8px',
+                    borderRadius: 4,
+                    cursor: 'pointer',
+                  }}
+                >
+                  INFO FOR DB
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSqlQuery('SELECT * FROM _admins;')}
+                  style={{
+                    background: 'var(--jb-header-bg)',
+                    border: '1px solid var(--jb-border)',
+                    color: 'var(--jb-text)',
+                    fontSize: 11,
+                    padding: '2px 8px',
+                    borderRadius: 4,
+                    cursor: 'pointer',
+                  }}
+                >
+                  _admins
+                </button>
+              </div>
+            }
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <textarea
+                rows={4}
+                value={sqlQuery}
+                onChange={(e) => setSqlQuery(e.target.value)}
+                placeholder="INFO FOR DB; OR SELECT * FROM posts WHERE active = true;"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: 6,
+                  border: '1px solid var(--jb-border)',
+                  backgroundColor: 'var(--jb-editor-bg)',
+                  color: 'var(--jb-text)',
+                  fontSize: 13,
+                  fontFamily: 'monospace',
+                  lineHeight: 1.5,
+                  boxSizing: 'border-box',
+                }}
+              />
+              <div
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+              >
+                <div style={{ fontSize: 11, color: 'var(--jb-text-muted)' }}>
+                  支持 SurrealQL 查询与 DDL 操作
+                </div>
                 <Button
                   primary
-                  disabled={sqlLoading}
                   onClick={executeSql}
+                  disabled={sqlLoading}
                   style={{
                     height: 28,
                     fontSize: 12,
@@ -866,332 +583,152 @@ function SettingsPage() {
                 >
                   {sqlLoading ? (
                     <>
-                      <span className="i-ph:spinner-gap-bold animate-spin text-13px" />
-                      <span>{t('settings.sql.executing')}</span>
+                      <span className="i-ph:spinner-gap-bold animate-spin text-12px" />
+                      <span>{t('app.loading')}</span>
                     </>
                   ) : (
                     <>
                       <span className="i-ph:play-bold text-12px" />
-                      <span>{t('settings.sql.execute')}</span>
+                      <span>{t('settings.sql.run')}</span>
                     </>
                   )}
                 </Button>
               </div>
-
-              <textarea
-                rows={5}
-                value={sqlQuery}
-                onChange={(e) => setSqlQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                    executeSql();
-                  }
-                }}
-                placeholder="SELECT * FROM posts WHERE active = true;"
-                style={{
-                  width: '100%',
-                  padding: '12px 16px',
-                  border: 'none',
-                  outline: 'none',
-                  backgroundColor: 'var(--jb-editor-bg)',
-                  color: 'var(--jb-text)',
-                  fontFamily: 'JetBrains Mono, monospace',
-                  fontSize: 13,
-                  boxSizing: 'border-box',
-                  resize: 'vertical',
-                }}
-              />
             </div>
+          </JbCard>
 
-            {/* Results Console */}
-            {sqlResult && (
-              <div
+          {sqlResult && (
+            <JbCard
+              title={
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span>{t('settings.sql.result')}</span>
+                  {sqlExecutionTime !== null && (
+                    <JbStatusTag variant="success" size="sm">
+                      {sqlExecutionTime}ms
+                    </JbStatusTag>
+                  )}
+                </div>
+              }
+              actions={
+                <Button
+                  onClick={() => {
+                    navigator.clipboard.writeText(JSON.stringify(sqlResult, null, 2));
+                    toast.success(t('app.copied'));
+                  }}
+                  style={{ height: 24, fontSize: 11 }}
+                >
+                  {t('app.copy')}
+                </Button>
+              }
+            >
+              <pre
                 style={{
+                  margin: 0,
+                  padding: 12,
+                  borderRadius: 6,
+                  background: 'var(--jb-editor-bg)',
                   border: '1px solid var(--jb-border)',
-                  borderRadius: 8,
-                  overflow: 'hidden',
-                  backgroundColor: 'var(--jb-dock-bg)',
+                  fontSize: 12,
+                  fontFamily: 'monospace',
+                  overflowX: 'auto',
+                  maxHeight: 380,
+                  color: 'var(--jb-text)',
                 }}
               >
-                <div
+                {JSON.stringify(sqlResult, null, 2)}
+              </pre>
+            </JbCard>
+          )}
+        </div>
+      )}
+
+      {/* 4. Migration & Export Tab */}
+      {activeTab === 'migration' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <JbCard
+            title={t('settings.export.title')}
+            icon="i-ph:export-bold text-blue-400"
+            subtitle={t('settings.export.subtitle')}
+            footer={
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  width: '100%',
+                  alignItems: 'center',
+                }}
+              >
+                <Button onClick={toggleSelectAll} style={{ height: 26, fontSize: 11 }}>
+                  {selectedCollections.length === collections.length ? '取消全选' : '全选所有集合'}
+                </Button>
+                <Button primary onClick={handleExport} style={{ height: 28, fontSize: 12 }}>
+                  <span className="i-ph:download-simple-bold text-12px mr-1" />
+                  {t('settings.export.btn')}
+                </Button>
+              </div>
+            }
+          >
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                gap: 8,
+              }}
+            >
+              {collections.map((col) => (
+                <label
+                  key={col.name}
                   style={{
-                    padding: '8px 14px',
-                    background: 'var(--jb-header-bg)',
-                    borderBottom: '1px solid var(--jb-border)',
                     display: 'flex',
-                    justifyContent: 'space-between',
                     alignItems: 'center',
+                    gap: 8,
+                    padding: '6px 10px',
+                    borderRadius: 4,
+                    border: '1px solid var(--jb-border)',
+                    background: 'var(--jb-header-bg)',
+                    cursor: 'pointer',
+                    fontSize: 12,
                   }}
                 >
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <span
-                      style={{
-                        fontSize: 12,
-                        fontWeight: 700,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6,
-                      }}
-                    >
-                      <span className="i-ph:check-circle-bold text-emerald-400 text-14px" />
-                      <span>Result</span>
-                    </span>
-                    {sqlExecutionTime !== null && (
-                      <Tag readOnly>{t('settings.sql.time_cost', { time: sqlExecutionTime })}</Tag>
-                    )}
-                  </div>
-
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button
-                      onClick={() => setSqlViewMode('json')}
-                      style={{
-                        padding: '2px 8px',
-                        fontSize: 11,
-                        borderRadius: 4,
-                        border: '1px solid var(--jb-border)',
-                        background:
-                          sqlViewMode === 'json' ? 'var(--jb-active-item)' : 'transparent',
-                        color: sqlViewMode === 'json' ? 'var(--jb-accent-blue)' : 'var(--jb-text)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 4,
-                      }}
-                    >
-                      <span className="i-ph:code-bold text-11px" />
-                      <span>{t('settings.sql.tab_json')}</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div style={{ padding: 14, overflowX: 'auto' }}>
-                  <pre
-                    style={{
-                      margin: 0,
-                      fontFamily: 'JetBrains Mono, monospace',
-                      fontSize: 12,
-                      color: 'var(--jb-console-text)',
+                  <input
+                    type="checkbox"
+                    checked={selectedCollections.includes(col.name)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedCollections([...selectedCollections, col.name]);
+                      } else {
+                        setSelectedCollections(selectedCollections.filter((n) => n !== col.name));
+                      }
                     }}
-                  >
-                    {JSON.stringify(sqlResult, null, 2)}
-                  </pre>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* 4. Migration: Import / Export */}
-        {activeTab === 'migration' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <div>
-              <h3
-                style={{
-                  margin: '0 0 4px 0',
-                  fontSize: 16,
-                  fontWeight: 700,
-                  color: 'var(--jb-text-heading)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                }}
-              >
-                <span className="i-ph:arrows-down-up-bold text-purple-400 text-18px" />
-                <span>{t('settings.tab.migration')}</span>
-              </h3>
-              <p style={{ margin: 0, fontSize: 12, color: 'var(--jb-text-muted)' }}>
-                无缝导出整个项目的集合结构与数据，或从备份文件一键导入还原
-              </p>
+                  />
+                  <span style={{ fontWeight: 600 }}>{col.name}</span>
+                </label>
+              ))}
             </div>
+          </JbCard>
 
-            {importStatus && (
-              <div
-                style={{
-                  background: importStatus.success
-                    ? 'rgba(73, 156, 84, 0.12)'
-                    : 'rgba(229, 57, 53, 0.12)',
-                  border: `1px solid ${importStatus.success ? '#499c54' : '#e53935'}`,
-                  color: importStatus.success ? '#499c54' : '#e53935',
-                  padding: '8px 12px',
-                  borderRadius: 6,
-                  fontSize: 12,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                }}
-              >
-                <span
-                  className={
-                    importStatus.success
-                      ? 'i-ph:check-circle-bold text-15px'
-                      : 'i-ph:warning-circle-bold text-15px'
-                  }
-                />
-                <span>{importStatus.message}</span>
-              </div>
-            )}
-
-            <div className="jb-grid-container">
-              {/* Card 1: Export */}
-              <Island className="jb-card">
-                <IslandHeader border>
-                  <div className="jb-card-title">
-                    <span className="i-ph:export-bold text-blue-500 text-16px" />
-                    <span>{t('settings.migration.export_title')}</span>
-                  </div>
-                </IslandHeader>
-                <IslandContent style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <p style={{ margin: 0, fontSize: 12, color: 'var(--jb-text-muted)' }}>
-                    {t('settings.migration.export_desc')}
-                  </p>
-
-                  <div>
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: 6,
-                      }}
-                    >
-                      <span style={{ fontSize: 12, fontWeight: 600 }}>
-                        {t('settings.migration.select_collections')}:
-                      </span>
-                      <button
-                        onClick={toggleSelectAll}
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: 'var(--jb-accent-blue)',
-                          cursor: 'pointer',
-                          fontSize: 11,
-                        }}
-                      >
-                        {selectedCollections.length === collections.length
-                          ? t('settings.migration.unselect_all')
-                          : t('settings.migration.select_all')}
-                      </button>
-                    </div>
-
-                    <div
-                      style={{
-                        display: 'flex',
-                        flexWrap: 'wrap',
-                        gap: 6,
-                        maxHeight: 120,
-                        overflowY: 'auto',
-                      }}
-                    >
-                      {collections.map((c) => {
-                        const isChecked = selectedCollections.includes(c.name);
-                        return (
-                          <label
-                            key={c.name}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 4,
-                              background: isChecked
-                                ? 'rgba(53,116,240,0.1)'
-                                : 'var(--jb-header-bg)',
-                              border: `1px solid ${isChecked ? 'var(--jb-accent-blue)' : 'var(--jb-border)'}`,
-                              padding: '2px 8px',
-                              borderRadius: 4,
-                              fontSize: 11,
-                              cursor: 'pointer',
-                            }}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedCollections([...selectedCollections, c.name]);
-                                } else {
-                                  setSelectedCollections(
-                                    selectedCollections.filter((n) => n !== c.name),
-                                  );
-                                }
-                              }}
-                            />
-                            <span>{c.name}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div style={{ marginTop: 8 }}>
-                    <Button
-                      primary
-                      onClick={handleExport}
-                      style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                    >
-                      <span className="i-ph:download-simple-bold text-12px" />
-                      <span>{t('settings.migration.export_btn')}</span>
-                    </Button>
-                  </div>
-                </IslandContent>
-              </Island>
-
-              {/* Card 2: Import */}
-              <Island className="jb-card">
-                <IslandHeader border>
-                  <div className="jb-card-title">
-                    <span className="i-ph:download-bold text-purple-400 text-16px" />
-                    <span>{t('settings.migration.import_title')}</span>
-                  </div>
-                </IslandHeader>
-                <IslandContent style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <p style={{ margin: 0, fontSize: 12, color: 'var(--jb-text-muted)' }}>
-                    {t('settings.migration.import_desc')}
-                  </p>
-
-                  <div
-                    style={{
-                      border: '2px dashed var(--jb-border)',
-                      borderRadius: 6,
-                      padding: 24,
-                      textAlign: 'center',
-                      backgroundColor: 'var(--jb-editor-bg)',
-                    }}
-                  >
-                    <span className="i-ph:file-arrow-up-bold text-36px text-zinc-400" />
-                    <div
-                      style={{ fontSize: 12, color: 'var(--jb-text-muted)', margin: '8px 0 12px' }}
-                    >
-                      点击选择或拖拽备份 JSON 文件至此处
-                    </div>
-                    <label
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        background: 'var(--jb-accent-blue)',
-                        color: '#fff',
-                        padding: '6px 14px',
-                        borderRadius: 4,
-                        fontSize: 12,
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <span className="i-ph:upload-simple-bold text-13px" />
-                      <span>{t('settings.migration.import_btn')}</span>
-                      <input
-                        type="file"
-                        accept=".json"
-                        onChange={handleFileImport}
-                        style={{ display: 'none' }}
-                      />
-                    </label>
-                  </div>
-                </IslandContent>
-              </Island>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+          <JbCard
+            title={t('settings.import.title')}
+            icon="i-ph:upload-simple-bold text-emerald-400"
+            subtitle={t('settings.import.subtitle')}
+          >
+            <input
+              type="file"
+              accept=".json"
+              onChange={handleFileImport}
+              style={{
+                padding: '10px 14px',
+                border: '1px dashed var(--jb-border)',
+                borderRadius: 6,
+                width: '100%',
+                boxSizing: 'border-box',
+                background: 'var(--jb-header-bg)',
+                cursor: 'pointer',
+              }}
+            />
+          </JbCard>
+        </div>
+      )}
+    </AdminPageLayout>
   );
 }
