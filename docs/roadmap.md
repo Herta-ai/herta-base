@@ -10,9 +10,11 @@ HertaBase 项目的开发生命周期分为 7 个核心阶段（Phases），按�
 
 **目标：** 实现系统骨架，打通 Salvo 与 SurrealDB，实现动态集合（Collection）的增删改查。
 
-* **Step 1: 核心上下文抽象**。设计应用级别的 Context，封装 SurrealDB 客户端（采用 `surrealdb::engine::local::SurrealKv` 作为持久化内嵌引擎，`Mem` 用于测试）。
+* **Step 1: 核心上下文抽象**。设计应用级别的 Context，封装 SurrealDB 客户端（采用 `surrealdb::engine::local::SurrealKv`
+  作为持久化内嵌引擎，`Mem` 用于测试）。
 * **Step 2: 动态路由与 CRUD**。在 Salvo 中注册通用的 RESTful 路由（如 `GET /api/collections/{name}/records`）。
-* **Step 3: 数据类型转换层**。开发适配层，将客户端请求的 `serde_json::Value` 安全地映射为 SurrealDB 的 `surrealdb::sql::Value`。
+* **Step 3: 数据类型转换层**。开发适配层，将客户端请求的 `serde_json::Value` 安全地映射为 SurrealDB 的
+  `surrealdb::sql::Value`。
 * **Step 4: OpenAPI 自动生成**。集成 Salvo 的 `oapi` 模块，实现数据库 Collection 的 OpenAPI（Swagger/Redoc）文档自动生成。
 
 ### Phase 2: 鉴权与权限引擎 — *已实现*
@@ -22,22 +24,25 @@ HertaBase 项目的开发生命周期分为 7 个核心阶段（Phases），按�
 * **Step 1: 基础用户模型**。在 SurrealDB 中初始化系统级的 `_users` 和 `_admins` 表结构。
 * **Step 2: JWT 签发与中间件**。实现登录鉴权接口以签发 JWT，并编写 Salvo 的 Auth 中间件解析 Token，将用户信息注入请求上下文。
 * **Step 3: 动态规则引擎 (API Rules)**。
-  * 解析访问规则表达式（如 `@request.auth.id = user_id`）。
-  * 将规则动态编译为 SurrealDB 的查询条件（如 `WHERE` 子句），复用底层数据库的评估性能。
+    * 解析访问规则表达式（如 `@request.auth.id = user_id`）。
+    * 将规则动态编译为 SurrealDB 的查询条件（如 `WHERE` 子句），复用底层数据库的评估性能。
 
 ### Phase 3: JS 扩展运行时 — *预计 4-6 周(暂时跳过)*
 
 **目标：** 集成 `rquickjs`，实现参考 PocketBase 开发体验的应用级 JavaScript 扩展环境。
 完整契约见 [JavaScript 扩展运行时设计](js-runtime.md)。
 
-* **Step 1: 运行时与注册表**。配置 `rquickjs::AsyncRuntime`、隔离的 `AsyncContext`、资源限制、脚本发现、编译缓存和原子热重载；扩展通过注册函数声明行为，不再通过文件名推断 Hook。
-* **Step 2: Event Hooks**。支持 Record、Collection、Auth 和应用生命周期事件，采用 `e.next()` 中间件链语义，并明确调用前的事务内逻辑与调用后的提交后逻辑边界。
+* **Step 1: 运行时与注册表**。配置 `rquickjs::AsyncRuntime`、隔离的 `AsyncContext`
+  、资源限制、脚本发现、编译缓存和原子热重载；扩展通过注册函数声明行为，不再通过文件名推断 Hook。
+* **Step 2: Event Hooks**。支持 Record、Collection、Auth 和应用生命周期事件，采用 `e.next()`
+  中间件链语义，并明确调用前的事务内逻辑与调用后的提交后逻辑边界。
 * **Step 3: FFI 边界映射 (Rust -> JS)**。
-  * 提供 Record/Collection 优先的数据库 API，并保留受限且可关闭的 `$app.db.query` 高级接口。
-  * 提供五级结构化日志、受限环境变量和统一错误类型。
-  * 将 HTTP Request/Response 映射给 JS，支持 `routerAdd()` 注册自定义路由。
+    * 提供 Record/Collection 优先的数据库 API，并保留受限且可关闭的 `$app.db.query` 高级接口。
+    * 提供五级结构化日志、受限环境变量和统一错误类型。
+    * 将 HTTP Request/Response 映射给 JS，支持 `routerAdd()` 注册自定义路由。
 * **Step 4: 后台与外部服务**。支持 `cronAdd()` 定时任务、受 SSRF 策略保护的 HTTP 请求和基于 Mailer trait 的邮件发送。
-* **Step 5: 跨阶段能力桥接**。定义 `$app.realtime` 和 `$app.files` 契约；分别对接 Phase 4 实时总线和 Phase 5 Storage，在服务未启用时明确返回能力不可用错误。
+* **Step 5: 跨阶段能力桥接**。定义 `$app.realtime` 和 `$app.files` 契约；分别对接 Phase 4 实时总线和 Phase 5
+  Storage，在服务未启用时明确返回能力不可用错误。
 
 ### Phase 4: 实时订阅引擎 — *已实现*
 
@@ -58,14 +63,14 @@ HertaBase 项目的开发生命周期分为 7 个核心阶段（Phases），按�
 
 完整协议见 [文件存储与上传](storage.md)。`$app.files` 仍属于 Phase 3，网页部署文件属于 Phase 6，均不在本阶段范围内。
 
-### Phase 6: 管理后台与单体打包 — *预计 4 周*
+### Phase 6: 管理后台与单体打包 — *已实现*
 
 **目标：** 开发可视化数据管理面板并整合应用分发形态。
 
 * **Step 1: Admin UI 开发（已实现）**。使用 React、Vite 和 TanStack Router 开发单页管理后台。
 * **Step 2: 静态资源嵌入（已实现）**。利用 `rust-embed` 在编译期将前端 HTML/JS/CSS 静态嵌入 Rust 二进制。
 * **Step 3: 静态文件路由（已实现）**。由 Salvo 在 `/webui/` 提供资源、缓存策略和 SPA fallback。
-* **Step 4: 用户网页部署**。由管理员上传并安全解压前端产物到 `HB_DATA_DIR/web/{project}`，
+* **Step 4: 用户网页部署（已实现）**。由管理员上传并安全解压前端产物到 `HB_DATA_DIR/web/{project}`，
   通过 `/web/{project}/` 或 `/web/` 开头的唯一别名提供静态文件，支持 SPA fallback、
   ETag、Range、自定义 404，以及基于 `HB_DATA_DIR/web_backup` 的版本历史和回滚。
 
@@ -75,7 +80,8 @@ HertaBase 项目的开发生命周期分为 7 个核心阶段（Phases），按�
 
 * **Step 1: CLI 工具集成**。通过 `clap` 提供多级命令结构（如 `serve`, `superuser`, `migrate`）。
 * **Step 2: 可观测性与日志**。集成 `tracing` 框架，输出符合标准的结构化日志，以供监控系统分析。
-* **Step 3: 分布式集群支持**。实现存储层的无缝切换能力，使 SurrealDB 从本地 `RocksDB` 引擎支持平滑迁移至连接外部的分布式 `TiKV` 集群。
+* **Step 3: 分布式集群支持**。实现存储层的无缝切换能力，使 SurrealDB 从本地 `RocksDB` 引擎支持平滑迁移至连接外部的分布式
+  `TiKV` 集群。
 
 ---
 
@@ -85,37 +91,42 @@ HertaBase 项目的开发生命周期分为 7 个核心阶段（Phases），按�
 
 ### 1. rquickjs 与 Tokio 异步运行时的冲突
 
-* **风险**：Tokio 采用多线程异步模型，而 JS 引擎是单线程同步的。在 JS Hook 中调用阻塞型的 Rust 函数可能导致 Tokio Worker 线程耗尽或引发死锁。
+* **风险**：Tokio 采用多线程异步模型，而 JS 引擎是单线程同步的。在 JS Hook 中调用阻塞型的 Rust 函数可能导致 Tokio Worker
+  线程耗尽或引发死锁。
 * **策略**：
-  * 必须使用 `rquickjs::AsyncRuntime` 与 `rquickjs::AsyncContext`。
-  * 将所有耗时 I/O 操作（数据库操作、外部请求）以 `Promise` 形式返回。
-  * 隔离运行环境，将 JS 执行调度至 `tokio::task::spawn_blocking` 甚至独立线程池内。
+    * 必须使用 `rquickjs::AsyncRuntime` 与 `rquickjs::AsyncContext`。
+    * 将所有耗时 I/O 操作（数据库操作、外部请求）以 `Promise` 形式返回。
+    * 隔离运行环境，将 JS 执行调度至 `tokio::task::spawn_blocking` 甚至独立线程池内。
 
 ### 2. JS 沙盒安全限制与网络控制
 
 * **风险**：恶意或缺陷 JS 脚本可能造成内存溢出、死循环，甚至发起内部网络探测攻击。
 * **策略**：
-  * **内存与执行控制**：启动 JS 运行时前配置 `rt.set_max_stack_size()` 和 `rt.set_memory_limit()`；利用中断处理（Interrupt Handler）实施微秒级超时强杀。
-  * **网络访问控制**：在沙盒环境中默认禁止全局网络访问，如需对外请求，需在 `$app` 接口下提供封装好的受限请求方法（检查域名白名单等），避免 SSRF 漏洞。
+    * **内存与执行控制**：启动 JS 运行时前配置 `rt.set_max_stack_size()` 和 `rt.set_memory_limit()`；利用中断处理（Interrupt
+      Handler）实施微秒级超时强杀。
+    * **网络访问控制**：在沙盒环境中默认禁止全局网络访问，如需对外请求，需在 `$app` 接口下提供封装好的受限请求方法（检查域名白名单等），避免
+      SSRF 漏洞。
 
 ### 3. API Rules 与 SQL 注入防护
 
 * **风险**：动态规则引擎解析用户自定义规则时，如处理不当，易受到注入攻击，危及数据隔离边界。
 * **策略**：
-  * 拒绝直接在查询中进行字符串拼接。
-  * 在转换层将规则参数化，严格使用 SurrealQL 的绑定变量（如 `WHERE user_id = $id`），配合完备的输入验证（Input Validation）模块清理非预期符号。
+    * 拒绝直接在查询中进行字符串拼接。
+    * 在转换层将规则参数化，严格使用 SurrealQL 的绑定变量（如 `WHERE user_id = $id`），配合完备的输入验证（Input
+      Validation）模块清理非预期符号。
 
 ### 4. 身份验证与 JWT 密钥管理
 
 * **风险**：硬编码 JWT 密钥或长效 Token 未能妥善处理轮换会导致持久性安全风险。
 * **策略**：
-  * 要求在部署时注入随机的 `JWT_SECRET`，并提供内部管理机制进行定期密钥轮换（Key Rotation）。
-  * 在鉴权流程中建立撤销列表（Revocation List）机制或在用户发生密码变更、权限降级时自动使相关 Token 失效。
+    * 要求在部署时注入随机的 `JWT_SECRET`，并提供内部管理机制进行定期密钥轮换（Key Rotation）。
+    * 在鉴权流程中建立撤销列表（Revocation List）机制或在用户发生密码变更、权限降级时自动使相关 Token 失效。
 
 ### 5. 跨层级数据转换开销 (Serialization Overhead)
 
-* **风险**：数据在 `HTTP (JSON) -> Salvo (Rust) -> rquickjs (JS) -> SurrealDB (Value)` 中的反复序列化会导致严重的 CPU 损耗及性能降级。
+* **风险**：数据在 `HTTP (JSON) -> Salvo (Rust) -> rquickjs (JS) -> SurrealDB (Value)` 中的反复序列化会导致严重的 CPU
+  损耗及性能降级。
 * **策略**：
-  * 避免无关业务的多重 JSON 字符串转换。
-  * 优化 `serde::Serialize / Deserialize` 到 `rquickjs` 间的零拷贝流程。
-  * 利用 SurrealDB 对 `serde` 的原生支持进行直接绑定，仅在明确需要触发 JS Hook 时才将必须字段转化为 JS 对象。
+    * 避免无关业务的多重 JSON 字符串转换。
+    * 优化 `serde::Serialize / Deserialize` 到 `rquickjs` 间的零拷贝流程。
+    * 利用 SurrealDB 对 `serde` 的原生支持进行直接绑定，仅在明确需要触发 JS Hook 时才将必须字段转化为 JS 对象。
