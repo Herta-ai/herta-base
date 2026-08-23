@@ -48,13 +48,3 @@ HertaBase 在启动时会自动跟踪 Collection Schema 的变更并应用所需
 
 - **RocksDB 至 TiKV 迁移路径**：系统将提供特定的 CLI 指令，用于在不同存储引擎之间同步和转换数据。
 - 版本升级中如遇数据目录结构变化，发行说明中将详细告知适配方案。
-
-## 项目阶段 (Roadmap)
-
-- Phase 1: 基础架构与动态 ORM — Salvo + SurrealDB 互通，动态 Collection CRUD，数据类型转换层，OpenAPI 自动生成
-- Phase 2: 鉴权与权限引擎 — 用户系统（_users/_admins 表），JWT 签发与中间件，API Rules 动态规则引擎
-- Phase 3: JS 扩展运行时 — rquickjs AsyncRuntime 集成，Rust→JS FFI 映射，生命周期 Hook 挂载与执行
-- Phase 4: 实时订阅引擎 — 基于 SurrealDB LIVE SELECT + Salvo SSE 的数据变更推送
-- Phase 5: 文件存储模块 — 抽象 Storage trait，LocalFS + S3 兼容云存储适配器
-- Phase 6: 管理后台与单体打包 — React Admin UI 开发，rust-embed 静态嵌入，Salvo 静态文件服务
-- Phase 7: 生产加固与分布式 — CLI 工具 (clap)，结构化日志 (tracing)，RocksDB→TiKV 集群支持
