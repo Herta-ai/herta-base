@@ -21,7 +21,7 @@
   --jb-accent-orange: #d67929;
   --jb-active-item: #e1e4ea;
   --jb-hover-item: #e8eaee;
-  --jb-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  --jb-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   --jb-dock-bg: #f7f8fa;
   --jb-console-text: #222222;
 }
@@ -47,7 +47,7 @@
   --jb-accent-orange: #e5934e;
   --jb-active-item: #2d313b;
   --jb-hover-item: #35373c;
-  --jb-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  --jb-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
   --jb-dock-bg: #1e1f22;
   --jb-console-text: #a9b7c6;
 }
@@ -61,11 +61,20 @@
   flex: 1;
   background-color: var(--ring-content-background-color, var(--jb-bg));
   color: var(--ring-text-color, var(--jb-text));
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
   overflow: hidden;
   box-sizing: border-box;
   text-align: left;
-  transition: background-color 0.25s, color 0.25s;
+  transition:
+    background-color 0.25s,
+    color 0.25s;
 }
 
 /* Header Navbar */
@@ -79,10 +88,13 @@
   padding: 0 12px;
   user-select: none;
   z-index: 10;
-  transition: background-color 0.25s, border-color 0.25s;
+  transition:
+    background-color 0.25s,
+    border-color 0.25s;
 }
 
-.jb-header-left, .jb-header-right {
+.jb-header-left,
+.jb-header-right {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -108,7 +120,7 @@
   color: #fff;
   font-size: 11px;
   font-family: 'JetBrains Mono', monospace;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .jb-project-name {
@@ -121,7 +133,7 @@
 }
 
 .jb-branch-badge {
-  background: rgba(0,0,0,0.06);
+  background: rgba(0, 0, 0, 0.06);
   border: 1px solid var(--jb-border);
   padding: 2px 8px;
   border-radius: 4px;
@@ -142,7 +154,9 @@
   color: var(--jb-text);
   border-radius: 4px;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .jb-menu-item:hover {
@@ -162,7 +176,10 @@
   font-size: 12px;
   color: var(--jb-text-muted);
   cursor: pointer;
-  transition: border-color 0.2s, box-shadow 0.2s, background 0.25s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s,
+    background 0.25s;
 }
 
 .jb-search-everywhere:hover {
@@ -170,7 +187,7 @@
 }
 
 .jb-kbd {
-  background: rgba(0,0,0,0.08);
+  background: rgba(0, 0, 0, 0.08);
   padding: 1px 5px;
   border-radius: 3px;
   font-size: 10px;
@@ -196,7 +213,9 @@
   padding: 10px 0;
   gap: 8px;
   user-select: none;
-  transition: background-color 0.25s, border-color 0.25s;
+  transition:
+    background-color 0.25s,
+    border-color 0.25s;
 }
 
 .jb-tool-icon {
@@ -239,7 +258,9 @@
   flex-direction: column;
   user-select: none;
   font-size: 13px;
-  transition: background-color 0.25s, border-color 0.25s;
+  transition:
+    background-color 0.25s,
+    border-color 0.25s;
 }
 
 .jb-panel-title {
@@ -255,7 +276,9 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--jb-text-muted);
-  transition: background-color 0.25s, border-color 0.25s;
+  transition:
+    background-color 0.25s,
+    border-color 0.25s;
 }
 
 .jb-tree-list {
@@ -312,7 +335,9 @@
   padding: 0 4px;
   overflow-x: auto;
   user-select: none;
-  transition: background-color 0.25s, border-color 0.25s;
+  transition:
+    background-color 0.25s,
+    border-color 0.25s;
 }
 
 .jb-editor-tab {
@@ -355,7 +380,7 @@
 }
 
 .jb-tab-close:hover {
-  background: rgba(0,0,0,0.15);
+  background: rgba(0, 0, 0, 0.15);
   opacity: 1;
 }
 
@@ -369,7 +394,9 @@
   font-size: 11px;
   color: var(--jb-text-muted);
   gap: 6px;
-  transition: background-color 0.25s, border-color 0.25s;
+  transition:
+    background-color 0.25s,
+    border-color 0.25s;
 }
 
 .jb-breadcrumb-link {
@@ -439,7 +466,11 @@
   flex-direction: column;
   gap: 14px;
   box-shadow: var(--jb-shadow);
-  transition: transform 0.2s, box-shadow 0.2s, background-color 0.25s, border-color 0.25s;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s,
+    background-color 0.25s,
+    border-color 0.25s;
 }
 
 .jb-card-header {
@@ -466,7 +497,9 @@
   border-top: 1px solid var(--jb-border);
   display: flex;
   flex-direction: column;
-  transition: background-color 0.25s, border-color 0.25s;
+  transition:
+    background-color 0.25s,
+    border-color 0.25s;
 }
 
 .jb-dock-tabs {
@@ -477,7 +510,9 @@
   align-items: center;
   padding: 0 8px;
   gap: 4px;
-  transition: background-color 0.25s, border-color 0.25s;
+  transition:
+    background-color 0.25s,
+    border-color 0.25s;
 }
 
 .jb-dock-tab {
@@ -506,7 +541,9 @@
   background: var(--jb-dock-bg);
   overflow-y: auto;
   line-height: 1.5;
-  transition: background-color 0.25s, color 0.25s;
+  transition:
+    background-color 0.25s,
+    color 0.25s;
 }
 
 .jb-log-line {
@@ -538,10 +575,13 @@
   font-size: 11px;
   color: var(--jb-text-muted);
   user-select: none;
-  transition: background-color 0.25s, border-color 0.25s;
+  transition:
+    background-color 0.25s,
+    border-color 0.25s;
 }
 
-.jb-status-left, .jb-status-right {
+.jb-status-left,
+.jb-status-right {
   display: flex;
   align-items: center;
   gap: 16px;
@@ -560,11 +600,10 @@
 
 /* Tooltip & Popup z-index elevation */
 .jb-tooltip-popup,
-[class*="popup_"],
-[class*="tooltip_"],
+[class*='popup_'],
+[class*='tooltip_'],
 .ring-popup,
 .ring-tooltip,
 [data-portalled] {
   z-index: 99999 !important;
 }
-

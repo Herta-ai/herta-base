@@ -1,9 +1,9 @@
-import React, { createContext, useContext, useState } from 'react'
+import React, { createContext, useContext, useState } from 'react';
 
-export type Language = 'zh' | 'en'
+export type Language = 'zh' | 'en';
 
 export interface I18nDictionary {
-  [key: string]: string | I18nDictionary
+  [key: string]: string | I18nDictionary;
 }
 
 export const zhDict: Record<string, string> = {
@@ -76,7 +76,8 @@ export const zhDict: Record<string, string> = {
   'collections.rule.create': '创建规则',
   'collections.rule.update': '更新规则',
   'collections.rule.delete': '删除规则',
-  'collections.rule.help': '填写 SurrealQL 布尔表达式，留空或 null 表示仅管理员可访问，@request.auth.id != null 表示需登录',
+  'collections.rule.help':
+    '填写 SurrealQL 布尔表达式，留空或 null 表示仅管理员可访问，@request.auth.id != null 表示需登录',
   'collections.add_field': '添加字段',
   'collections.field_name': '字段名',
   'collections.field_type': '字段类型',
@@ -92,7 +93,8 @@ export const zhDict: Record<string, string> = {
   'collections.created_success': '集合创建成功',
   'collections.updated_success': '集合更新成功',
   'collections.deleted_success': '集合已删除',
-  'collections.delete_confirm': '确定要删除集合 {name} 吗？此操作将同时清空该表所有数据且不可恢复！',
+  'collections.delete_confirm':
+    '确定要删除集合 {name} 吗？此操作将同时清空该表所有数据且不可恢复！',
 
   // 记录管理
   'records.title': '数据记录',
@@ -153,7 +155,8 @@ export const zhDict: Record<string, string> = {
 
   // SQL Console
   'settings.sql.title': 'SurrealQL 交互式执行终端',
-  'settings.sql.desc': '支持输入任意 SurrealQL 语句（SELECT, CREATE, UPDATE, RELATE, DEFINE...）直接操作数据库',
+  'settings.sql.desc':
+    '支持输入任意 SurrealQL 语句（SELECT, CREATE, UPDATE, RELATE, DEFINE...）直接操作数据库',
   'settings.sql.execute': '执行查询 (Ctrl+Enter)',
   'settings.sql.executing': '正在执行...',
   'settings.sql.time_cost': '耗时: {time}ms',
@@ -177,7 +180,8 @@ export const zhDict: Record<string, string> = {
   'web.subtitle': '管理静态网站产物、原子发布部署、SPA 路由 Fallback、缓存策略与版本备份回滚',
   'web.projects_count': '共 {count} 个网页项目',
   'web.deploy_title': '部署前端构建产物',
-  'web.deploy_desc': '上传包含单一根目录的 .zip、.tar.gz 或 .7z 压缩包，系统将自动校验、解压并原子发布。',
+  'web.deploy_desc':
+    '上传包含单一根目录的 .zip、.tar.gz 或 .7z 压缩包，系统将自动校验、解压并原子发布。',
   'web.archive': '项目归档压缩包',
   'web.archive_select_file': '选择文件',
   'web.archive_drag_drop': '点击选择文件或拖拽压缩包至此区域',
@@ -189,7 +193,8 @@ export const zhDict: Record<string, string> = {
   'web.alias_placeholder': '/web/docs 或 /web/my-app',
   'web.alias_help': '可选。自定义 HTTP 访问路径，必须以 /web/ 开头且全局唯一',
   'web.spa_fallback': 'SPA History 路由回退',
-  'web.spa_fallback_help': '单页应用 (React/Vue/Vite) 建议开启，未匹配子路径将自动回退到 index.html',
+  'web.spa_fallback_help':
+    '单页应用 (React/Vue/Vite) 建议开启，未匹配子路径将自动回退到 index.html',
   'web.cache_control': 'Cache-Control 响应头',
   'web.cache_control_placeholder': 'public, max-age=0, must-revalidate',
   'web.cache_control_help': '自定义静态文件 HTTP 缓存策略',
@@ -214,7 +219,8 @@ export const zhDict: Record<string, string> = {
   'web.versions': '版本历史',
   'web.copy_url': '复制链接',
   'web.url_copied': '已复制访问链接',
-  'web.delete_confirm': '确定要删除网页项目 {name} 吗？当前线上目录和路由将被删除，版本备份仍将保留。',
+  'web.delete_confirm':
+    '确定要删除网页项目 {name} 吗？当前线上目录和路由将被删除，版本备份仍将保留。',
   'web.delete_success': '项目 {name} 已删除。',
   'web.edit_modal_title': '修改项目配置: {name}',
   'web.edit_success': '项目配置已保存。',
@@ -223,20 +229,23 @@ export const zhDict: Record<string, string> = {
   'web.versions_empty': '该项目暂无历史备份版本。',
   'web.version_name': '备份版本',
   'web.rollback_btn': '回滚至此版本',
-  'web.rollback_confirm': '确定要将项目 {name} 回滚到版本 {version} 吗？当前线上文件将被此版本覆盖。',
+  'web.rollback_confirm':
+    '确定要将项目 {name} 回滚到版本 {version} 吗？当前线上文件将被此版本覆盖。',
   'web.rollback_success': '已成功将项目 {name} 回滚至版本 {version}！',
   'web.rolling_back': '正在回滚...',
   'web.guide.title': '打包规范说明',
-  'web.guide.rule1': '压缩包根目录必须且只能包含一个以项目名命名的目录（例如 site.zip 解压后根层级为 my-app/...）。',
+  'web.guide.rule1':
+    '压缩包根目录必须且只能包含一个以项目名命名的目录（例如 site.zip 解压后根层级为 my-app/...）。',
   'web.guide.rule2': '格式支持 .zip、.tar.gz 和 .7z，最大限制 100MB。',
-  'web.guide.rule3': 'SPA 单页应用（React/Vue/Vite 等）开启 SPA Fallback 后无需额外配置 Nginx 即可正常接管路由。',
+  'web.guide.rule3':
+    'SPA 单页应用（React/Vue/Vite 等）开启 SPA Fallback 后无需额外配置 Nginx 即可正常接管路由。',
 
   // 状态栏
   'status.db': '数据库',
   'status.engine': '引擎',
   'status.ready': '就绪',
   'status.realtime': '实时总线',
-}
+};
 
 export const enDict: Record<string, string> = {
   // Common
@@ -308,7 +317,8 @@ export const enDict: Record<string, string> = {
   'collections.rule.create': 'Create Rule',
   'collections.rule.update': 'Update Rule',
   'collections.rule.delete': 'Delete Rule',
-  'collections.rule.help': 'SurrealQL boolean expression. Leave empty/null for admin-only access, @request.auth.id != null for authenticated users.',
+  'collections.rule.help':
+    'SurrealQL boolean expression. Leave empty/null for admin-only access, @request.auth.id != null for authenticated users.',
   'collections.add_field': 'Add Field',
   'collections.field_name': 'Field Name',
   'collections.field_type': 'Field Type',
@@ -319,12 +329,14 @@ export const enDict: Record<string, string> = {
   'collections.rule.admin_only': 'Admin Only',
   'collections.rule.configured': 'Custom Rule Configured',
   'collections.rule.placeholder_public': 'Leave empty for admin only (or "true" for public)',
-  'collections.rule.placeholder_admin': 'Leave empty for admin only (or "@request.auth.id != null")',
+  'collections.rule.placeholder_admin':
+    'Leave empty for admin only (or "@request.auth.id != null")',
   'collections.empty': 'No custom collections yet. Click the top-right button to create one.',
   'collections.created_success': 'Collection created successfully',
   'collections.updated_success': 'Collection updated successfully',
   'collections.deleted_success': 'Collection deleted',
-  'collections.delete_confirm': 'Are you sure you want to delete collection {name}? All record data will be permanently purged!',
+  'collections.delete_confirm':
+    'Are you sure you want to delete collection {name}? All record data will be permanently purged!',
 
   // Records
   'records.title': 'Records',
@@ -346,7 +358,8 @@ export const enDict: Record<string, string> = {
 
   // Logs
   'logs.title': 'System & Hook Runtime Logs',
-  'logs.subtitle': 'Live console stream from backend microkernel, JS runtime sandbox and API requests',
+  'logs.subtitle':
+    'Live console stream from backend microkernel, JS runtime sandbox and API requests',
   'logs.clear': 'Clear Console',
   'logs.auto_scroll': 'Auto Scroll',
   'logs.search_placeholder': 'Filter messages or keywords...',
@@ -356,7 +369,8 @@ export const enDict: Record<string, string> = {
 
   // Settings
   'settings.title': 'System Settings',
-  'settings.subtitle': 'Manage application parameters, cron schedules, SQL queries and data migration',
+  'settings.subtitle':
+    'Manage application parameters, cron schedules, SQL queries and data migration',
   'settings.tab.app': 'App Settings',
   'settings.tab.cron': 'Scheduled Tasks',
   'settings.tab.sql': 'SQL Console',
@@ -381,11 +395,13 @@ export const enDict: Record<string, string> = {
   'settings.cron.next_run': 'Next Execution',
   'settings.cron.status': 'Status',
   'settings.cron.last_exec': 'Last Duration',
-  'settings.cron.empty': 'No scheduled jobs registered. Use cronAdd() in hb_hooks to register jobs automatically.',
+  'settings.cron.empty':
+    'No scheduled jobs registered. Use cronAdd() in hb_hooks to register jobs automatically.',
 
   // SQL Console
   'settings.sql.title': 'SurrealQL Interactive Query Console',
-  'settings.sql.desc': 'Execute any SurrealQL statements (SELECT, CREATE, UPDATE, RELATE, DEFINE...) directly against the database',
+  'settings.sql.desc':
+    'Execute any SurrealQL statements (SELECT, CREATE, UPDATE, RELATE, DEFINE...) directly against the database',
   'settings.sql.execute': 'Run Query (Ctrl+Enter)',
   'settings.sql.executing': 'Executing...',
   'settings.sql.time_cost': 'Latency: {time}ms',
@@ -396,20 +412,24 @@ export const enDict: Record<string, string> = {
 
   // Import / Export
   'settings.migration.export_title': 'Backup & Export',
-  'settings.migration.export_desc': 'Export selected collection schema definitions and complete record datasets as JSON backup',
+  'settings.migration.export_desc':
+    'Export selected collection schema definitions and complete record datasets as JSON backup',
   'settings.migration.export_btn': 'Export Backup File (.json)',
   'settings.migration.import_title': 'Restore & Import',
-  'settings.migration.import_desc': 'Upload a previously exported JSON backup file to reconstruct collection schemas and restore data',
+  'settings.migration.import_desc':
+    'Upload a previously exported JSON backup file to reconstruct collection schemas and restore data',
   'settings.migration.import_btn': 'Select File & Start Import',
   'settings.migration.import_success': 'Data imported and synced successfully!',
   'settings.migration.select_all': 'Select All Collections',
 
   // Web Hosting & Deployments
   'web.title': 'Web Hosting & Deployments',
-  'web.subtitle': 'Manage static site assets, atomic deployments, SPA history fallback, caching policies, and version rollbacks',
+  'web.subtitle':
+    'Manage static site assets, atomic deployments, SPA history fallback, caching policies, and version rollbacks',
   'web.projects_count': '{count} web projects in total',
   'web.deploy_title': 'Deploy Project Archive',
-  'web.deploy_desc': 'Upload a .zip, .tar.gz, or .7z archive containing a single top-level folder for atomic deployment.',
+  'web.deploy_desc':
+    'Upload a .zip, .tar.gz, or .7z archive containing a single top-level folder for atomic deployment.',
   'web.archive': 'Project Archive',
   'web.archive_select_file': 'Choose File',
   'web.archive_drag_drop': 'Click to browse or drag & drop archive file here',
@@ -421,7 +441,8 @@ export const enDict: Record<string, string> = {
   'web.alias_placeholder': '/web/docs or /web/my-app',
   'web.alias_help': 'Optional. Custom HTTP path, must start with /web/ and be unique',
   'web.spa_fallback': 'SPA History Fallback',
-  'web.spa_fallback_help': 'Recommended for SPAs (React/Vue/Vite). Non-matching paths fallback to index.html',
+  'web.spa_fallback_help':
+    'Recommended for SPAs (React/Vue/Vite). Non-matching paths fallback to index.html',
   'web.cache_control': 'Cache-Control Header',
   'web.cache_control_placeholder': 'public, max-age=0, must-revalidate',
   'web.cache_control_help': 'Custom HTTP Cache-Control header for static responses',
@@ -431,13 +452,15 @@ export const enDict: Record<string, string> = {
   'web.cache_preset.immutable': '1 Year (Immutable)',
   'web.not_found': 'Custom 404 File Path',
   'web.not_found_placeholder': '404.html',
-  'web.not_found_help': 'Optional. Relative file path in project folder (effective when SPA fallback is disabled)',
+  'web.not_found_help':
+    'Optional. Relative file path in project folder (effective when SPA fallback is disabled)',
   'web.deploy_btn': 'Deploy & Publish',
   'web.deploying': 'Deploying...',
   'web.deploy_success': 'Project deployed successfully!',
   'web.projects_list': 'Deployed Web Projects',
   'web.search_placeholder': 'Filter by project name or alias...',
-  'web.empty': 'No deployed web projects yet. Upload your first frontend build archive above to publish!',
+  'web.empty':
+    'No deployed web projects yet. Upload your first frontend build archive above to publish!',
   'web.project_name': 'Project Name',
   'web.routing_path': 'Routing Path',
   'web.status.deployed': 'Active',
@@ -446,74 +469,75 @@ export const enDict: Record<string, string> = {
   'web.versions': 'Versions',
   'web.copy_url': 'Copy URL',
   'web.url_copied': 'Access URL copied to clipboard',
-  'web.delete_confirm': 'Are you sure you want to delete web project {name}? Active files and routes will be deleted, while backup versions are retained.',
+  'web.delete_confirm':
+    'Are you sure you want to delete web project {name}? Active files and routes will be deleted, while backup versions are retained.',
   'web.delete_success': 'Project {name} deleted.',
   'web.edit_modal_title': 'Edit Project Settings: {name}',
   'web.edit_success': 'Project settings updated.',
   'web.versions_modal_title': 'Version Backups & Rollback: {name}',
-  'web.versions_modal_desc': 'Previous versions are automatically backed up on each update for atomic rollback.',
+  'web.versions_modal_desc':
+    'Previous versions are automatically backed up on each update for atomic rollback.',
   'web.versions_empty': 'No backup versions available for this project.',
   'web.version_name': 'Backup Version',
   'web.rollback_btn': 'Rollback to this version',
-  'web.rollback_confirm': 'Are you sure you want to rollback {name} to version {version}? Active files will be overwritten.',
+  'web.rollback_confirm':
+    'Are you sure you want to rollback {name} to version {version}? Active files will be overwritten.',
   'web.rollback_success': 'Successfully rolled {name} back to version {version}!',
   'web.rolling_back': 'Rolling back...',
   'web.guide.title': 'Archive Packaging Guide',
-  'web.guide.rule1': 'Archive root must contain exactly one top-level folder named after the project (e.g. site.zip -> my-app/...).',
+  'web.guide.rule1':
+    'Archive root must contain exactly one top-level folder named after the project (e.g. site.zip -> my-app/...).',
   'web.guide.rule2': 'Supported formats: .zip, .tar.gz, and .7z (max 100MB).',
-  'web.guide.rule3': 'Single Page Apps (React/Vue/Vite) with SPA Fallback handle routing seamlessly without Nginx.',
+  'web.guide.rule3':
+    'Single Page Apps (React/Vue/Vite) with SPA Fallback handle routing seamlessly without Nginx.',
 
   // Status Bar
   'status.db': 'Database',
   'status.engine': 'Engine',
   'status.ready': 'Ready',
   'status.realtime': 'Realtime Bus',
-}
+};
 
 interface I18nContextType {
-  lang: Language
-  setLang: (lang: Language) => void
-  t: (key: string, params?: Record<string, string | number>) => string
+  lang: Language;
+  setLang: (lang: Language) => void;
+  t: (key: string, params?: Record<string, string | number>) => string;
 }
 
 const I18nContext = createContext<I18nContextType>({
   lang: 'zh',
   setLang: () => {},
   t: (key) => key,
-})
+});
 
-const LANG_STORAGE_KEY = 'hb_admin_lang'
+const LANG_STORAGE_KEY = 'hb_admin_lang';
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Language>(() => {
-    const saved = localStorage.getItem(LANG_STORAGE_KEY)
-    if (saved === 'en' || saved === 'zh') return saved
-    return 'zh' // 默认中文
-  })
+    const saved = localStorage.getItem(LANG_STORAGE_KEY);
+    if (saved === 'en' || saved === 'zh') return saved;
+    return 'zh'; // 默认中文
+  });
 
   const setLang = (newLang: Language) => {
-    setLangState(newLang)
-    localStorage.setItem(LANG_STORAGE_KEY, newLang)
-  }
+    setLangState(newLang);
+    localStorage.setItem(LANG_STORAGE_KEY, newLang);
+  };
 
   const t = (key: string, params?: Record<string, string | number>): string => {
-    const dict = lang === 'zh' ? zhDict : enDict
-    let text = dict[key] || zhDict[key] || key
+    const dict = lang === 'zh' ? zhDict : enDict;
+    let text = dict[key] || zhDict[key] || key;
     if (params) {
       Object.entries(params).forEach(([k, v]) => {
-        text = text.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v))
-      })
+        text = text.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));
+      });
     }
-    return text
-  }
+    return text;
+  };
 
-  return (
-    <I18nContext.Provider value={{ lang, setLang, t }}>
-      {children}
-    </I18nContext.Provider>
-  )
+  return <I18nContext.Provider value={{ lang, setLang, t }}>{children}</I18nContext.Provider>;
 }
 
 export function useI18n() {
-  return useContext(I18nContext)
+  return useContext(I18nContext);
 }

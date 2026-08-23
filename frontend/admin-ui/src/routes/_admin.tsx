@@ -1,72 +1,74 @@
-import { useEffect } from 'react'
-import { createFileRoute, Outlet, useNavigate, useLocation, Link } from '@tanstack/react-router'
-import { useStore } from '@tanstack/react-store'
-import { useQuery } from '@tanstack/react-query'
-import Tooltip from '@jetbrains/ring-ui-built/components/tooltip/tooltip'
-import { Directions } from '@jetbrains/ring-ui-built/components/popup/popup.consts'
-import { appStore } from '../store/app'
-import { authStore, clearAuthSession } from '../store/auth'
-import { hbApi } from '../lib/api'
-import { useI18n } from '../lib/i18n'
-import { ThemedWrapper } from '../components/ThemedWrapper'
-import './jetbrains-ide.css'
+import { Directions } from '@jetbrains/ring-ui-built/components/popup/popup.consts';
+import Tooltip from '@jetbrains/ring-ui-built/components/tooltip/tooltip';
+import { useQuery } from '@tanstack/react-query';
+import { createFileRoute, Outlet, useNavigate, useLocation, Link } from '@tanstack/react-router';
+import { useStore } from '@tanstack/react-store';
+import { useEffect } from 'react';
+
+import { ThemedWrapper } from '../components/ThemedWrapper';
+import { hbApi } from '../lib/api';
+import { useI18n } from '../lib/i18n';
+import { appStore } from '../store/app';
+import { authStore, clearAuthSession } from '../store/auth';
+
+import './jetbrains-ide.css';
 
 export const Route = createFileRoute('/_admin')({
   component: AdminLayout,
-})
+});
 
 function AdminLayout() {
-  const navigate = useNavigate()
-  const location = useLocation()
-  const { t, lang, setLang } = useI18n()
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { t, lang, setLang } = useI18n();
 
-  const isDark = useStore(appStore, (state) => state.dark)
-  const auth = useStore(authStore, (state) => state)
+  const isDark = useStore(appStore, (state) => state.dark);
+  const auth = useStore(authStore, (state) => state);
 
   // 认证守护
   useEffect(() => {
     if (!auth.isAuthenticated) {
-      navigate({ to: '/login' })
+      navigate({ to: '/login' });
     }
-  }, [auth.isAuthenticated, navigate])
+  }, [auth.isAuthenticated, navigate]);
 
   // 获取集合列表
   const { data: collectionsRes, refetch: refetchCollections } = useQuery({
     queryKey: ['collections'],
     queryFn: async () => {
-      const res = await hbApi.collections.list()
-      return res.data.data || []
+      const res = await hbApi.collections.list();
+      return res.data.data || [];
     },
     enabled: auth.isAuthenticated,
-  })
+  });
 
-  const collections = collectionsRes || []
-  const baseCollections = collections.filter((c) => c.type === 'base')
-  const authCollections = collections.filter((c) => c.type === 'auth')
+  const collections = collectionsRes || [];
+  const baseCollections = collections.filter((c) => c.type === 'base');
+  const authCollections = collections.filter((c) => c.type === 'auth');
 
   const toggleTheme = () => {
-    appStore.setState((s) => ({ ...s, dark: !s.dark }))
-  }
+    appStore.setState((s) => ({ ...s, dark: !s.dark }));
+  };
 
   const handleLogout = () => {
     if (window.confirm(t('auth.logout.confirm'))) {
-      clearAuthSession()
-      navigate({ to: '/login' })
+      clearAuthSession();
+      navigate({ to: '/login' });
     }
-  }
+  };
 
   if (!auth.isAuthenticated) {
-    return null
+    return null;
   }
 
-  const currentPath = location.pathname
+  const currentPath = location.pathname;
 
   const tooltipDirections = [
     Directions.RIGHT_CENTER,
     Directions.RIGHT_TOP,
     Directions.RIGHT_BOTTOM,
     Directions.BOTTOM_CENTER,
-  ]
+  ];
 
   return (
     <ThemedWrapper>
@@ -94,7 +96,9 @@ function AdminLayout() {
                 className={`jb-menu-item ${currentPath.startsWith('/collections') ? 'active' : ''}`}
                 style={{
                   textDecoration: 'none',
-                  color: currentPath.startsWith('/collections') ? 'var(--jb-accent-blue)' : 'inherit',
+                  color: currentPath.startsWith('/collections')
+                    ? 'var(--jb-accent-blue)'
+                    : 'inherit',
                   fontWeight: currentPath.startsWith('/collections') ? 600 : 400,
                 }}
               >
@@ -137,10 +141,7 @@ function AdminLayout() {
           </div>
 
           {/* Search Everywhere Box */}
-          <div
-            className="jb-search-everywhere"
-            onClick={() => navigate({ to: '/collections' })}
-          >
+          <div className="jb-search-everywhere" onClick={() => navigate({ to: '/collections' })}>
             <span className="i-ph:magnifying-glass-bold text-13px" />
             <span>Search Collections & Records</span>
             <span className="jb-kbd">Shift Shift</span>
@@ -210,7 +211,13 @@ function AdminLayout() {
                 justifyContent: 'center',
               }}
             >
-              <span className={isDark ? 'i-ph:moon-stars-bold text-14px text-indigo-400' : 'i-ph:sun-dim-bold text-14px text-amber-400'} />
+              <span
+                className={
+                  isDark
+                    ? 'i-ph:moon-stars-bold text-14px text-indigo-400'
+                    : 'i-ph:sun-dim-bold text-14px text-amber-400'
+                }
+              />
             </button>
 
             {/* Current Admin Capsule with embedded Logout Button */}
@@ -240,7 +247,14 @@ function AdminLayout() {
               >
                 {auth.admin?.email || 'Admin'}
               </span>
-              <div style={{ width: 1, height: 14, backgroundColor: 'var(--jb-border)', margin: '0 2px' }} />
+              <div
+                style={{
+                  width: 1,
+                  height: 14,
+                  backgroundColor: 'var(--jb-border)',
+                  margin: '0 2px',
+                }}
+              />
               <Tooltip
                 title={t('auth.logout')}
                 popupProps={{
@@ -266,12 +280,12 @@ function AdminLayout() {
                     transition: 'color 0.15s, background-color 0.15s',
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.color = '#ef4444'
-                    e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.12)'
+                    e.currentTarget.style.color = '#ef4444';
+                    e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.12)';
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.color = 'var(--jb-text-muted)'
-                    e.currentTarget.style.backgroundColor = 'transparent'
+                    e.currentTarget.style.color = 'var(--jb-text-muted)';
+                    e.currentTarget.style.backgroundColor = 'transparent';
                   }}
                 >
                   <span className="i-ph:sign-out-bold text-13px" />
@@ -285,10 +299,7 @@ function AdminLayout() {
         <div className="jb-main-layout">
           {/* Left Side Tool Icon Bar (48px) - Using Ring UI Tooltip/Popup */}
           <aside className="jb-tool-sidebar">
-            <Tooltip
-              title={t('nav.collections')}
-              popupProps={{ directions: tooltipDirections }}
-            >
+            <Tooltip title={t('nav.collections')} popupProps={{ directions: tooltipDirections }}>
               <Link
                 to="/collections"
                 className={`jb-tool-icon ${currentPath.startsWith('/collections') ? 'active' : ''}`}
@@ -297,10 +308,7 @@ function AdminLayout() {
               </Link>
             </Tooltip>
 
-            <Tooltip
-              title={t('nav.logs')}
-              popupProps={{ directions: tooltipDirections }}
-            >
+            <Tooltip title={t('nav.logs')} popupProps={{ directions: tooltipDirections }}>
               <Link
                 to="/logs"
                 className={`jb-tool-icon ${currentPath.startsWith('/logs') ? 'active' : ''}`}
@@ -309,15 +317,15 @@ function AdminLayout() {
               </Link>
             </Tooltip>
             <Tooltip title={t('nav.web_hosting')} popupProps={{ directions: tooltipDirections }}>
-              <Link to="/web" className={`jb-tool-icon ${currentPath.startsWith('/web') ? 'active' : ''}`}>
+              <Link
+                to="/web"
+                className={`jb-tool-icon ${currentPath.startsWith('/web') ? 'active' : ''}`}
+              >
                 <span className="i-ph:globe-bold" />
               </Link>
             </Tooltip>
 
-            <Tooltip
-              title={t('nav.settings')}
-              popupProps={{ directions: tooltipDirections }}
-            >
+            <Tooltip title={t('nav.settings')} popupProps={{ directions: tooltipDirections }}>
               <Link
                 to="/settings"
                 className={`jb-tool-icon ${currentPath.startsWith('/settings') ? 'active' : ''}`}
@@ -327,16 +335,8 @@ function AdminLayout() {
             </Tooltip>
 
             <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <Tooltip
-                title={t('nav.swagger')}
-                popupProps={{ directions: tooltipDirections }}
-              >
-                <a
-                  href="/swagger-ui"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="jb-tool-icon"
-                >
+              <Tooltip title={t('nav.swagger')} popupProps={{ directions: tooltipDirections }}>
+                <a href="/swagger-ui" target="_blank" rel="noreferrer" className="jb-tool-icon">
                   <span className="i-ph:file-code-bold" />
                 </a>
               </Tooltip>
@@ -410,12 +410,19 @@ function AdminLayout() {
               </div>
 
               {baseCollections.length === 0 ? (
-                <div style={{ padding: '6px 24px', fontSize: 12, color: 'var(--jb-text-muted)', fontStyle: 'italic' }}>
+                <div
+                  style={{
+                    padding: '6px 24px',
+                    fontSize: 12,
+                    color: 'var(--jb-text-muted)',
+                    fontStyle: 'italic',
+                  }}
+                >
                   (无自定义数据表)
                 </div>
               ) : (
                 baseCollections.map((col) => {
-                  const isActive = currentPath === `/collections/${col.name}`
+                  const isActive = currentPath === `/collections/${col.name}`;
                   return (
                     <Link
                       key={col.name}
@@ -425,7 +432,14 @@ function AdminLayout() {
                       style={{ paddingLeft: 24, textDecoration: 'none' }}
                     >
                       <span className="i-ph:table-bold text-sky-400 text-14px shrink-0" />
-                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span
+                        style={{
+                          flex: 1,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
                         {col.name}
                       </span>
                       <span
@@ -440,7 +454,7 @@ function AdminLayout() {
                         {col.fields?.length || 0}f
                       </span>
                     </Link>
-                  )
+                  );
                 })
               )}
 
@@ -464,12 +478,19 @@ function AdminLayout() {
               </div>
 
               {authCollections.length === 0 ? (
-                <div style={{ padding: '6px 24px', fontSize: 12, color: 'var(--jb-text-muted)', fontStyle: 'italic' }}>
+                <div
+                  style={{
+                    padding: '6px 24px',
+                    fontSize: 12,
+                    color: 'var(--jb-text-muted)',
+                    fontStyle: 'italic',
+                  }}
+                >
                   (无用户表)
                 </div>
               ) : (
                 authCollections.map((col) => {
-                  const isActive = currentPath === `/collections/${col.name}`
+                  const isActive = currentPath === `/collections/${col.name}`;
                   return (
                     <Link
                       key={col.name}
@@ -479,7 +500,14 @@ function AdminLayout() {
                       style={{ paddingLeft: 24, textDecoration: 'none' }}
                     >
                       <span className="i-ph:shield-check-bold text-purple-400 text-14px shrink-0" />
-                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span
+                        style={{
+                          flex: 1,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
                         {col.name}
                       </span>
                       <span
@@ -494,7 +522,7 @@ function AdminLayout() {
                         auth
                       </span>
                     </Link>
-                  )
+                  );
                 })
               )}
             </div>
@@ -561,17 +589,24 @@ function AdminLayout() {
 
             <span className="jb-status-item">
               <span className="i-ph:database-bold text-11px text-emerald-400" />
-              <span>{t('status.db')}: <strong>SurrealKV / Memory</strong></span>
+              <span>
+                {t('status.db')}: <strong>SurrealKV / Memory</strong>
+              </span>
             </span>
 
             <span className="jb-status-item">
               <span className="i-ph:cpu-bold text-11px text-purple-400" />
-              <span>{t('status.engine')}: <strong>Rust Core + Boa JS VM</strong></span>
+              <span>
+                {t('status.engine')}: <strong>Rust Core + Boa JS VM</strong>
+              </span>
             </span>
 
             <span className="jb-status-item">
               <span className="i-ph:broadcast-bold text-11px text-emerald-400" />
-              <span>{t('status.realtime')}: <strong style={{ color: 'var(--jb-accent-green)' }}>SSE Ready</strong></span>
+              <span>
+                {t('status.realtime')}:{' '}
+                <strong style={{ color: 'var(--jb-accent-green)' }}>SSE Ready</strong>
+              </span>
             </span>
           </div>
 
@@ -587,5 +622,5 @@ function AdminLayout() {
         </footer>
       </div>
     </ThemedWrapper>
-  )
+  );
 }

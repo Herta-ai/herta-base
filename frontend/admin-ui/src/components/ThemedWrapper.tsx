@@ -1,15 +1,16 @@
-import React from 'react'
-import { useStore } from '@tanstack/react-store'
-import { appStore } from '../store/app'
+import { useStore } from '@tanstack/react-store';
+import React from 'react';
+
+import { appStore } from '../store/app';
 
 export interface ThemedWrapperProps {
-  children: React.ReactNode
-  className?: string
-  style?: React.CSSProperties
+  children: React.ReactNode;
+  className?: string;
+  style?: React.CSSProperties;
 }
 
 export function ThemedWrapper({ children, className = '', style }: ThemedWrapperProps) {
-  const isDark = useStore(appStore, (state) => state.dark)
+  const isDark = useStore(appStore, (state) => state.dark);
 
   return (
     <div
@@ -18,5 +19,5 @@ export function ThemedWrapper({ children, className = '', style }: ThemedWrapper
     >
       {children}
     </div>
-  )
+  );
 }

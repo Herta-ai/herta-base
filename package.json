@@ -14,6 +14,12 @@
     "lint": "pnpm lint:ui && pnpm lint:server",
     "lint:ui": "pnpm --filter @hb/admin-ui lint",
     "lint:server": "cargo clippy --workspace -- -D warnings",
+    "fmt": "pnpm fmt:ui && pnpm fmt:server",
+    "fmt:ui": "pnpm --filter @hb/admin-ui fmt",
+    "fmt:server": "cargo fmt --all",
+    "fmt:check": "pnpm fmt:check:ui && pnpm fmt:check:server",
+    "fmt:check:ui": "pnpm --filter @hb/admin-ui fmt:check",
+    "fmt:check:server": "cargo fmt --all -- --check",
     "test:rust": "cargo test --workspace",
     "test:integration": "pnpm --filter blog-demo-integration test",
     "test": "pnpm test:rust && pnpm test:integration"

@@ -1,33 +1,37 @@
-import { useState } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import Button from '@jetbrains/ring-ui-built/components/button/button'
-import Island, { Header as IslandHeader, Content as IslandContent } from '@jetbrains/ring-ui-built/components/island/island'
-import Tag from '@jetbrains/ring-ui-built/components/tag/tag'
-import { hbApi, type CollectionModel } from '../../lib/api'
-import { useI18n } from '../../lib/i18n'
+import Button from '@jetbrains/ring-ui-built/components/button/button';
+import Island, {
+  Header as IslandHeader,
+  Content as IslandContent,
+} from '@jetbrains/ring-ui-built/components/island/island';
+import Tag from '@jetbrains/ring-ui-built/components/tag/tag';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { createFileRoute } from '@tanstack/react-router';
+import { useState } from 'react';
+
+import { hbApi, type CollectionModel } from '../../lib/api';
+import { useI18n } from '../../lib/i18n';
 
 export const Route = createFileRoute('/_admin/settings')({
   component: SettingsPage,
-})
+});
 
-type SubTab = 'app' | 'cron' | 'sql' | 'migration'
+type SubTab = 'app' | 'cron' | 'sql' | 'migration';
 
 function SettingsPage() {
-  const { t } = useI18n()
-  const queryClient = useQueryClient()
-  const [activeTab, setActiveTab] = useState<SubTab>('app')
+  const { t } = useI18n();
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState<SubTab>('app');
 
   // 1. App Settings State
-  const [serverHost, setServerHost] = useState('127.0.0.1')
-  const [serverPort, setServerPort] = useState(8080)
-  const [dbEngine] = useState('memory')
-  const [logLevel, setLogLevel] = useState('info')
-  const [accessTtl, setAccessTtl] = useState(900)
-  const [refreshTtl, setRefreshTtl] = useState(604800)
-  const [dataDir, setDataDir] = useState('./hb_data')
-  const [hooksDir, setHooksDir] = useState('./hb_hooks')
-  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null)
+  const [serverHost, setServerHost] = useState('127.0.0.1');
+  const [serverPort, setServerPort] = useState(8080);
+  const [dbEngine] = useState('memory');
+  const [logLevel, setLogLevel] = useState('info');
+  const [accessTtl, setAccessTtl] = useState(900);
+  const [refreshTtl, setRefreshTtl] = useState(604800);
+  const [dataDir, setDataDir] = useState('./hb_data');
+  const [hooksDir, setHooksDir] = useState('./hb_hooks');
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
   // 2. Cron Jobs (Mock / Real)
   const cronJobs = [
@@ -52,111 +56,128 @@ function SettingsPage() {
       status: 'active',
       lastExec: '3ms',
     },
-  ]
+  ];
 
   // 3. SQL Console State
-  const [sqlQuery, setSqlQuery] = useState('INFO FOR DB;')
-  const [sqlResult, setSqlResult] = useState<unknown[] | null>(null)
-  const [sqlExecutionTime, setSqlExecutionTime] = useState<number | null>(null)
-  const [sqlLoading, setSqlLoading] = useState(false)
-  const [sqlViewMode, setSqlViewMode] = useState<'json' | 'table'>('json')
+  const [sqlQuery, setSqlQuery] = useState('INFO FOR DB;');
+  const [sqlResult, setSqlResult] = useState<unknown[] | null>(null);
+  const [sqlExecutionTime, setSqlExecutionTime] = useState<number | null>(null);
+  const [sqlLoading, setSqlLoading] = useState(false);
+  const [sqlViewMode, setSqlViewMode] = useState<'json' | 'table'>('json');
 
   const executeSql = async () => {
-    if (!sqlQuery.trim()) return
-    setSqlLoading(true)
+    if (!sqlQuery.trim()) return;
+    setSqlLoading(true);
 
-    const startTime = performance.now()
+    const startTime = performance.now();
     try {
-      const res = await hbApi.system.executeSql(sqlQuery)
-      const endTime = performance.now()
-      setSqlExecutionTime(Math.round(endTime - startTime))
-      setSqlResult(res.data?.data?.results || [{ status: 'OK', message: 'Query executed successfully' }])
+      const res = await hbApi.system.executeSql(sqlQuery);
+      const endTime = performance.now();
+      setSqlExecutionTime(Math.round(endTime - startTime));
+      setSqlResult(
+        res.data?.data?.results || [{ status: 'OK', message: 'Query executed successfully' }],
+      );
     } catch {
-      const endTime = performance.now()
-      setSqlExecutionTime(Math.round(endTime - startTime))
+      const endTime = performance.now();
+      setSqlExecutionTime(Math.round(endTime - startTime));
       setSqlResult([
         {
           statement: sqlQuery,
           status: 'OK',
-          result: { collections: ['_admins', 'posts', 'comments'], time: `${Math.round(endTime - startTime)}ms` },
+          result: {
+            collections: ['_admins', 'posts', 'comments'],
+            time: `${Math.round(endTime - startTime)}ms`,
+          },
         },
-      ])
+      ]);
     } finally {
-      setSqlLoading(false)
+      setSqlLoading(false);
     }
-  }
+  };
 
   // 4. Migration & Export State
   const { data: collectionsRes } = useQuery({
     queryKey: ['collections'],
     queryFn: async () => {
-      const res = await hbApi.collections.list()
-      return res.data.data || []
+      const res = await hbApi.collections.list();
+      return res.data.data || [];
     },
-  })
+  });
 
-  const collections: CollectionModel[] = collectionsRes || []
-  const [selectedCollections, setSelectedCollections] = useState<string[]>([])
-  const [importStatus, setImportStatus] = useState<{ success: boolean; message: string } | null>(null)
+  const collections: CollectionModel[] = collectionsRes || [];
+  const [selectedCollections, setSelectedCollections] = useState<string[]>([]);
+  const [importStatus, setImportStatus] = useState<{ success: boolean; message: string } | null>(
+    null,
+  );
 
   const toggleSelectAll = () => {
     if (selectedCollections.length === collections.length) {
-      setSelectedCollections([])
+      setSelectedCollections([]);
     } else {
-      setSelectedCollections(collections.map((c) => c.name))
+      setSelectedCollections(collections.map((c) => c.name));
     }
-  }
+  };
 
   const handleExport = () => {
-    const targetCols = selectedCollections.length > 0 ? selectedCollections : collections.map((c) => c.name)
+    const targetCols =
+      selectedCollections.length > 0 ? selectedCollections : collections.map((c) => c.name);
     const exportData = {
       version: '0.1.0',
       exportedAt: new Date().toISOString(),
       collections: collections.filter((c) => targetCols.includes(c.name)),
       data: {},
-    }
+    };
 
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(exportData, null, 2))
-    const downloadAnchor = document.createElement('a')
-    downloadAnchor.setAttribute('href', dataStr)
-    downloadAnchor.setAttribute('download', `hertabase_backup_${Date.now()}.json`)
-    document.body.appendChild(downloadAnchor)
-    downloadAnchor.click()
-    downloadAnchor.remove()
-  }
+    const dataStr =
+      'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(exportData, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('download', `hertabase_backup_${Date.now()}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
 
   const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    const reader = new FileReader()
+    const reader = new FileReader();
     reader.onload = (evt) => {
       try {
-        const content = evt.target?.result as string
-        const parsed = JSON.parse(content)
+        const content = evt.target?.result as string;
+        const parsed = JSON.parse(content);
         setImportStatus({
           success: true,
           message: `解析成功！包含 ${parsed.collections?.length || 0} 个集合定义。数据同步已完成。`,
-        })
-        queryClient.invalidateQueries({ queryKey: ['collections'] })
+        });
+        queryClient.invalidateQueries({ queryKey: ['collections'] });
       } catch {
         setImportStatus({
           success: false,
           message: '文件解析失败，请确保上传合法的 JSON 备份文件。',
-        })
+        });
       }
-    }
-    reader.readAsText(file)
-  }
+    };
+    reader.readAsText(file);
+  };
 
   const handleSaveAppConfig = (e: React.FormEvent) => {
-    e.preventDefault()
-    setSaveSuccessMsg(t('settings.app.saved'))
-    setTimeout(() => setSaveSuccessMsg(null), 3000)
-  }
+    e.preventDefault();
+    setSaveSuccessMsg(t('settings.app.saved'));
+    setTimeout(() => setSaveSuccessMsg(null), 3000);
+  };
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div
+      style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        overflow: 'hidden',
+      }}
+    >
       {/* Editor Tabs Bar */}
       <div className="jb-editor-tabs" style={{ justifyContent: 'space-between', paddingRight: 12 }}>
         <div style={{ display: 'flex' }}>
@@ -177,10 +198,10 @@ function SettingsPage() {
           {activeTab === 'app'
             ? t('settings.tab.app')
             : activeTab === 'cron'
-            ? t('settings.tab.cron')
-            : activeTab === 'sql'
-            ? t('settings.tab.sql')
-            : t('settings.tab.migration')}
+              ? t('settings.tab.cron')
+              : activeTab === 'sql'
+                ? t('settings.tab.sql')
+                : t('settings.tab.migration')}
         </span>
       </div>
 
@@ -205,7 +226,8 @@ function SettingsPage() {
             borderTop: 'none',
             borderLeft: 'none',
             borderRight: 'none',
-            borderBottom: activeTab === 'app' ? '2px solid var(--jb-accent-blue)' : '2px solid transparent',
+            borderBottom:
+              activeTab === 'app' ? '2px solid var(--jb-accent-blue)' : '2px solid transparent',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -227,7 +249,8 @@ function SettingsPage() {
             borderTop: 'none',
             borderLeft: 'none',
             borderRight: 'none',
-            borderBottom: activeTab === 'cron' ? '2px solid var(--jb-accent-blue)' : '2px solid transparent',
+            borderBottom:
+              activeTab === 'cron' ? '2px solid var(--jb-accent-blue)' : '2px solid transparent',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -249,7 +272,8 @@ function SettingsPage() {
             borderTop: 'none',
             borderLeft: 'none',
             borderRight: 'none',
-            borderBottom: activeTab === 'sql' ? '2px solid var(--jb-accent-blue)' : '2px solid transparent',
+            borderBottom:
+              activeTab === 'sql' ? '2px solid var(--jb-accent-blue)' : '2px solid transparent',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -271,7 +295,10 @@ function SettingsPage() {
             borderTop: 'none',
             borderLeft: 'none',
             borderRight: 'none',
-            borderBottom: activeTab === 'migration' ? '2px solid var(--jb-accent-blue)' : '2px solid transparent',
+            borderBottom:
+              activeTab === 'migration'
+                ? '2px solid var(--jb-accent-blue)'
+                : '2px solid transparent',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -289,7 +316,17 @@ function SettingsPage() {
         {activeTab === 'app' && (
           <div style={{ maxWidth: 740, display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div>
-              <h3 style={{ margin: '0 0 4px 0', fontSize: 16, fontWeight: 700, color: 'var(--jb-text-heading)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <h3
+                style={{
+                  margin: '0 0 4px 0',
+                  fontSize: 16,
+                  fontWeight: 700,
+                  color: 'var(--jb-text-heading)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
                 <span className="i-ph:sliders-horizontal-bold text-sky-400 text-18px" />
                 <span>{t('settings.tab.app')}</span>
               </h3>
@@ -325,54 +362,125 @@ function SettingsPage() {
                 </div>
               </IslandHeader>
               <IslandContent>
-                <form onSubmit={handleSaveAppConfig} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <form
+                  onSubmit={handleSaveAppConfig}
+                  style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
+                >
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                     <div>
-                      <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--jb-text-muted)', display: 'block', marginBottom: 6 }}>
+                      <label
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: 'var(--jb-text-muted)',
+                          display: 'block',
+                          marginBottom: 6,
+                        }}
+                      >
                         {t('settings.app.server_host')}
                       </label>
                       <input
                         type="text"
                         value={serverHost}
                         onChange={(e) => setServerHost(e.target.value)}
-                        style={{ width: '100%', padding: '6px 10px', borderRadius: 4, border: '1px solid var(--jb-border)', backgroundColor: 'var(--jb-editor-bg)', color: 'var(--jb-text)', fontSize: 13, boxSizing: 'border-box' }}
+                        style={{
+                          width: '100%',
+                          padding: '6px 10px',
+                          borderRadius: 4,
+                          border: '1px solid var(--jb-border)',
+                          backgroundColor: 'var(--jb-editor-bg)',
+                          color: 'var(--jb-text)',
+                          fontSize: 13,
+                          boxSizing: 'border-box',
+                        }}
                       />
                     </div>
 
                     <div>
-                      <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--jb-text-muted)', display: 'block', marginBottom: 6 }}>
+                      <label
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: 'var(--jb-text-muted)',
+                          display: 'block',
+                          marginBottom: 6,
+                        }}
+                      >
                         {t('settings.app.server_port')}
                       </label>
                       <input
                         type="number"
                         value={serverPort}
                         onChange={(e) => setServerPort(Number(e.target.value))}
-                        style={{ width: '100%', padding: '6px 10px', borderRadius: 4, border: '1px solid var(--jb-border)', backgroundColor: 'var(--jb-editor-bg)', color: 'var(--jb-text)', fontSize: 13, boxSizing: 'border-box' }}
+                        style={{
+                          width: '100%',
+                          padding: '6px 10px',
+                          borderRadius: 4,
+                          border: '1px solid var(--jb-border)',
+                          backgroundColor: 'var(--jb-editor-bg)',
+                          color: 'var(--jb-text)',
+                          fontSize: 13,
+                          boxSizing: 'border-box',
+                        }}
                       />
                     </div>
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                     <div>
-                      <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--jb-text-muted)', display: 'block', marginBottom: 6 }}>
+                      <label
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: 'var(--jb-text-muted)',
+                          display: 'block',
+                          marginBottom: 6,
+                        }}
+                      >
                         {t('settings.app.db_engine')}
                       </label>
                       <input
                         type="text"
                         value={dbEngine}
                         disabled
-                        style={{ width: '100%', padding: '6px 10px', borderRadius: 4, border: '1px solid var(--jb-border)', backgroundColor: 'var(--jb-header-bg)', color: 'var(--jb-text-muted)', fontSize: 13, boxSizing: 'border-box' }}
+                        style={{
+                          width: '100%',
+                          padding: '6px 10px',
+                          borderRadius: 4,
+                          border: '1px solid var(--jb-border)',
+                          backgroundColor: 'var(--jb-header-bg)',
+                          color: 'var(--jb-text-muted)',
+                          fontSize: 13,
+                          boxSizing: 'border-box',
+                        }}
                       />
                     </div>
 
                     <div>
-                      <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--jb-text-muted)', display: 'block', marginBottom: 6 }}>
+                      <label
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: 'var(--jb-text-muted)',
+                          display: 'block',
+                          marginBottom: 6,
+                        }}
+                      >
                         {t('settings.app.log_level')}
                       </label>
                       <select
                         value={logLevel}
                         onChange={(e) => setLogLevel(e.target.value)}
-                        style={{ width: '100%', padding: '6px 10px', borderRadius: 4, border: '1px solid var(--jb-border)', backgroundColor: 'var(--jb-editor-bg)', color: 'var(--jb-text)', fontSize: 13, boxSizing: 'border-box' }}
+                        style={{
+                          width: '100%',
+                          padding: '6px 10px',
+                          borderRadius: 4,
+                          border: '1px solid var(--jb-border)',
+                          backgroundColor: 'var(--jb-editor-bg)',
+                          color: 'var(--jb-text)',
+                          fontSize: 13,
+                          boxSizing: 'border-box',
+                        }}
                       >
                         <option value="debug">debug</option>
                         <option value="info">info</option>
@@ -384,58 +492,130 @@ function SettingsPage() {
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                     <div>
-                      <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--jb-text-muted)', display: 'block', marginBottom: 6 }}>
+                      <label
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: 'var(--jb-text-muted)',
+                          display: 'block',
+                          marginBottom: 6,
+                        }}
+                      >
                         {t('settings.app.access_ttl')}
                       </label>
                       <input
                         type="number"
                         value={accessTtl}
                         onChange={(e) => setAccessTtl(Number(e.target.value))}
-                        style={{ width: '100%', padding: '6px 10px', borderRadius: 4, border: '1px solid var(--jb-border)', backgroundColor: 'var(--jb-editor-bg)', color: 'var(--jb-text)', fontSize: 13, boxSizing: 'border-box' }}
+                        style={{
+                          width: '100%',
+                          padding: '6px 10px',
+                          borderRadius: 4,
+                          border: '1px solid var(--jb-border)',
+                          backgroundColor: 'var(--jb-editor-bg)',
+                          color: 'var(--jb-text)',
+                          fontSize: 13,
+                          boxSizing: 'border-box',
+                        }}
                       />
                     </div>
 
                     <div>
-                      <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--jb-text-muted)', display: 'block', marginBottom: 6 }}>
+                      <label
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: 'var(--jb-text-muted)',
+                          display: 'block',
+                          marginBottom: 6,
+                        }}
+                      >
                         {t('settings.app.refresh_ttl')}
                       </label>
                       <input
                         type="number"
                         value={refreshTtl}
                         onChange={(e) => setRefreshTtl(Number(e.target.value))}
-                        style={{ width: '100%', padding: '6px 10px', borderRadius: 4, border: '1px solid var(--jb-border)', backgroundColor: 'var(--jb-editor-bg)', color: 'var(--jb-text)', fontSize: 13, boxSizing: 'border-box' }}
+                        style={{
+                          width: '100%',
+                          padding: '6px 10px',
+                          borderRadius: 4,
+                          border: '1px solid var(--jb-border)',
+                          backgroundColor: 'var(--jb-editor-bg)',
+                          color: 'var(--jb-text)',
+                          fontSize: 13,
+                          boxSizing: 'border-box',
+                        }}
                       />
                     </div>
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                     <div>
-                      <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--jb-text-muted)', display: 'block', marginBottom: 6 }}>
+                      <label
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: 'var(--jb-text-muted)',
+                          display: 'block',
+                          marginBottom: 6,
+                        }}
+                      >
                         {t('settings.app.data_dir')}
                       </label>
                       <input
                         type="text"
                         value={dataDir}
                         onChange={(e) => setDataDir(e.target.value)}
-                        style={{ width: '100%', padding: '6px 10px', borderRadius: 4, border: '1px solid var(--jb-border)', backgroundColor: 'var(--jb-editor-bg)', color: 'var(--jb-text)', fontSize: 13, boxSizing: 'border-box' }}
+                        style={{
+                          width: '100%',
+                          padding: '6px 10px',
+                          borderRadius: 4,
+                          border: '1px solid var(--jb-border)',
+                          backgroundColor: 'var(--jb-editor-bg)',
+                          color: 'var(--jb-text)',
+                          fontSize: 13,
+                          boxSizing: 'border-box',
+                        }}
                       />
                     </div>
 
                     <div>
-                      <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--jb-text-muted)', display: 'block', marginBottom: 6 }}>
+                      <label
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: 'var(--jb-text-muted)',
+                          display: 'block',
+                          marginBottom: 6,
+                        }}
+                      >
                         {t('settings.app.hooks_dir')}
                       </label>
                       <input
                         type="text"
                         value={hooksDir}
                         onChange={(e) => setHooksDir(e.target.value)}
-                        style={{ width: '100%', padding: '6px 10px', borderRadius: 4, border: '1px solid var(--jb-border)', backgroundColor: 'var(--jb-editor-bg)', color: 'var(--jb-text)', fontSize: 13, boxSizing: 'border-box' }}
+                        style={{
+                          width: '100%',
+                          padding: '6px 10px',
+                          borderRadius: 4,
+                          border: '1px solid var(--jb-border)',
+                          backgroundColor: 'var(--jb-editor-bg)',
+                          color: 'var(--jb-text)',
+                          fontSize: 13,
+                          boxSizing: 'border-box',
+                        }}
                       />
                     </div>
                   </div>
 
                   <div style={{ marginTop: 8 }}>
-                    <Button primary type="submit" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Button
+                      primary
+                      type="submit"
+                      style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                    >
                       <span className="i-ph:check-bold text-12px" />
                       <span>{t('settings.app.save_btn')}</span>
                     </Button>
@@ -450,7 +630,17 @@ function SettingsPage() {
         {activeTab === 'cron' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
-              <h3 style={{ margin: '0 0 4px 0', fontSize: 16, fontWeight: 700, color: 'var(--jb-text-heading)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <h3
+                style={{
+                  margin: '0 0 4px 0',
+                  fontSize: 16,
+                  fontWeight: 700,
+                  color: 'var(--jb-text-heading)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
                 <span className="i-ph:clock-bold text-teal-400 text-18px" />
                 <span>{t('settings.cron.title')}</span>
               </h3>
@@ -468,14 +658,67 @@ function SettingsPage() {
                 boxShadow: 'var(--jb-shadow)',
               }}
             >
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, textAlign: 'left' }}>
+              <table
+                style={{
+                  width: '100%',
+                  borderCollapse: 'collapse',
+                  fontSize: 13,
+                  textAlign: 'left',
+                }}
+              >
                 <thead>
-                  <tr style={{ backgroundColor: 'var(--jb-header-bg)', borderBottom: '1px solid var(--jb-border)' }}>
-                    <th style={{ padding: '10px 16px', fontWeight: 600, color: 'var(--jb-text-heading)' }}>{t('settings.cron.name')}</th>
-                    <th style={{ padding: '10px 16px', fontWeight: 600, color: 'var(--jb-text-heading)' }}>{t('settings.cron.expr')}</th>
-                    <th style={{ padding: '10px 16px', fontWeight: 600, color: 'var(--jb-text-heading)' }}>{t('settings.cron.next_run')}</th>
-                    <th style={{ padding: '10px 16px', fontWeight: 600, color: 'var(--jb-text-heading)' }}>{t('settings.cron.status')}</th>
-                    <th style={{ padding: '10px 16px', fontWeight: 600, color: 'var(--jb-text-heading)', textAlign: 'right' }}>{t('settings.cron.last_exec')}</th>
+                  <tr
+                    style={{
+                      backgroundColor: 'var(--jb-header-bg)',
+                      borderBottom: '1px solid var(--jb-border)',
+                    }}
+                  >
+                    <th
+                      style={{
+                        padding: '10px 16px',
+                        fontWeight: 600,
+                        color: 'var(--jb-text-heading)',
+                      }}
+                    >
+                      {t('settings.cron.name')}
+                    </th>
+                    <th
+                      style={{
+                        padding: '10px 16px',
+                        fontWeight: 600,
+                        color: 'var(--jb-text-heading)',
+                      }}
+                    >
+                      {t('settings.cron.expr')}
+                    </th>
+                    <th
+                      style={{
+                        padding: '10px 16px',
+                        fontWeight: 600,
+                        color: 'var(--jb-text-heading)',
+                      }}
+                    >
+                      {t('settings.cron.next_run')}
+                    </th>
+                    <th
+                      style={{
+                        padding: '10px 16px',
+                        fontWeight: 600,
+                        color: 'var(--jb-text-heading)',
+                      }}
+                    >
+                      {t('settings.cron.status')}
+                    </th>
+                    <th
+                      style={{
+                        padding: '10px 16px',
+                        fontWeight: 600,
+                        color: 'var(--jb-text-heading)',
+                        textAlign: 'right',
+                      }}
+                    >
+                      {t('settings.cron.last_exec')}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -486,7 +729,14 @@ function SettingsPage() {
                         borderBottom: '1px solid var(--jb-border)',
                       }}
                     >
-                      <td style={{ padding: '12px 16px', fontWeight: 600, fontFamily: 'JetBrains Mono, monospace', color: 'var(--jb-accent-blue)' }}>
+                      <td
+                        style={{
+                          padding: '12px 16px',
+                          fontWeight: 600,
+                          fontFamily: 'JetBrains Mono, monospace',
+                          color: 'var(--jb-accent-blue)',
+                        }}
+                      >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <span className="i-ph:gear-bold text-14px text-teal-400" />
                           <span>{job.name}</span>
@@ -516,7 +766,13 @@ function SettingsPage() {
                           <span>Active</span>
                         </span>
                       </td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'monospace' }}>
+                      <td
+                        style={{
+                          padding: '12px 16px',
+                          textAlign: 'right',
+                          fontFamily: 'monospace',
+                        }}
+                      >
                         {job.lastExec}
                       </td>
                     </tr>
@@ -525,7 +781,15 @@ function SettingsPage() {
               </table>
             </div>
 
-            <div style={{ fontSize: 12, color: 'var(--jb-text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div
+              style={{
+                fontSize: 12,
+                color: 'var(--jb-text-muted)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
               <span className="i-ph:info-bold text-blue-400 text-14px" />
               <span>{t('settings.cron.empty')}</span>
             </div>
@@ -536,7 +800,17 @@ function SettingsPage() {
         {activeTab === 'sql' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
-              <h3 style={{ margin: '0 0 4px 0', fontSize: 16, fontWeight: 700, color: 'var(--jb-text-heading)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <h3
+                style={{
+                  margin: '0 0 4px 0',
+                  fontSize: 16,
+                  fontWeight: 700,
+                  color: 'var(--jb-text-heading)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
                 <span className="i-ph:terminal-bold text-amber-400 text-18px" />
                 <span>{t('settings.sql.title')}</span>
               </h3>
@@ -565,7 +839,16 @@ function SettingsPage() {
                   alignItems: 'center',
                 }}
               >
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--jb-text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: 'var(--jb-text-muted)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                >
                   <span className="i-ph:code-bold text-sky-400 text-14px" />
                   <span>SurrealQL Query Input</span>
                 </span>
@@ -573,7 +856,13 @@ function SettingsPage() {
                   primary
                   disabled={sqlLoading}
                   onClick={executeSql}
-                  style={{ height: 28, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
+                  style={{
+                    height: 28,
+                    fontSize: 12,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
                 >
                   {sqlLoading ? (
                     <>
@@ -595,7 +884,7 @@ function SettingsPage() {
                 onChange={(e) => setSqlQuery(e.target.value)}
                 onKeyDown={(e) => {
                   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                    executeSql()
+                    executeSql();
                   }
                 }}
                 placeholder="SELECT * FROM posts WHERE active = true;"
@@ -635,7 +924,15 @@ function SettingsPage() {
                   }}
                 >
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}
+                    >
                       <span className="i-ph:check-circle-bold text-emerald-400 text-14px" />
                       <span>Result</span>
                     </span>
@@ -652,7 +949,8 @@ function SettingsPage() {
                         fontSize: 11,
                         borderRadius: 4,
                         border: '1px solid var(--jb-border)',
-                        background: sqlViewMode === 'json' ? 'var(--jb-active-item)' : 'transparent',
+                        background:
+                          sqlViewMode === 'json' ? 'var(--jb-active-item)' : 'transparent',
                         color: sqlViewMode === 'json' ? 'var(--jb-accent-blue)' : 'var(--jb-text)',
                         cursor: 'pointer',
                         display: 'flex',
@@ -687,7 +985,17 @@ function SettingsPage() {
         {activeTab === 'migration' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div>
-              <h3 style={{ margin: '0 0 4px 0', fontSize: 16, fontWeight: 700, color: 'var(--jb-text-heading)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <h3
+                style={{
+                  margin: '0 0 4px 0',
+                  fontSize: 16,
+                  fontWeight: 700,
+                  color: 'var(--jb-text-heading)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
                 <span className="i-ph:arrows-down-up-bold text-purple-400 text-18px" />
                 <span>{t('settings.tab.migration')}</span>
               </h3>
@@ -699,7 +1007,9 @@ function SettingsPage() {
             {importStatus && (
               <div
                 style={{
-                  background: importStatus.success ? 'rgba(73, 156, 84, 0.12)' : 'rgba(229, 57, 53, 0.12)',
+                  background: importStatus.success
+                    ? 'rgba(73, 156, 84, 0.12)'
+                    : 'rgba(229, 57, 53, 0.12)',
                   border: `1px solid ${importStatus.success ? '#499c54' : '#e53935'}`,
                   color: importStatus.success ? '#499c54' : '#e53935',
                   padding: '8px 12px',
@@ -710,7 +1020,13 @@ function SettingsPage() {
                   gap: 8,
                 }}
               >
-                <span className={importStatus.success ? 'i-ph:check-circle-bold text-15px' : 'i-ph:warning-circle-bold text-15px'} />
+                <span
+                  className={
+                    importStatus.success
+                      ? 'i-ph:check-circle-bold text-15px'
+                      : 'i-ph:warning-circle-bold text-15px'
+                  }
+                />
                 <span>{importStatus.message}</span>
               </div>
             )}
@@ -730,19 +1046,44 @@ function SettingsPage() {
                   </p>
 
                   <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                      <span style={{ fontSize: 12, fontWeight: 600 }}>{t('settings.migration.select_collections')}:</span>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: 6,
+                      }}
+                    >
+                      <span style={{ fontSize: 12, fontWeight: 600 }}>
+                        {t('settings.migration.select_collections')}:
+                      </span>
                       <button
                         onClick={toggleSelectAll}
-                        style={{ background: 'transparent', border: 'none', color: 'var(--jb-accent-blue)', cursor: 'pointer', fontSize: 11 }}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'var(--jb-accent-blue)',
+                          cursor: 'pointer',
+                          fontSize: 11,
+                        }}
                       >
-                        {selectedCollections.length === collections.length ? t('settings.migration.unselect_all') : t('settings.migration.select_all')}
+                        {selectedCollections.length === collections.length
+                          ? t('settings.migration.unselect_all')
+                          : t('settings.migration.select_all')}
                       </button>
                     </div>
 
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 120, overflowY: 'auto' }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: 6,
+                        maxHeight: 120,
+                        overflowY: 'auto',
+                      }}
+                    >
                       {collections.map((c) => {
-                        const isChecked = selectedCollections.includes(c.name)
+                        const isChecked = selectedCollections.includes(c.name);
                         return (
                           <label
                             key={c.name}
@@ -750,7 +1091,9 @@ function SettingsPage() {
                               display: 'flex',
                               alignItems: 'center',
                               gap: 4,
-                              background: isChecked ? 'rgba(53,116,240,0.1)' : 'var(--jb-header-bg)',
+                              background: isChecked
+                                ? 'rgba(53,116,240,0.1)'
+                                : 'var(--jb-header-bg)',
                               border: `1px solid ${isChecked ? 'var(--jb-accent-blue)' : 'var(--jb-border)'}`,
                               padding: '2px 8px',
                               borderRadius: 4,
@@ -763,21 +1106,27 @@ function SettingsPage() {
                               checked={isChecked}
                               onChange={(e) => {
                                 if (e.target.checked) {
-                                  setSelectedCollections([...selectedCollections, c.name])
+                                  setSelectedCollections([...selectedCollections, c.name]);
                                 } else {
-                                  setSelectedCollections(selectedCollections.filter((n) => n !== c.name))
+                                  setSelectedCollections(
+                                    selectedCollections.filter((n) => n !== c.name),
+                                  );
                                 }
                               }}
                             />
                             <span>{c.name}</span>
                           </label>
-                        )
+                        );
                       })}
                     </div>
                   </div>
 
                   <div style={{ marginTop: 8 }}>
-                    <Button primary onClick={handleExport} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Button
+                      primary
+                      onClick={handleExport}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                    >
                       <span className="i-ph:download-simple-bold text-12px" />
                       <span>{t('settings.migration.export_btn')}</span>
                     </Button>
@@ -808,7 +1157,9 @@ function SettingsPage() {
                     }}
                   >
                     <span className="i-ph:file-arrow-up-bold text-36px text-zinc-400" />
-                    <div style={{ fontSize: 12, color: 'var(--jb-text-muted)', margin: '8px 0 12px' }}>
+                    <div
+                      style={{ fontSize: 12, color: 'var(--jb-text-muted)', margin: '8px 0 12px' }}
+                    >
                       点击选择或拖拽备份 JSON 文件至此处
                     </div>
                     <label
@@ -842,5 +1193,5 @@ function SettingsPage() {
         )}
       </div>
     </div>
-  )
+  );
 }

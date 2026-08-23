@@ -1,190 +1,216 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
-import { useQuery } from '@tanstack/react-query'
-import Button from '@jetbrains/ring-ui-built/components/button/button'
-import Loader from '@jetbrains/ring-ui-built/components/loader/loader'
-import Tooltip from '@jetbrains/ring-ui-built/components/tooltip/tooltip'
-import { hbApi, type LogEntry, type LogQueryParams } from '../../lib/api'
-import { useI18n } from '../../lib/i18n'
+import Button from '@jetbrains/ring-ui-built/components/button/button';
+import Loader from '@jetbrains/ring-ui-built/components/loader/loader';
+import Tooltip from '@jetbrains/ring-ui-built/components/tooltip/tooltip';
+import { useQuery } from '@tanstack/react-query';
+import { createFileRoute } from '@tanstack/react-router';
+import { useState, useRef, useEffect, useMemo } from 'react';
+
+import { hbApi, type LogEntry, type LogQueryParams } from '../../lib/api';
+import { useI18n } from '../../lib/i18n';
 
 export const Route = createFileRoute('/_admin/logs')({
   component: SystemLogsPage,
-})
+});
 
-type TimeRangeOption = 'all' | '15m' | '1h' | '24h'
-const LOG_POLL_INTERVAL_MS = 4000
+type TimeRangeOption = 'all' | '15m' | '1h' | '24h';
+const LOG_POLL_INTERVAL_MS = 4000;
 
 function SystemLogsPage() {
-  const { t } = useI18n()
+  const { t } = useI18n();
 
   // Query Parameters State
-  const [page, setPage] = useState(1)
-  const [perPage, setPerPage] = useState(30)
-  const [selectedType, setSelectedType] = useState<'all' | 'server' | 'request'>('all')
-  const [selectedLevel, setSelectedLevel] = useState<string>('ALL')
-  const [keyword, setKeyword] = useState('')
-  const [debouncedKeyword, setDebouncedKeyword] = useState('')
-  const [statusCodeFilter, setStatusCodeFilter] = useState<string>('all')
-  const [timeRange, setTimeRange] = useState<TimeRangeOption>('all')
-  const [targetFilter, setTargetFilter] = useState('')
-  const [debouncedTarget, setDebouncedTarget] = useState('')
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(30);
+  const [selectedType, setSelectedType] = useState<'all' | 'server' | 'request'>('all');
+  const [selectedLevel, setSelectedLevel] = useState<string>('ALL');
+  const [keyword, setKeyword] = useState('');
+  const [debouncedKeyword, setDebouncedKeyword] = useState('');
+  const [statusCodeFilter, setStatusCodeFilter] = useState<string>('all');
+  const [timeRange, setTimeRange] = useState<TimeRangeOption>('all');
+  const [targetFilter, setTargetFilter] = useState('');
+  const [debouncedTarget, setDebouncedTarget] = useState('');
 
   // UI state
-  const [autoScroll, setAutoScroll] = useState(true)
+  const [autoScroll, setAutoScroll] = useState(true);
   // Logs intentionally use HTTP polling only. The log read request is not an SSE source.
-  const [pollingEnabled, setPollingEnabled] = useState(true)
-  const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null)
-  const [copiedNotification, setCopiedNotification] = useState(false)
+  const [pollingEnabled, setPollingEnabled] = useState(true);
+  const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
+  const [copiedNotification, setCopiedNotification] = useState(false);
 
-  const logEndRef = useRef<HTMLDivElement>(null)
+  const logEndRef = useRef<HTMLDivElement>(null);
 
   // Debounce search and target input
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedKeyword(keyword)
-      setDebouncedTarget(targetFilter)
-      setPage(1)
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [keyword, targetFilter])
+      setDebouncedKeyword(keyword);
+      setDebouncedTarget(targetFilter);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [keyword, targetFilter]);
 
   // Calculate from date based on timeRange
   const fromTime = useMemo(() => {
     if (timeRange === '15m') {
-      return new Date(Date.now() - 15 * 60 * 1000).toISOString()
+      return new Date(Date.now() - 15 * 60 * 1000).toISOString();
     }
     if (timeRange === '1h') {
-      return new Date(Date.now() - 60 * 60 * 1000).toISOString()
+      return new Date(Date.now() - 60 * 60 * 1000).toISOString();
     }
     if (timeRange === '24h') {
-      return new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+      return new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     }
-    return undefined
-  }, [timeRange])
+    return undefined;
+  }, [timeRange]);
 
   // Build query parameters
   const queryParams: LogQueryParams = useMemo(() => {
     const params: LogQueryParams = {
       page,
       perPage,
-    }
+    };
     if (selectedType !== 'all') {
-      params.logType = selectedType
+      params.logType = selectedType;
     }
     if (selectedLevel !== 'ALL') {
-      params.level = selectedLevel.toLowerCase()
+      params.level = selectedLevel.toLowerCase();
     }
     if (debouncedKeyword.trim()) {
-      params.q = debouncedKeyword.trim()
+      params.q = debouncedKeyword.trim();
     }
     if (debouncedTarget.trim()) {
-      params.target = debouncedTarget.trim()
+      params.target = debouncedTarget.trim();
     }
     if (statusCodeFilter !== 'all') {
-      const parsed = parseInt(statusCodeFilter, 10)
+      const parsed = parseInt(statusCodeFilter, 10);
       if (!isNaN(parsed)) {
-        params.statusCode = parsed
+        params.statusCode = parsed;
       }
     }
     if (fromTime) {
-      params.from = fromTime
+      params.from = fromTime;
     }
-    return params
-  }, [page, perPage, selectedType, selectedLevel, debouncedKeyword, debouncedTarget, statusCodeFilter, fromTime])
+    return params;
+  }, [
+    page,
+    perPage,
+    selectedType,
+    selectedLevel,
+    debouncedKeyword,
+    debouncedTarget,
+    statusCodeFilter,
+    fromTime,
+  ]);
 
   // Fetch logs using TanStack Query polling. Do not add an SSE subscription here:
   // each refresh is itself an HTTP request and is excluded from request persistence.
-  const { data: logsResponse, isLoading, isFetching, refetch } = useQuery({
+  const {
+    data: logsResponse,
+    isLoading,
+    isFetching,
+    refetch,
+  } = useQuery({
     queryKey: ['admin-logs', queryParams],
     queryFn: async () => {
-      const res = await hbApi.logs.list(queryParams)
-      return res.data
+      const res = await hbApi.logs.list(queryParams);
+      return res.data;
     },
     refetchInterval: pollingEnabled ? LOG_POLL_INTERVAL_MS : false,
-  })
+  });
 
-  const logs = useMemo(() => logsResponse?.data || [], [logsResponse])
-  const meta = logsResponse?.meta as { total?: number; page?: number; perPage?: number } | undefined
-  const total = meta?.total ?? logs.length
-  const totalPages = Math.max(1, Math.ceil(total / perPage))
+  const logs = useMemo(() => logsResponse?.data || [], [logsResponse]);
+  const meta = logsResponse?.meta as
+    | { total?: number; page?: number; perPage?: number }
+    | undefined;
+  const total = meta?.total ?? logs.length;
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
 
   useEffect(() => {
     if (autoScroll && logs.length > 0) {
-      logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [logs, autoScroll])
+  }, [logs, autoScroll]);
 
   const handleCopyLogs = () => {
-    if (logs.length === 0) return
+    if (logs.length === 0) return;
     const text = logs
       .map((l) => {
-        const prefix = `[${l.created_at}] [${l.level.toUpperCase()}] [${l.log_type.toUpperCase()}] [${l.target}]`
-        const reqInfo = l.method && l.path ? ` ${l.method} ${l.path} (${l.status_code || '-'})` : ''
-        return `${prefix}${reqInfo} ${l.message}`
+        const prefix = `[${l.created_at}] [${l.level.toUpperCase()}] [${l.log_type.toUpperCase()}] [${l.target}]`;
+        const reqInfo =
+          l.method && l.path ? ` ${l.method} ${l.path} (${l.status_code || '-'})` : '';
+        return `${prefix}${reqInfo} ${l.message}`;
       })
-      .join('\n')
-    navigator.clipboard.writeText(text)
-    setCopiedNotification(true)
-    setTimeout(() => setCopiedNotification(false), 2000)
-  }
+      .join('\n');
+    navigator.clipboard.writeText(text);
+    setCopiedNotification(true);
+    setTimeout(() => setCopiedNotification(false), 2000);
+  };
 
   const handleExportJson = () => {
-    if (logs.length === 0) return
-    const jsonStr = JSON.stringify(logs, null, 2)
-    const blob = new Blob([jsonStr], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `herta-logs-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
+    if (logs.length === 0) return;
+    const jsonStr = JSON.stringify(logs, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `herta-logs-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const getLevelColor = (lvl: string) => {
-    const upper = lvl.toUpperCase()
+    const upper = lvl.toUpperCase();
     switch (upper) {
       case 'TRACE':
-        return '#787b80'
+        return '#787b80';
       case 'DEBUG':
-        return '#9876aa'
+        return '#9876aa';
       case 'INFO':
-        return '#3574f0'
+        return '#3574f0';
       case 'WARN':
-        return '#e5934e'
+        return '#e5934e';
       case 'ERROR':
       case 'FATAL':
-        return '#e53935'
+        return '#e53935';
       default:
-        return 'var(--jb-text-muted)'
+        return 'var(--jb-text-muted)';
     }
-  }
+  };
 
   const getStatusColor = (code?: number) => {
-    if (!code) return 'var(--jb-text-muted)'
-    if (code >= 200 && code < 300) return '#499c54' // Green
-    if (code >= 300 && code < 400) return '#3574f0' // Blue
-    if (code >= 400 && code < 500) return '#e5934e' // Orange
-    return '#e53935' // Red (5xx)
-  }
+    if (!code) return 'var(--jb-text-muted)';
+    if (code >= 200 && code < 300) return '#499c54'; // Green
+    if (code >= 300 && code < 400) return '#3574f0'; // Blue
+    if (code >= 400 && code < 500) return '#e5934e'; // Orange
+    return '#e53935'; // Red (5xx)
+  };
 
   const getMethodBadgeColor = (method?: string) => {
     switch (method?.toUpperCase()) {
       case 'GET':
-        return '#3574f0'
+        return '#3574f0';
       case 'POST':
-        return '#499c54'
+        return '#499c54';
       case 'PUT':
       case 'PATCH':
-        return '#e5934e'
+        return '#e5934e';
       case 'DELETE':
-        return '#e53935'
+        return '#e53935';
       default:
-        return 'var(--jb-text-muted)'
+        return 'var(--jb-text-muted)';
     }
-  }
+  };
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div
+      style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        overflow: 'hidden',
+      }}
+    >
       {/* 1. Editor Tab Header */}
       <div className="jb-editor-tabs" style={{ justifyContent: 'space-between', paddingRight: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -208,13 +234,13 @@ function SystemLogsPage() {
           {/* Log Type Switcher Tabs */}
           <div style={{ display: 'flex', gap: 2, marginLeft: 16 }}>
             {(['all', 'server', 'request'] as const).map((typeKey) => {
-              const active = selectedType === typeKey
+              const active = selectedType === typeKey;
               return (
                 <button
                   key={typeKey}
                   onClick={() => {
-                    setSelectedType(typeKey)
-                    setPage(1)
+                    setSelectedType(typeKey);
+                    setPage(1);
                   }}
                   style={{
                     background: active ? 'var(--jb-active-item)' : 'transparent',
@@ -232,8 +258,12 @@ function SystemLogsPage() {
                   }}
                 >
                   {typeKey === 'all' && <span className="i-ph:stack-bold text-12px" />}
-                  {typeKey === 'server' && <span className="i-ph:cpu-bold text-12px text-purple-400" />}
-                  {typeKey === 'request' && <span className="i-ph:globe-bold text-12px text-sky-400" />}
+                  {typeKey === 'server' && (
+                    <span className="i-ph:cpu-bold text-12px text-purple-400" />
+                  )}
+                  {typeKey === 'request' && (
+                    <span className="i-ph:globe-bold text-12px text-sky-400" />
+                  )}
                   <span>
                     {typeKey === 'all'
                       ? t('logs.type.all')
@@ -242,7 +272,7 @@ function SystemLogsPage() {
                         : t('logs.type.request')}
                   </span>
                 </button>
-              )
+              );
             })}
           </div>
         </div>
@@ -250,7 +280,14 @@ function SystemLogsPage() {
         {/* Action Toolbar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {copiedNotification && (
-            <span style={{ fontSize: 11, color: 'var(--jb-accent-green)', fontWeight: 600, marginRight: 4 }}>
+            <span
+              style={{
+                fontSize: 11,
+                color: 'var(--jb-accent-green)',
+                fontWeight: 600,
+                marginRight: 4,
+              }}
+            >
               ✓ {t('app.copied')}
             </span>
           )}
@@ -284,7 +321,9 @@ function SystemLogsPage() {
             onClick={() => refetch()}
             style={{ height: 24, fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
           >
-            <span className={`i-ph:arrow-clockwise-bold text-11px ${isFetching ? 'animate-spin' : ''}`} />
+            <span
+              className={`i-ph:arrow-clockwise-bold text-11px ${isFetching ? 'animate-spin' : ''}`}
+            />
             <span>{t('app.refresh')}</span>
           </Button>
 
@@ -312,7 +351,9 @@ function SystemLogsPage() {
         <span className="jb-breadcrumb-sep">›</span>
         <span>Monitoring</span>
         <span className="jb-breadcrumb-sep">›</span>
-        <span style={{ color: 'var(--jb-accent-blue)', fontWeight: 500 }}>System & Request Logs</span>
+        <span style={{ color: 'var(--jb-accent-blue)', fontWeight: 500 }}>
+          System & Request Logs
+        </span>
       </div>
 
       {/* 3. Filters Toolbar */}
@@ -330,14 +371,14 @@ function SystemLogsPage() {
         {/* Severity Level Pills */}
         <div style={{ display: 'flex', gap: 3 }}>
           {['ALL', 'ERROR', 'WARN', 'INFO', 'DEBUG', 'TRACE'].map((lvl) => {
-            const isActive = selectedLevel === lvl
-            const color = lvl === 'ALL' ? 'var(--jb-text)' : getLevelColor(lvl)
+            const isActive = selectedLevel === lvl;
+            const color = lvl === 'ALL' ? 'var(--jb-text)' : getLevelColor(lvl);
             return (
               <button
                 key={lvl}
                 onClick={() => {
-                  setSelectedLevel(lvl)
-                  setPage(1)
+                  setSelectedLevel(lvl);
+                  setPage(1);
                 }}
                 style={{
                   background: isActive ? `${color}22` : 'var(--jb-panel-bg)',
@@ -361,14 +402,22 @@ function SystemLogsPage() {
                 {lvl === 'TRACE' && <span className="i-ph:magnifying-glass-bold text-zinc-400" />}
                 <span>{lvl === 'ALL' ? t('logs.level.all') : lvl}</span>
               </button>
-            )
+            );
           })}
         </div>
 
         <div style={{ width: 1, height: 18, background: 'var(--jb-border)', margin: '0 2px' }} />
 
         {/* Search Keyword */}
-        <div style={{ flex: 1, minWidth: 200, display: 'flex', alignItems: 'center', position: 'relative' }}>
+        <div
+          style={{
+            flex: 1,
+            minWidth: 200,
+            display: 'flex',
+            alignItems: 'center',
+            position: 'relative',
+          }}
+        >
           <span className="i-ph:magnifying-glass-bold text-12px text-zinc-400 absolute left-2.5" />
           <input
             type="text"
@@ -451,8 +500,8 @@ function SystemLogsPage() {
           <select
             value={timeRange}
             onChange={(e) => {
-              setTimeRange(e.target.value as TimeRangeOption)
-              setPage(1)
+              setTimeRange(e.target.value as TimeRangeOption);
+              setPage(1);
             }}
             style={{
               background: 'var(--jb-panel-bg)',
@@ -479,8 +528,8 @@ function SystemLogsPage() {
             <select
               value={statusCodeFilter}
               onChange={(e) => {
-                setStatusCodeFilter(e.target.value)
-                setPage(1)
+                setStatusCodeFilter(e.target.value);
+                setPage(1);
               }}
               style={{
                 background: 'var(--jb-panel-bg)',
@@ -541,7 +590,15 @@ function SystemLogsPage() {
         }}
       >
         {isLoading && logs.length === 0 ? (
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', gap: 8 }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              height: '100%',
+              gap: 8,
+            }}
+          >
             <Loader />
             <span style={{ color: 'var(--jb-text-muted)', fontSize: 12 }}>{t('app.loading')}</span>
           </div>
@@ -555,11 +612,11 @@ function SystemLogsPage() {
           </div>
         ) : (
           logs.map((log) => {
-            const lvlColor = getLevelColor(log.level)
-            const isRequest = log.log_type === 'request'
-            const methodColor = getMethodBadgeColor(log.method)
-            const statusColor = getStatusColor(log.status_code)
-            const isSelected = selectedLog?.id === log.id
+            const lvlColor = getLevelColor(log.level);
+            const isRequest = log.log_type === 'request';
+            const methodColor = getMethodBadgeColor(log.method);
+            const statusColor = getStatusColor(log.status_code);
+            const isSelected = selectedLog?.id === log.id;
 
             return (
               <div
@@ -573,7 +630,9 @@ function SystemLogsPage() {
                   cursor: 'pointer',
                   transition: 'background-color 0.1s',
                   alignItems: 'baseline',
-                  borderLeft: isSelected ? `2px solid var(--jb-accent-blue)` : '2px solid transparent',
+                  borderLeft: isSelected
+                    ? `2px solid var(--jb-accent-blue)`
+                    : '2px solid transparent',
                   background: isSelected ? 'var(--jb-active-item)' : 'transparent',
                 }}
                 className="hover:bg-[var(--jb-hover-item)]"
@@ -612,7 +671,9 @@ function SystemLogsPage() {
                   style={{
                     fontSize: 10,
                     color: isRequest ? '#3574f0' : '#9876aa',
-                    background: isRequest ? 'rgba(53, 116, 240, 0.12)' : 'rgba(152, 118, 170, 0.12)',
+                    background: isRequest
+                      ? 'rgba(53, 116, 240, 0.12)'
+                      : 'rgba(152, 118, 170, 0.12)',
                     padding: '0 4px',
                     borderRadius: 2,
                     fontWeight: 600,
@@ -687,7 +748,7 @@ function SystemLogsPage() {
                   </span>
                 )}
               </div>
-            )
+            );
           })
         )}
         <div ref={logEndRef} />
@@ -708,9 +769,7 @@ function SystemLogsPage() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span>
-            {t('logs.total_records', { total })}
-          </span>
+          <span>{t('logs.total_records', { total })}</span>
           <span>•</span>
           <span>
             {t('logs.page', { page })} / {totalPages}
@@ -724,8 +783,8 @@ function SystemLogsPage() {
             <select
               value={perPage}
               onChange={(e) => {
-                setPerPage(parseInt(e.target.value, 10))
-                setPage(1)
+                setPerPage(parseInt(e.target.value, 10));
+                setPage(1);
               }}
               style={{
                 background: 'var(--jb-panel-bg)',
@@ -825,7 +884,10 @@ function SystemLogsPage() {
                   style={{
                     fontSize: 10.5,
                     color: selectedLog.log_type === 'request' ? '#3574f0' : '#9876aa',
-                    background: selectedLog.log_type === 'request' ? 'rgba(53, 116, 240, 0.12)' : 'rgba(152, 118, 170, 0.12)',
+                    background:
+                      selectedLog.log_type === 'request'
+                        ? 'rgba(53, 116, 240, 0.12)'
+                        : 'rgba(152, 118, 170, 0.12)',
                     padding: '1px 6px',
                     borderRadius: 3,
                     fontWeight: 600,
@@ -882,7 +944,13 @@ function SystemLogsPage() {
 
                 <div>
                   <span style={{ color: 'var(--jb-text-muted)' }}>Target: </span>
-                  <span style={{ fontFamily: 'JetBrains Mono, monospace', color: 'var(--jb-accent-purple)', fontWeight: 600 }}>
+                  <span
+                    style={{
+                      fontFamily: 'JetBrains Mono, monospace',
+                      color: 'var(--jb-accent-purple)',
+                      fontWeight: 600,
+                    }}
+                  >
                     {selectedLog.target}
                   </span>
                 </div>
@@ -890,7 +958,9 @@ function SystemLogsPage() {
                 {selectedLog.method && (
                   <div>
                     <span style={{ color: 'var(--jb-text-muted)' }}>HTTP Method: </span>
-                    <span style={{ fontWeight: 700, color: getMethodBadgeColor(selectedLog.method) }}>
+                    <span
+                      style={{ fontWeight: 700, color: getMethodBadgeColor(selectedLog.method) }}
+                    >
                       {selectedLog.method}
                     </span>
                   </div>
@@ -899,7 +969,9 @@ function SystemLogsPage() {
                 {selectedLog.status_code && (
                   <div>
                     <span style={{ color: 'var(--jb-text-muted)' }}>Status Code: </span>
-                    <span style={{ fontWeight: 700, color: getStatusColor(selectedLog.status_code) }}>
+                    <span
+                      style={{ fontWeight: 700, color: getStatusColor(selectedLog.status_code) }}
+                    >
                       {selectedLog.status_code}
                     </span>
                   </div>
@@ -917,7 +989,9 @@ function SystemLogsPage() {
                 {selectedLog.remote_ip && (
                   <div>
                     <span style={{ color: 'var(--jb-text-muted)' }}>Remote IP: </span>
-                    <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>{selectedLog.remote_ip}</span>
+                    <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                      {selectedLog.remote_ip}
+                    </span>
                   </div>
                 )}
 
@@ -947,7 +1021,9 @@ function SystemLogsPage() {
                 {selectedLog.user_agent && (
                   <div style={{ gridColumn: 'span 2' }}>
                     <span style={{ color: 'var(--jb-text-muted)' }}>User Agent: </span>
-                    <span style={{ fontSize: 10.5, color: 'var(--jb-text)', wordBreak: 'break-all' }}>
+                    <span
+                      style={{ fontSize: 10.5, color: 'var(--jb-text)', wordBreak: 'break-all' }}
+                    >
                       {selectedLog.user_agent}
                     </span>
                   </div>
@@ -1019,8 +1095,8 @@ function SystemLogsPage() {
             >
               <Button
                 onClick={() => {
-                  navigator.clipboard.writeText(JSON.stringify(selectedLog, null, 2))
-                  alert(t('app.copied'))
+                  navigator.clipboard.writeText(JSON.stringify(selectedLog, null, 2));
+                  alert(t('app.copied'));
                 }}
                 style={{ height: 26, fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
               >
@@ -1036,5 +1112,5 @@ function SystemLogsPage() {
         </div>
       )}
     </div>
-  )
+  );
 }

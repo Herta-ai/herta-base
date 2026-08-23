@@ -1,4 +1,4 @@
-import { QueryClient } from '@tanstack/react-query'
+import { QueryClient } from '@tanstack/react-query';
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -8,4 +8,4 @@ export const queryClient = new QueryClient({
       staleTime: 5 * 60 * 1000, // 5分钟内数据认为是新鲜的，不会重复请求网络
     },
   },
-})
+});

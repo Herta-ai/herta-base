@@ -1,4 +1,4 @@
-import { FileSystemIconLoader } from '@iconify/utils/lib/loader/node-loaders'
+import { FileSystemIconLoader } from '@iconify/utils/lib/loader/node-loaders';
 import {
   defineConfig,
   presetIcons,
@@ -6,7 +6,7 @@ import {
   presetWind3,
   transformerDirectives,
   transformerVariantGroup,
-} from 'unocss'
+} from 'unocss';
 
 export default defineConfig({
   shortcuts: {
@@ -27,14 +27,16 @@ export default defineConfig({
     'fixed-center': 'fixed left-0 top-0 wh-full flex-center',
     'nprogress-primary': 'important-bg-primary',
     'modal-container': 'rounded-10px bg-white',
-    'modal-header': 'flex items-center justify-between b-(b-1px #D9DCE5 solid) px-32px py-18px text-18px font-bold',
-    'modal-close': 'i-material-symbols-close-rounded shrink-0 cursor-pointer text-30px rounded-8px hover:text-#666',
+    'modal-header':
+      'flex items-center justify-between b-(b-1px #D9DCE5 solid) px-32px py-18px text-18px font-bold',
+    'modal-close':
+      'i-material-symbols-close-rounded shrink-0 cursor-pointer text-30px rounded-8px hover:text-#666',
   },
   theme: {
     fontSize: {
       'icon-xs': '0.875rem',
       'icon-small': '1rem',
-      'icon': '1.125rem',
+      icon: '1.125rem',
       'icon-large': '1.5rem',
       'icon-xl': '2rem',
     },
@@ -44,15 +46,15 @@ export default defineConfig({
       ...theme,
       fontSize: {
         'extra-small': 'var(--el-font-size-extra-small)',
-        'small': 'var(--el-font-size-small)',
-        'base': 'var(--el-font-size-base)',
-        'medium': 'var(--el-font-size-medium)',
-        'large': 'var(--el-font-size-large)',
+        small: 'var(--el-font-size-small)',
+        base: 'var(--el-font-size-base)',
+        medium: 'var(--el-font-size-medium)',
+        large: 'var(--el-font-size-large)',
         'extra-large': 'var(--el-font-size-extra-large)',
         'title-base': '24px',
         'title-large': '30px',
       },
-    }
+    };
   },
   presets: [
     presetWind3(),
@@ -63,8 +65,9 @@ export default defineConfig({
         display: 'inline-block',
       },
       collections: {
-        local: FileSystemIconLoader('./src/assets/svg', svg =>
-          svg.replace(/^<svg\s/, '<svg width="1em" height="1em" ')),
+        local: FileSystemIconLoader('./src/assets/svg', (svg) =>
+          svg.replace(/^<svg\s/, '<svg width="1em" height="1em" '),
+        ),
       },
       warn: true,
       unit: 'em',
@@ -72,4 +75,4 @@ export default defineConfig({
     presetTypography(),
   ],
   transformers: [transformerDirectives(), transformerVariantGroup()],
-})
+});

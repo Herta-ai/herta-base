@@ -1,64 +1,70 @@
-import { useState } from 'react'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useStore } from '@tanstack/react-store'
-import Button from '@jetbrains/ring-ui-built/components/button/button'
-import { appStore } from '../store/app'
-import { setAuthSession } from '../store/auth'
-import { hbApi } from '../lib/api'
-import { useI18n } from '../lib/i18n'
-import { ThemedWrapper } from '../components/ThemedWrapper'
-import './jetbrains-ide.css'
+import Button from '@jetbrains/ring-ui-built/components/button/button';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { useStore } from '@tanstack/react-store';
+import { useState } from 'react';
+
+import { ThemedWrapper } from '../components/ThemedWrapper';
+import { hbApi } from '../lib/api';
+import { useI18n } from '../lib/i18n';
+import { appStore } from '../store/app';
+import { setAuthSession } from '../store/auth';
+
+import './jetbrains-ide.css';
 
 export const Route = createFileRoute('/login')({
   component: AdminLoginPage,
-})
+});
 
 function AdminLoginPage() {
-  const navigate = useNavigate()
-  const { t, lang, setLang } = useI18n()
-  const isDark = useStore(appStore, (state) => state.dark)
+  const navigate = useNavigate();
+  const { t, lang, setLang } = useI18n();
+  const isDark = useStore(appStore, (state) => state.dark);
 
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
+    e.preventDefault();
     if (!email || !password) {
-      setErrorMessage(t('auth.login.failed'))
-      return
+      setErrorMessage(t('auth.login.failed'));
+      return;
     }
 
-    setLoading(true)
-    setErrorMessage(null)
+    setLoading(true);
+    setErrorMessage(null);
 
     try {
-      const response = await hbApi.auth.login({ email, password })
-      const resData = response.data.data
+      const response = await hbApi.auth.login({ email, password });
+      const resData = response.data.data;
 
       if (resData?.accessToken && resData?.user) {
         setAuthSession({
           accessToken: resData.accessToken,
           refreshToken: resData.refreshToken,
           user: resData.user,
-        })
-        navigate({ to: '/collections' })
+        });
+        navigate({ to: '/collections' });
       } else {
-        setErrorMessage(t('auth.login.failed'))
+        setErrorMessage(t('auth.login.failed'));
       }
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { error?: { message?: string } } }; message?: string }
-      const msg = axiosErr.response?.data?.error?.message || axiosErr.message || t('auth.login.failed')
-      setErrorMessage(msg)
+      const axiosErr = err as {
+        response?: { data?: { error?: { message?: string } } };
+        message?: string;
+      };
+      const msg =
+        axiosErr.response?.data?.error?.message || axiosErr.message || t('auth.login.failed');
+      setErrorMessage(msg);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const toggleTheme = () => {
-    appStore.setState((s) => ({ ...s, dark: !s.dark }))
-  }
+    appStore.setState((s) => ({ ...s, dark: !s.dark }));
+  };
 
   return (
     <ThemedWrapper>
@@ -127,7 +133,13 @@ function AdminLoginPage() {
               transition: 'all 0.15s',
             }}
           >
-            <span className={isDark ? 'i-ph:moon-stars-bold text-14px text-indigo-400' : 'i-ph:sun-dim-bold text-14px text-amber-400'} />
+            <span
+              className={
+                isDark
+                  ? 'i-ph:moon-stars-bold text-14px text-indigo-400'
+                  : 'i-ph:sun-dim-bold text-14px text-amber-400'
+              }
+            />
             <span>{isDark ? t('app.theme.dark') : t('app.theme.light')}</span>
           </button>
         </div>
@@ -148,11 +160,23 @@ function AdminLoginPage() {
         >
           {/* Header Logo & Title */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 24 }}>
-            <div className="jb-logo-icon" style={{ width: 44, height: 44, fontSize: 18, borderRadius: 8 }}>
+            <div
+              className="jb-logo-icon"
+              style={{ width: 44, height: 44, fontSize: 18, borderRadius: 8 }}
+            >
               HB
             </div>
             <div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--jb-text-heading)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div
+                style={{
+                  fontSize: 18,
+                  fontWeight: 700,
+                  color: 'var(--jb-text-heading)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
                 <span>{t('auth.login.title')}</span>
                 <span className="jb-branch-badge">
                   <span className="i-ph:shield-star-bold text-11px mr-1" />
@@ -187,9 +211,22 @@ function AdminLoginPage() {
           )}
 
           {/* Form */}
-          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <form
+            onSubmit={handleLogin}
+            style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
+          >
             <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--jb-text-muted)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+              <label
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: 'var(--jb-text-muted)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  marginBottom: 6,
+                }}
+              >
                 <span className="i-ph:envelope-simple-bold text-13px" />
                 <span>{t('auth.email')}</span>
               </label>
@@ -215,7 +252,17 @@ function AdminLoginPage() {
             </div>
 
             <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--jb-text-muted)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+              <label
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: 'var(--jb-text-muted)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  marginBottom: 6,
+                }}
+              >
                 <span className="i-ph:lock-key-bold text-13px" />
                 <span>{t('auth.password')}</span>
               </label>
@@ -292,12 +339,24 @@ function AdminLoginPage() {
               <span className="i-ph:lightbulb-bold text-amber-400 text-13px" />
               <span>默认超级管理员凭据:</span>
             </span>
-            <code style={{ background: 'rgba(0,0,0,0.1)', padding: '2px 6px', borderRadius: 4 }}>admin@example.com</code>
+            <code style={{ background: 'rgba(0,0,0,0.1)', padding: '2px 6px', borderRadius: 4 }}>
+              admin@example.com
+            </code>
           </div>
         </div>
 
         {/* Footer Version */}
-        <div style={{ position: 'absolute', bottom: 16, fontSize: 12, color: 'var(--jb-text-muted)', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 16,
+            fontSize: 12,
+            color: 'var(--jb-text-muted)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+          }}
+        >
           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span className="i-ph:cpu-bold text-13px" />
             <span>HertaBase Microkernel v0.1.0</span>
@@ -310,5 +369,5 @@ function AdminLoginPage() {
         </div>
       </div>
     </ThemedWrapper>
-  )
+  );
 }

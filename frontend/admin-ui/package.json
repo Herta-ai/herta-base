@@ -1,12 +1,14 @@
 {
   "name": "@hb/admin-ui",
-  "private": true,
   "version": "0.0.0",
+  "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
+    "fmt": "oxfmt --write",
+    "fmt:check": "oxfmt --check",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -35,6 +37,7 @@
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.5",
     "babel-plugin-react-compiler": "^1.0.0",
+    "oxfmt": "^0.64.0",
     "oxlint": "^1.77.0",
     "typescript": "^7.0.2",
     "unocss": "^66.7.5",

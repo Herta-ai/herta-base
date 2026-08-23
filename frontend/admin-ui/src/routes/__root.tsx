@@ -1,10 +1,12 @@
-import { createRootRouteWithContext, Outlet } from '@tanstack/react-router'
-import type { QueryClient } from '@tanstack/react-query'
-import { ThemedWrapper } from '../components/ThemedWrapper'
-import './jetbrains-ide.css'
+import type { QueryClient } from '@tanstack/react-query';
+import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
+
+import { ThemedWrapper } from '../components/ThemedWrapper';
+
+import './jetbrains-ide.css';
 
 interface MyRouterContext {
-  queryClient: QueryClient
+  queryClient: QueryClient;
 }
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
@@ -13,4 +15,4 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       <Outlet />
     </ThemedWrapper>
   ),
-})
+});
