@@ -120,7 +120,7 @@ function AdminLayout() {
                   fontWeight: currentPath.startsWith('/web') ? 600 : 400,
                 }}
               >
-                Web Hosting
+                {t('nav.web_hosting')}
               </Link>
               <Link
                 to="/settings"
@@ -308,7 +308,7 @@ function AdminLayout() {
                 <span className="i-ph:terminal-window-bold" />
               </Link>
             </Tooltip>
-            <Tooltip title="Web Hosting" popupProps={{ directions: tooltipDirections }}>
+            <Tooltip title={t('nav.web_hosting')} popupProps={{ directions: tooltipDirections }}>
               <Link to="/web" className={`jb-tool-icon ${currentPath.startsWith('/web') ? 'active' : ''}`}>
                 <span className="i-ph:globe-bold" />
               </Link>
