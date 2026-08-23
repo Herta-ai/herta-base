@@ -11,7 +11,7 @@ use salvo::{oapi::swagger_ui::SwaggerUi, prelude::*};
 
 use crate::{
     docs::OpenApiCache,
-    handlers::{auth, collections, docs, files, logs, realtime, records},
+    handlers::{auth, collections, docs, files, logs, realtime, records, web},
 };
 
 #[derive(Clone)]
@@ -22,6 +22,7 @@ pub struct ApiState {
     pub auth: AuthService,
     pub storage: Arc<dyn Storage>,
     pub realtime: RealtimeLimiter,
+    pub web: web::WebHosting,
 }
 
 impl ApiState {
@@ -40,6 +41,7 @@ impl ApiState {
             config.realtime.max_connections,
             config.realtime.max_connections_per_ip,
         );
+        let web = web::WebHosting::new(&config)?;
         let state = Self {
             db,
             config: Arc::new(config),
@@ -47,6 +49,7 @@ impl ApiState {
             auth,
             storage,
             realtime,
+            web,
         };
         state.docs.refresh(&state).await?;
         Ok(state)
@@ -153,6 +156,17 @@ pub fn build_router_with_logger(
         .push(Router::with_path("refresh").post(auth::refresh_admin))
         .push(Router::with_path("me").get(auth::me_admin));
     let admin_logs = Router::with_path("api/admin/logs").get(logs::list);
+    let web_projects = Router::with_path("_/web-projects")
+        .get(web::list_projects)
+        .post(web::deploy_project)
+        .push(
+            Router::with_path("{project}")
+                .get(web::get_project)
+                .patch(web::patch_project)
+                .delete(web::delete_project)
+                .push(Router::with_path("versions").get(web::list_versions))
+                .push(Router::with_path("rollback").post(web::rollback_project)),
+        );
     let files_router = Router::with_path("api/files")
         .push(Router::with_path("token").post(files::token))
         .push(
@@ -172,7 +186,13 @@ pub fn build_router_with_logger(
         .push(collection_auth)
         .push(admin_auth)
         .push(admin_logs)
+        .push(web_projects)
         .push(files_router)
+        .push(
+            Router::with_path("web/{**rest}")
+                .get(web::serve_project)
+                .head(web::serve_project),
+        )
         .push(Router::with_path("api-doc/openapi.json").get(docs::openapi))
         .push(SwaggerUi::new("/api-doc/openapi.json").into_router("/swagger-ui"))
 }

@@ -71,7 +71,10 @@ impl DbClient {
                  DEFINE INDEX IF NOT EXISTS idx_logs_level ON TABLE _logs FIELDS level;\
                  DEFINE INDEX IF NOT EXISTS idx_logs_created ON TABLE _logs FIELDS created_at;\
                  DEFINE INDEX IF NOT EXISTS idx_logs_status ON TABLE _logs FIELDS status_code;\
-                 DEFINE INDEX IF NOT EXISTS idx_logs_user ON TABLE _logs FIELDS user_id;",
+                 DEFINE INDEX IF NOT EXISTS idx_logs_user ON TABLE _logs FIELDS user_id;\
+                 DEFINE TABLE IF NOT EXISTS _web_projects SCHEMALESS;\
+                 DEFINE INDEX IF NOT EXISTS idx_web_projects_name \
+                   ON TABLE _web_projects FIELDS name UNIQUE;",
             )
             .await?;
         response.check()?;

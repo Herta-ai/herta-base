@@ -112,6 +112,17 @@ function AdminLayout() {
                 {t('nav.logs')}
               </Link>
               <Link
+                to="/web"
+                className={`jb-menu-item ${currentPath.startsWith('/web') ? 'active' : ''}`}
+                style={{
+                  textDecoration: 'none',
+                  color: currentPath.startsWith('/web') ? 'var(--jb-accent-blue)' : 'inherit',
+                  fontWeight: currentPath.startsWith('/web') ? 600 : 400,
+                }}
+              >
+                Web Hosting
+              </Link>
+              <Link
                 to="/settings"
                 className={`jb-menu-item ${currentPath.startsWith('/settings') ? 'active' : ''}`}
                 style={{
@@ -295,6 +306,11 @@ function AdminLayout() {
                 className={`jb-tool-icon ${currentPath.startsWith('/logs') ? 'active' : ''}`}
               >
                 <span className="i-ph:terminal-window-bold" />
+              </Link>
+            </Tooltip>
+            <Tooltip title="Web Hosting" popupProps={{ directions: tooltipDirections }}>
+              <Link to="/web" className={`jb-tool-icon ${currentPath.startsWith('/web') ? 'active' : ''}`}>
+                <span className="i-ph:globe-bold" />
               </Link>
             </Tooltip>
 

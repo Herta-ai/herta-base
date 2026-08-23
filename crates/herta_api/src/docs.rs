@@ -147,6 +147,71 @@ fn base_paths() -> Map<String, Value> {
         }),
     );
     paths.insert(
+        "/_/web-projects".into(),
+        json!({
+            "get": secured_operation("List deployed web projects", "WebProjectListEnvelope"),
+            "post": {
+                "summary": "Deploy a web project archive",
+                "security": [{"bearerAuth": []}],
+                "requestBody": {
+                    "required": true,
+                    "content": {"multipart/form-data": {"schema": {
+                        "type": "object",
+                        "required": ["archive"],
+                        "properties": {
+                            "archive": {"type": "string", "format": "binary"},
+                            "alias": {"type": "string"},
+                            "spaFallback": {"type": "boolean", "default": true},
+                            "cacheControl": {"type": "string"},
+                            "notFound": {"type": "string"}
+                        }
+                    }}}
+                },
+                "responses": {
+                    "201": {"description": "Project created"},
+                    "200": {"description": "Project updated"},
+                    "400": {"description": "Invalid archive or settings"},
+                    "401": {"description": "Authentication required"},
+                    "403": {"description": "Administrator access required"},
+                    "413": {"description": "Archive is too large"}
+                }
+            }
+        }),
+    );
+    paths.insert(
+        "/_/web-projects/{project}".into(),
+        json!({
+            "parameters": [path_parameter("project")],
+            "get": secured_operation("Get a deployed web project", "WebProjectEnvelope"),
+            "patch": {
+                "summary": "Update web project routing settings",
+                "security": [{"bearerAuth": []}],
+                "requestBody": json_body("WebProjectPatch"),
+                "responses": success_response("WebProjectEnvelope")
+            },
+            "delete": secured_operation("Delete a deployed web project", "GenericEnvelope")
+        }),
+    );
+    paths.insert(
+        "/_/web-projects/{project}/versions".into(),
+        json!({
+            "parameters": [path_parameter("project")],
+            "get": secured_operation("List web project backup versions", "WebVersionsEnvelope")
+        }),
+    );
+    paths.insert(
+        "/_/web-projects/{project}/rollback".into(),
+        json!({
+            "parameters": [path_parameter("project")],
+            "post": {
+                "summary": "Rollback a web project",
+                "security": [{"bearerAuth": []}],
+                "requestBody": json_body("WebRollbackRequest"),
+                "responses": success_response("WebProjectEnvelope")
+            }
+        }),
+    );
+    paths.insert(
         "/api/files/token".into(),
         json!({"post": {
             "summary": "Issue a short-lived file token",
@@ -186,6 +251,50 @@ fn base_schemas() -> Map<String, Value> {
                 "details": {}
             }
         }),
+    );
+    schemas.insert(
+        "WebProject".into(),
+        json!({
+            "type": "object",
+            "required": ["name", "spaFallback", "cacheControl", "deployedAt", "deployed"],
+            "properties": {
+                "name": {"type": "string"},
+                "alias": {"type": ["string", "null"]},
+                "spaFallback": {"type": "boolean"},
+                "cacheControl": {"type": "string"},
+                "notFound": {"type": ["string", "null"]},
+                "deployedAt": {"type": "string"},
+                "deployed": {"type": "boolean"}
+            }
+        }),
+    );
+    schemas.insert(
+        "WebProjectPatch".into(),
+        json!({
+            "type": "object",
+            "properties": {
+                "alias": {"type": ["string", "null"]},
+                "spaFallback": {"type": "boolean"},
+                "cacheControl": {"type": "string"},
+                "notFound": {"type": ["string", "null"]}
+            }
+        }),
+    );
+    schemas.insert(
+        "WebRollbackRequest".into(),
+        json!({"type": "object", "required": ["version"], "properties": {"version": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{2}$"}}}),
+    );
+    schemas.insert(
+        "WebProjectEnvelope".into(),
+        envelope(json!({"$ref": "#/components/schemas/WebProject"})),
+    );
+    schemas.insert(
+        "WebProjectListEnvelope".into(),
+        envelope(json!({"type": "array", "items": {"$ref": "#/components/schemas/WebProject"}})),
+    );
+    schemas.insert(
+        "WebVersionsEnvelope".into(),
+        envelope(json!({"type": "array", "items": {"type": "string"}})),
     );
     schemas.insert("Collection".into(), collection_schema());
     schemas.insert("ApiRules".into(), rules_schema());

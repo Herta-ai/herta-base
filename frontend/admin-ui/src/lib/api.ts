@@ -220,6 +220,16 @@ export interface LogQueryParams {
   to?: string
 }
 
+export interface WebProjectModel {
+  name: string
+  alias?: string | null
+  spaFallback: boolean
+  cacheControl: string
+  notFound?: string | null
+  deployedAt: string
+  deployed: boolean
+}
+
 // 常用 API 接口封装
 export const hbApi = {
   // 认证
@@ -281,6 +291,18 @@ export const hbApi = {
   logs: {
     list: (params?: LogQueryParams) =>
       api.get<ApiResponse<LogEntry[]>>('/api/admin/logs', { params }),
+  },
+
+  webProjects: {
+    list: () => api.get<ApiResponse<WebProjectModel[]>>('/_/web-projects'),
+    deploy: (form: FormData) => api.post<ApiResponse<WebProjectModel>>('/_/web-projects', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+    patch: (name: string, data: Partial<Pick<WebProjectModel, 'alias' | 'spaFallback' | 'cacheControl' | 'notFound'>>) =>
+      api.patch<ApiResponse<WebProjectModel>>(`/_/web-projects/${encodeURIComponent(name)}`, data),
+    delete: (name: string) => api.delete<ApiResponse<{ name: string; deleted: boolean }>>(`/_/web-projects/${encodeURIComponent(name)}`),
+    versions: (name: string) => api.get<ApiResponse<string[]>>(`/_/web-projects/${encodeURIComponent(name)}/versions`),
+    rollback: (name: string, version: string) => api.post<ApiResponse<WebProjectModel>>(`/_/web-projects/${encodeURIComponent(name)}/rollback`, { version }),
   },
 
   // 系统与扩展

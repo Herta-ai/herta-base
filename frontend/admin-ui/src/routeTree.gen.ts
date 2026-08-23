@@ -15,6 +15,7 @@ import { Route as DemoRouteImport } from './routes/demo'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AdminLogsRouteImport } from './routes/_admin/logs'
 import { Route as AdminSettingsRouteImport } from './routes/_admin/settings'
+import { Route as AdminWebRouteImport } from './routes/_admin/web'
 import { Route as AdminCollectionsIndexRouteImport } from './routes/_admin/collections/index'
 import { Route as AdminCollectionsCollectionNameRouteImport } from './routes/_admin/collections/$collectionName'
 
@@ -47,6 +48,11 @@ const AdminSettingsRoute = AdminSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminWebRoute = AdminWebRouteImport.update({
+  id: '/web',
+  path: '/web',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminCollectionsIndexRoute = AdminCollectionsIndexRouteImport.update({
   id: '/collections/',
   path: '/collections/',
@@ -65,6 +71,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/logs': typeof AdminLogsRoute
   '/settings': typeof AdminSettingsRoute
+  '/web': typeof AdminWebRoute
   '/collections/$collectionName': typeof AdminCollectionsCollectionNameRoute
   '/collections/': typeof AdminCollectionsIndexRoute
 }
@@ -74,6 +81,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/logs': typeof AdminLogsRoute
   '/settings': typeof AdminSettingsRoute
+  '/web': typeof AdminWebRoute
   '/collections/$collectionName': typeof AdminCollectionsCollectionNameRoute
   '/collections': typeof AdminCollectionsIndexRoute
 }
@@ -85,6 +93,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_admin/logs': typeof AdminLogsRoute
   '/_admin/settings': typeof AdminSettingsRoute
+  '/_admin/web': typeof AdminWebRoute
   '/_admin/collections/$collectionName': typeof AdminCollectionsCollectionNameRoute
   '/_admin/collections/': typeof AdminCollectionsIndexRoute
 }
@@ -96,6 +105,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/logs'
     | '/settings'
+    | '/web'
     | '/collections/$collectionName'
     | '/collections/'
   fileRoutesByTo: FileRoutesByTo
@@ -105,6 +115,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/logs'
     | '/settings'
+    | '/web'
     | '/collections/$collectionName'
     | '/collections'
   id:
@@ -115,6 +126,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/_admin/logs'
     | '/_admin/settings'
+    | '/_admin/web'
     | '/_admin/collections/$collectionName'
     | '/_admin/collections/'
   fileRoutesById: FileRoutesById
@@ -170,6 +182,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSettingsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/_admin/web': {
+      id: '/_admin/web'
+      path: '/web'
+      fullPath: '/web'
+      preLoaderRoute: typeof AdminWebRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/_admin/collections/': {
       id: '/_admin/collections/'
       path: '/collections'
@@ -190,6 +209,7 @@ declare module '@tanstack/react-router' {
 interface AdminRouteChildren {
   AdminLogsRoute: typeof AdminLogsRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
+  AdminWebRoute: typeof AdminWebRoute
   AdminCollectionsCollectionNameRoute: typeof AdminCollectionsCollectionNameRoute
   AdminCollectionsIndexRoute: typeof AdminCollectionsIndexRoute
 }
@@ -197,6 +217,7 @@ interface AdminRouteChildren {
 const AdminRouteChildren: AdminRouteChildren = {
   AdminLogsRoute: AdminLogsRoute,
   AdminSettingsRoute: AdminSettingsRoute,
+  AdminWebRoute: AdminWebRoute,
   AdminCollectionsCollectionNameRoute: AdminCollectionsCollectionNameRoute,
   AdminCollectionsIndexRoute: AdminCollectionsIndexRoute,
 }

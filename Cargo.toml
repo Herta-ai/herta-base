@@ -26,16 +26,19 @@ argon2 = "0.5.3"
 async-recursion = "1.1.1"
 clap = { version = "4.6.5", features = ["derive"] }
 email_address = "0.2.9"
+flate2 = "1.1.9"
 jsonwebtoken = { version = "10.4.0", default-features = false, features = ["aws_lc_rs"] }
 mime = "0.3.17"
 mime-infer = "4.0.1"
 object_store = { version = "0.13.2", default-features = false, features = ["fs", "aws", "tls-webpki-roots"] }
+percent-encoding = "2.3.2"
 rand = "0.8.7"
 regex = "1.12.3"
 rust-embed = { version = "8.12.0", features = ["mime-guess"] }
 salvo = { version = "0.95.0", features = ["affix-state", "anyhow", "cors", "oapi", "sse"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
+sevenz-rust = "0.6.1"
 sha2 = "0.10.9"
 surrealdb = { version = "3.2.3", default-features = false, features = ["kv-mem", "kv-surrealkv"] }
 surrealdb-core = { version = "3.2.3", default-features = false }
@@ -45,8 +48,11 @@ tokio-util = { version = "0.7.19", features = ["io"] }
 toml = "0.8.23"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
+tar = "0.4.44"
 url = "2.5.8"
 uuid = { version = "1.18.1", features = ["serde", "v7"] }
+walkdir = "2.5.0"
+zip = { version = "2.4.2", default-features = false, features = ["deflate"] }
 
 [profile.release]
 codegen-units = 1

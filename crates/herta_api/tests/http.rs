@@ -12,6 +12,7 @@ use salvo::{
     test::{ResponseExt, TestClient},
 };
 use serde_json::{Value, json};
+use std::io::Write;
 use tokio::time::{Duration, timeout};
 
 #[tokio::test]
@@ -87,6 +88,22 @@ async fn service_with_db() -> (Service, DbClient) {
     (
         Service::new(build_router()).hoop(affix_state::inject(state)),
         db,
+    )
+}
+
+async fn web_service() -> (Service, tempfile::TempDir) {
+    let data = tempfile::tempdir().unwrap();
+    let db = DbClient::memory().await.unwrap();
+    let mut config = HbConfig::default();
+    config.database.engine = "memory".into();
+    config.paths.data_dir = data.path().to_string_lossy().into_owned();
+    config.server.dev_mode = true;
+    config.auth.bootstrap_admin_email = Some("admin@example.com".into());
+    config.auth.bootstrap_admin_password = Some("correct horse battery staple".into());
+    let state = ApiState::new(db, config).await.unwrap();
+    (
+        Service::new(build_router()).hoop(affix_state::inject(state)),
+        data,
     )
 }
 
@@ -308,6 +325,148 @@ fn multipart_body(
         body,
         "multipart/form-data; boundary=hertabase-phase5-boundary",
     )
+}
+
+fn web_archive(index: &str, app: &str) -> Vec<u8> {
+    let mut bytes = std::io::Cursor::new(Vec::new());
+    {
+        let mut archive = zip::ZipWriter::new(&mut bytes);
+        let options = zip::write::SimpleFileOptions::default();
+        archive.add_directory("demo/", options).unwrap();
+        archive.start_file("demo/index.html", options).unwrap();
+        archive.write_all(index.as_bytes()).unwrap();
+        archive.add_directory("demo/assets/", options).unwrap();
+        archive.start_file("demo/assets/app.js", options).unwrap();
+        archive.write_all(app.as_bytes()).unwrap();
+        archive.start_file("demo/404.html", options).unwrap();
+        archive.write_all(b"custom missing").unwrap();
+        archive.finish().unwrap();
+    }
+    bytes.into_inner()
+}
+
+fn web_multipart(archive: &[u8], fields: &[(&str, &str)]) -> (Vec<u8>, &'static str) {
+    const BOUNDARY: &str = "hertabase-web-boundary";
+    let mut body = Vec::new();
+    for (name, value) in fields {
+        write!(
+            body,
+            "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n"
+        )
+        .unwrap();
+    }
+    write!(body, "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"archive\"; filename=\"site.bin\"\r\nContent-Type: application/octet-stream\r\n\r\n").unwrap();
+    body.extend_from_slice(archive);
+    write!(body, "\r\n--{BOUNDARY}--\r\n").unwrap();
+    (body, "multipart/form-data; boundary=hertabase-web-boundary")
+}
+
+#[tokio::test]
+async fn web_projects_deploy_serve_update_and_rollback() {
+    let (service, _data) = web_service().await;
+    let mut unauthorized = TestClient::get("http://localhost/_/web-projects")
+        .send(&service)
+        .await;
+    assert_eq!(unauthorized.status_code, Some(StatusCode::UNAUTHORIZED));
+    let error: Value = unauthorized.take_json().await.unwrap();
+    assert_eq!(error["error"]["error"], "HB_AUTH_REQUIRED");
+
+    let admin = admin_token(&service).await;
+    let (body, content_type) = web_multipart(
+        &web_archive("version one", "console.log('one')"),
+        &[("alias", "/web/portal")],
+    );
+    let mut deployed = TestClient::post("http://localhost/_/web-projects")
+        .bearer_auth(&admin)
+        .add_header("content-type", content_type, true)
+        .body(body)
+        .send(&service)
+        .await;
+    let status = deployed.status_code;
+    let deployment: Value = deployed.take_json().await.unwrap();
+    assert_eq!(status, Some(StatusCode::CREATED), "{deployment}");
+    assert_eq!(deployment["data"]["name"], "demo");
+    assert_eq!(deployment["data"]["alias"], "/web/portal");
+
+    let redirected = TestClient::get("http://localhost/web/demo")
+        .send(&service)
+        .await;
+    assert_eq!(redirected.status_code, Some(StatusCode::PERMANENT_REDIRECT));
+    assert_eq!(redirected.headers().get("location").unwrap(), "/web/demo/");
+
+    let mut spa = TestClient::get("http://localhost/web/portal/client/route")
+        .send(&service)
+        .await;
+    assert_eq!(spa.status_code, Some(StatusCode::OK));
+    assert_eq!(spa.take_string().await.unwrap(), "version one");
+
+    let mut asset = TestClient::get("http://localhost/web/demo/assets/app.js")
+        .send(&service)
+        .await;
+    assert_eq!(asset.status_code, Some(StatusCode::OK));
+    let etag = asset
+        .headers()
+        .get("etag")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_owned();
+    assert!(!asset.take_bytes(None).await.unwrap().is_empty());
+    let cached = TestClient::get("http://localhost/web/demo/assets/app.js")
+        .add_header("if-none-match", &etag, true)
+        .send(&service)
+        .await;
+    assert_eq!(cached.status_code, Some(StatusCode::NOT_MODIFIED));
+
+    let mut partial = TestClient::get("http://localhost/web/demo/assets/app.js")
+        .add_header("range", "bytes=0-6", true)
+        .send(&service)
+        .await;
+    assert_eq!(partial.status_code, Some(StatusCode::PARTIAL_CONTENT));
+    assert_eq!(partial.take_string().await.unwrap(), "console");
+
+    let mut patched = TestClient::patch("http://localhost/_/web-projects/demo")
+        .bearer_auth(&admin)
+        .json(&json!({"spaFallback": false, "notFound": "404.html"}))
+        .send(&service)
+        .await;
+    assert_eq!(patched.status_code, Some(StatusCode::OK));
+    let _: Value = patched.take_json().await.unwrap();
+    let mut missing = TestClient::get("http://localhost/web/demo/client/route")
+        .send(&service)
+        .await;
+    assert_eq!(missing.status_code, Some(StatusCode::NOT_FOUND));
+    assert_eq!(missing.take_string().await.unwrap(), "custom missing");
+
+    let (body, content_type) =
+        web_multipart(&web_archive("version two", "console.log('two')"), &[]);
+    let mut updated = TestClient::post("http://localhost/_/web-projects")
+        .bearer_auth(&admin)
+        .add_header("content-type", content_type, true)
+        .body(body)
+        .send(&service)
+        .await;
+    assert_eq!(updated.status_code, Some(StatusCode::OK));
+    let _: Value = updated.take_json().await.unwrap();
+
+    let mut versions = TestClient::get("http://localhost/_/web-projects/demo/versions")
+        .bearer_auth(&admin)
+        .send(&service)
+        .await;
+    let versions: Value = versions.take_json().await.unwrap();
+    let version = versions["data"][0].as_str().unwrap();
+    let mut rollback = TestClient::post("http://localhost/_/web-projects/demo/rollback")
+        .bearer_auth(&admin)
+        .json(&json!({"version": version}))
+        .send(&service)
+        .await;
+    assert_eq!(rollback.status_code, Some(StatusCode::OK));
+    let _: Value = rollback.take_json().await.unwrap();
+
+    let mut restored = TestClient::get("http://localhost/web/demo/")
+        .send(&service)
+        .await;
+    assert_eq!(restored.take_string().await.unwrap(), "version one");
 }
 
 #[tokio::test]

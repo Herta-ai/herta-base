@@ -13,6 +13,22 @@ pub struct HbConfig {
     pub auth: AuthConfig,
     pub realtime: RealtimeConfig,
     pub storage: StorageConfig,
+    pub web: WebConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct WebConfig {
+    /// Maximum compressed archive size accepted by the web deployment endpoint.
+    pub max_archive_size: usize,
+}
+
+impl Default for WebConfig {
+    fn default() -> Self {
+        Self {
+            max_archive_size: 100 * 1024 * 1024,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -296,6 +312,7 @@ impl HbConfig {
             "HB_REALTIME_HEARTBEAT_SECONDS",
             &mut self.realtime.heartbeat_seconds,
         )?;
+        apply_usize_env("HB_WEB_MAX_ARCHIVE_SIZE", &mut self.web.max_archive_size)?;
         if let Ok(value) = std::env::var("HB_STORAGE_TYPE") {
             self.storage.storage_type = value;
         }
@@ -377,6 +394,9 @@ impl HbConfig {
             || self.realtime.heartbeat_seconds == 0
         {
             bail!("realtime connection limits and heartbeat must be greater than zero");
+        }
+        if self.web.max_archive_size == 0 {
+            bail!("web.max_archive_size must be greater than zero");
         }
         if !matches!(self.storage.storage_type.as_str(), "local" | "s3") {
             bail!("storage.type must be either 'local' or 's3'");
@@ -466,6 +486,7 @@ mod tests {
         assert_eq!(config.realtime.heartbeat_seconds, 30);
         assert_eq!(config.storage.storage_type, "local");
         assert_eq!(config.storage.file_token_ttl_seconds, 300);
+        assert_eq!(config.web.max_archive_size, 100 * 1024 * 1024);
     }
 
     #[test]

@@ -6,3 +6,4 @@ pub mod logging;
 pub mod logs;
 pub mod realtime;
 pub mod records;
+pub mod web;
