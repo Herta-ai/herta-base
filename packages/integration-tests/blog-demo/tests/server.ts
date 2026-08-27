@@ -33,8 +33,13 @@ async function freePort(): Promise<number> {
 }
 
 function binaryPath(workspaceRoot: string): string {
+  const profile = process.env.HB_TEST_PROFILE
+    ?? (process.env.npm_lifecycle_event === 'test:release' ? 'release' : 'debug');
+  if (profile !== 'debug' && profile !== 'release') {
+    throw new Error(`HB_TEST_PROFILE must be debug or release, received '${profile}'`);
+  }
   const name = process.platform === 'win32' ? 'hertabase.exe' : 'hertabase';
-  return path.join(workspaceRoot, 'target', 'release', name);
+  return path.join(workspaceRoot, 'target', profile, name);
 }
 
 async function waitForReady(url: string, output: () => string): Promise<void> {

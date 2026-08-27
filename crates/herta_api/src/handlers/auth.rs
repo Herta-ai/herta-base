@@ -192,12 +192,12 @@ pub async fn identity(req: &Request, state: &ApiState) -> HbResult<AuthIdentity>
     let Some(header) = req.headers().get("authorization") else {
         return Ok(AuthIdentity::Anonymous);
     };
-    let header = header.to_str().map_err(|_| HbError::AuthRequired)?;
+    let header = header.to_str().map_err(|_| HbError::Unauthorized)?;
     let Some(token) = header.strip_prefix("Bearer ") else {
-        return Err(HbError::AuthRequired);
+        return Err(HbError::Unauthorized);
     };
     if token.is_empty() || token.contains(char::is_whitespace) {
-        return Err(HbError::AuthRequired);
+        return Err(HbError::Unauthorized);
     }
     state.auth.authenticate(token).await
 }

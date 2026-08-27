@@ -328,7 +328,7 @@ impl AuthService {
         let mut accounts: Vec<Value> = response.take(0).map_err(database_error)?;
         let Some(account) = accounts.pop() else {
             delay_failed_login(0).await;
-            return Err(HbError::AuthRequired);
+            return Err(HbError::Unauthorized);
         };
         let locked_until = account
             .get("locked_until")
@@ -356,7 +356,7 @@ impl AuthService {
             return if lock.is_some() {
                 Err(HbError::AccountLocked)
             } else {
-                Err(HbError::AuthRequired)
+                Err(HbError::Unauthorized)
             };
         }
         self.update_login_state(table, record_id(&account)?, 0, None)
@@ -380,7 +380,7 @@ impl AuthService {
         if claims.admin != expected_admin
             || expected_collection.is_some_and(|collection| claims.collection != collection)
         {
-            return Err(HbError::AuthRequired);
+            return Err(HbError::Unauthorized);
         }
         let hash = token_hash(refresh_token);
         let mut response = self
@@ -402,16 +402,16 @@ impl AuthService {
         let updated: Vec<Value> = response.take(0).map_err(database_error)?;
         if updated.iter().all(Value::is_null) {
             self.revoke_family(&claims).await?;
-            return Err(HbError::AuthRequired);
+            return Err(HbError::Unauthorized);
         }
         let account = self.load_account(&claims).await?;
         let current_key = account
             .get("token_key")
             .and_then(Value::as_str)
-            .ok_or(HbError::AuthRequired)?
+            .ok_or(HbError::Unauthorized)?
             .to_owned();
         if current_key != claims.token_key {
-            return Err(HbError::AuthRequired);
+            return Err(HbError::Unauthorized);
         }
         let user = user_from_value(&claims.collection, claims.admin, account)?;
         self.issue_pair(&user, &current_key, claims.family).await
@@ -425,7 +425,7 @@ impl AuthService {
         let claims = self.decode_token(token, "access")?;
         let account = self.load_account(&claims).await?;
         if account.get("token_key").and_then(Value::as_str) != Some(claims.token_key.as_str()) {
-            return Err(HbError::AuthRequired);
+            return Err(HbError::Unauthorized);
         }
         let id = full_record_id(&account)?;
         let expires_at = claims.exp;
@@ -519,11 +519,11 @@ impl AuthService {
             decode::<FileTokenClaims>(token, &DecodingKey::from_secret(&self.secret), &validation)
                 .map_err(|error| match error.kind() {
                     ErrorKind::ExpiredSignature => HbError::TokenExpired,
-                    _ => HbError::AuthRequired,
+                    _ => HbError::Unauthorized,
                 })?
                 .claims;
         if claims.typ != "file" {
-            return Err(HbError::AuthRequired);
+            return Err(HbError::Unauthorized);
         }
         let account_claims = TokenClaims {
             sub: claims.sub,
@@ -540,7 +540,7 @@ impl AuthService {
         };
         let account = self.load_account(&account_claims).await?;
         if account.get("token_key").and_then(Value::as_str) != Some(claims.token_key.as_str()) {
-            return Err(HbError::AuthRequired);
+            return Err(HbError::Unauthorized);
         }
         Ok(FileTokenScope {
             collection: claims.collection,
@@ -650,10 +650,10 @@ impl AuthService {
             decode::<TokenClaims>(token, &DecodingKey::from_secret(&self.secret), &validation)
                 .map_err(|error| match error.kind() {
                     ErrorKind::ExpiredSignature => HbError::TokenExpired,
-                    _ => HbError::AuthRequired,
+                    _ => HbError::Unauthorized,
                 })?;
         if decoded.claims.typ != expected_type {
-            return Err(HbError::AuthRequired);
+            return Err(HbError::Unauthorized);
         }
         Ok(decoded.claims)
     }
@@ -676,9 +676,9 @@ impl AuthService {
             .check()
             .map_err(database_error)?;
         let records: Vec<Value> = response.take(0).map_err(database_error)?;
-        let account = records.into_iter().next().ok_or(HbError::AuthRequired)?;
+        let account = records.into_iter().next().ok_or(HbError::Unauthorized)?;
         if full_record_id(&account)? != claims.sub {
-            return Err(HbError::AuthRequired);
+            return Err(HbError::Unauthorized);
         }
         Ok(account)
     }
@@ -706,7 +706,7 @@ impl AuthService {
     }
 
     async fn revoke_family(&self, claims: &TokenClaims) -> HbResult<()> {
-        let family = claims.family.as_deref().ok_or(HbError::AuthRequired)?;
+        let family = claims.family.as_deref().ok_or(HbError::Unauthorized)?;
         let new_key = Uuid::now_v7().to_string();
         let table = if claims.admin {
             "_admins"
@@ -1066,7 +1066,7 @@ mod tests {
             .unwrap();
         assert!(matches!(
             service.verify_file_token(&token.token).await,
-            Err(HbError::AuthRequired)
+            Err(HbError::Unauthorized)
         ));
     }
 

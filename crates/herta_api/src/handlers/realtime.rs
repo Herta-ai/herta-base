@@ -73,12 +73,12 @@ pub async fn subscribe(
 
 async fn authenticate(req: &Request, state: &ApiState) -> HbResult<(AuthIdentity, Option<u64>)> {
     let token = if let Some(header) = req.headers().get("authorization") {
-        let header = header.to_str().map_err(|_| HbError::AuthRequired)?;
+        let header = header.to_str().map_err(|_| HbError::Unauthorized)?;
         Some(
             header
                 .strip_prefix("Bearer ")
                 .filter(|token| !token.is_empty() && !token.contains(char::is_whitespace))
-                .ok_or(HbError::AuthRequired)?
+                .ok_or(HbError::Unauthorized)?
                 .to_owned(),
         )
     } else {

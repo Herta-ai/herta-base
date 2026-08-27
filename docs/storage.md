@@ -72,6 +72,9 @@ PATCH 规则：
 - `null` 或 `[]`：清空该字段，并按单值/数组类型归一化。
 - 上传一个或多个同字段 part：整体替换旧值。
 - 上传和清空标记同时出现时，上传值优先。
+- `PATCH ...?appendFiles=attachments,images`：仅对列出的多文件字段追加；旧引用在前，新引用在后，组合数量仍不能超过 `maxSelect`。未列出的字段继续整体替换。
+- `appendFiles` 拒绝未知、重复、非文件、单文件或本次没有上传 part 的字段；同一字段不能在一次请求中同时清空和追加。
+- 扩展名不在 `extensions` 白名单时返回 `400 HB_VALIDATION_ERROR`；声明/推断 MIME 不匹配仍返回 `415 HB_UNSUPPORTED_MEDIA_TYPE`。
 
 ## 4. 文件令牌与下载
 

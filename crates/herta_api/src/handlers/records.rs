@@ -150,12 +150,12 @@ fn path(req: &Request, name: &str) -> Result<String, ApiFailure> {
 fn normalize_record_id(collection: &str, value: &str) -> herta_core::HbResult<String> {
     let key = match value.split_once(':') {
         Some((table, key)) if table == collection => key,
-        Some(_) => return Err(herta_core::HbError::NotFound),
+        Some(_) => return Err(herta_core::HbError::RecordNotFound),
         None => value,
     };
     normalize_record_key(key)
         .map(str::to_owned)
-        .ok_or(herta_core::HbError::NotFound)
+        .ok_or(herta_core::HbError::RecordNotFound)
 }
 
 fn normalize_record_key(value: &str) -> Option<&str> {
@@ -202,7 +202,7 @@ async fn create_multipart(
     reject_file_references(&schema, &data)?;
     normalize_file_clears(&schema, &mut data);
     let uploads = collect_uploads(form, &schema, state.config.storage.max_file_size)?;
-    apply_uploaded_references(&mut data, &schema.fields, &uploads)?;
+    apply_uploaded_references(&mut data, &schema.fields, &uploads, None, &HashSet::new())?;
     let context = rule_context(identity, data.clone());
     RecordManager::new(&state.db)
         .preflight_create_authorized(collection, data.clone(), &context)
@@ -235,6 +235,7 @@ async fn update_multipart(
     id: &str,
     identity: &herta_auth::AuthIdentity,
 ) -> Result<Value, ApiFailure> {
+    let append_files = req.query::<String>("appendFiles");
     let form = req
         .form_data_max_size(state.config.server.max_body_size)
         .await
@@ -247,17 +248,31 @@ async fn update_multipart(
     reject_file_references(&schema, &data)?;
     normalize_file_clears(&schema, &mut data);
     let uploads = collect_uploads(form, &schema, state.config.storage.max_file_size)?;
-    apply_uploaded_references(&mut data, &schema.fields, &uploads)?;
+    let append_fields =
+        validate_append_fields(append_files.as_deref(), &schema.fields, &uploads, &data)?;
+    let visible_context = rule_context(identity, Value::Null);
+    let old_record = manager
+        .get_authorized(collection, id, None, &visible_context)
+        .await?;
+    apply_uploaded_references(
+        &mut data,
+        &schema.fields,
+        &uploads,
+        Some(&old_record),
+        &append_fields,
+    )?;
     let context = rule_context(identity, data.clone());
     manager
         .preflight_update_authorized(collection, id, data.clone(), &context)
         .await?;
-    let old_record = manager.get(collection, id, None).await?;
     let replaced_fields: HashSet<String> = data
         .as_object()
         .into_iter()
         .flat_map(|object| object.keys())
         .filter(|name| {
+            if append_fields.contains(*name) {
+                return false;
+            }
             schema
                 .fields
                 .iter()
@@ -396,9 +411,10 @@ fn validate_upload_part(
             })
         })
     {
-        return Err(ApiFailure(herta_core::HbError::UnsupportedMediaType(
-            format!("file extension is not allowed for field '{}'", field.name),
-        )));
+        return Err(ApiFailure(herta_core::HbError::validation(format!(
+            "file extension is not allowed for field '{}'",
+            field.name
+        ))));
     }
     if let Some(mime_types) = field
         .options
@@ -450,6 +466,8 @@ fn apply_uploaded_references(
     data: &mut Value,
     fields: &[FieldDef],
     uploads: &[UploadPart],
+    old_record: Option<&Value>,
+    append_fields: &HashSet<String>,
 ) -> Result<(), ApiFailure> {
     let object = data.as_object_mut().ok_or_else(|| {
         ApiFailure(herta_core::HbError::validation(
@@ -469,20 +487,93 @@ fn apply_uploaded_references(
             .find(|candidate| candidate.name == field)
             .expect("uploads were schema checked");
         if file_is_many(definition.options.as_ref()) {
-            object.insert(
-                field.into(),
-                Value::Array(
-                    references
-                        .into_iter()
-                        .map(|value| Value::String(value.into()))
-                        .collect(),
-                ),
+            let mut values = if append_fields.contains(field) {
+                old_record
+                    .and_then(|record| record.get(field))
+                    .map(file_names)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|value| Value::String(value.into()))
+                    .collect::<Vec<_>>()
+            } else {
+                Vec::new()
+            };
+            values.extend(
+                references
+                    .into_iter()
+                    .map(|value| Value::String(value.into())),
             );
+            let max_select = herta_db::validation::file_max_select(definition);
+            if values.len() > max_select {
+                return Err(ApiFailure(herta_core::HbError::validation(format!(
+                    "file field '{field}' allows at most {max_select} file(s)"
+                ))));
+            }
+            object.insert(field.into(), Value::Array(values));
         } else {
             object.insert(field.into(), Value::String(references[0].into()));
         }
     }
     Ok(())
+}
+
+fn validate_append_fields(
+    input: Option<&str>,
+    fields: &[FieldDef],
+    uploads: &[UploadPart],
+    data: &Value,
+) -> Result<HashSet<String>, ApiFailure> {
+    let Some(input) = input else {
+        return Ok(HashSet::new());
+    };
+    if input.is_empty() {
+        return Err(ApiFailure(herta_core::HbError::validation(
+            "appendFiles must list at least one field",
+        )));
+    }
+
+    let mut append = HashSet::new();
+    for name in input.split(',') {
+        if name.is_empty() || name.trim() != name {
+            return Err(ApiFailure(herta_core::HbError::validation(
+                "appendFiles must be a comma-separated list of field names",
+            )));
+        }
+        if !append.insert(name.to_owned()) {
+            return Err(ApiFailure(herta_core::HbError::validation(format!(
+                "appendFiles contains duplicate field '{name}'"
+            ))));
+        }
+        let field = fields
+            .iter()
+            .find(|field| field.name == name)
+            .ok_or_else(|| {
+                ApiFailure(herta_core::HbError::validation(format!(
+                    "appendFiles references unknown field '{name}'"
+                )))
+            })?;
+        if field.field_type != FieldType::File {
+            return Err(ApiFailure(herta_core::HbError::validation(format!(
+                "appendFiles field '{name}' is not a file field"
+            ))));
+        }
+        if !file_is_many(field.options.as_ref()) {
+            return Err(ApiFailure(herta_core::HbError::validation(format!(
+                "appendFiles field '{name}' does not accept multiple files"
+            ))));
+        }
+        if !uploads.iter().any(|upload| upload.field == name) {
+            return Err(ApiFailure(herta_core::HbError::validation(format!(
+                "appendFiles field '{name}' has no uploaded files"
+            ))));
+        }
+        if data.get(name).is_some() {
+            return Err(ApiFailure(herta_core::HbError::validation(format!(
+                "file field '{name}' cannot be cleared and appended in the same request"
+            ))));
+        }
+    }
+    Ok(append)
 }
 
 async fn prepare_json_body(

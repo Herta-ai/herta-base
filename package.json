@@ -21,7 +21,10 @@
     "fmt:check:ui": "pnpm --filter @hb/admin-ui fmt:check",
     "fmt:check:server": "cargo fmt --all -- --check",
     "test:rust": "cargo test --workspace",
-    "test:integration": "pnpm --filter blog-demo-integration test",
+    "test:integration": "pnpm --filter blog-demo-integration test && pnpm --filter kanban-demo-integration test",
+    "test:integration:blog": "pnpm --filter blog-demo-integration test",
+    "test:integration:kanban": "pnpm --filter kanban-demo-integration test",
+    "test:integration:kanban:release": "pnpm --filter kanban-demo-integration test:release",
     "test": "pnpm test:rust && pnpm test:integration"
   },
   "devDependencies": {

@@ -185,7 +185,7 @@ describe.sequential('blog contract integration', () => {
     expect((success(bare, 200) as any).id).toBe(publicPostId);
 
     const wrongCollection = await author1.get(`/api/collections/blog_posts/records/${encodeURIComponent(`other:${key}`)}`);
-    failure(wrongCollection, 404, 'HB_NOT_FOUND');
+    failure(wrongCollection, 404, 'HB_RECORD_NOT_FOUND');
 
     for (const relation of ['author1', 'blog_users:', 'not a record', 'other:abc']) {
       const invalid = await author1.post('/api/collections/blog_posts/records', {
@@ -204,7 +204,7 @@ describe.sequential('blog contract integration', () => {
     expect((paged(author2Posts, 200, 1) as any[]).map((post) => post.id)).toEqual([publicPostId]);
 
     const outsiderGet = await author2.get(`/api/collections/blog_posts/records/${encodeURIComponent(privatePostId)}`);
-    failure(outsiderGet, 404, 'HB_NOT_FOUND');
+    failure(outsiderGet, 404, 'HB_RECORD_NOT_FOUND');
     const transfer = await author1.patch(`/api/collections/blog_posts/records/${encodeURIComponent(publicPostId)}`, { author: author2Id });
     failure(transfer, 403, 'HB_FORBIDDEN');
     const update = await author2.patch(`/api/collections/blog_posts/records/${encodeURIComponent(publicPostId)}`, { content: 'hacked' });
@@ -251,7 +251,7 @@ describe.sequential('blog contract integration', () => {
     const commentAuthorView = await author2.get(`/api/collections/blog_comments/records/${encodeURIComponent(attributedPrivateCommentId)}`);
     expect((success(commentAuthorView, 200) as any).id).toBe(attributedPrivateCommentId);
     const anonymousView = await anonymous.get(`/api/collections/blog_comments/records/${encodeURIComponent(attributedPrivateCommentId)}`);
-    failure(anonymousView, 404, 'HB_NOT_FOUND');
+    failure(anonymousView, 404, 'HB_RECORD_NOT_FOUND');
     const adminUpdate = await admin.patch(`/api/collections/blog_posts/records/${encodeURIComponent(publicPostId)}`, { author: author2Id, title: 'Moderated' });
     const updated = success(adminUpdate, 200) as any;
     expect(updated.author).toBe(author2Id);
@@ -263,11 +263,11 @@ describe.sequential('blog contract integration', () => {
     const deletePost = await author1.delete(`/api/collections/blog_posts/records/${encodeURIComponent(privatePostId)}`);
     success(deletePost, 200);
     const getDeleted = await author1.get(`/api/collections/blog_posts/records/${encodeURIComponent(privatePostId)}`);
-    failure(getDeleted, 404, 'HB_NOT_FOUND');
+    failure(getDeleted, 404, 'HB_RECORD_NOT_FOUND');
     const deleteAgain = await author1.delete(`/api/collections/blog_posts/records/${encodeURIComponent(privatePostId)}`);
-    failure(deleteAgain, 403, 'HB_FORBIDDEN');
+    failure(deleteAgain, 404, 'HB_RECORD_NOT_FOUND');
     const patch = await author1.patch(`/api/collections/blog_posts/records/${encodeURIComponent(privatePostId)}`, { content: 'too late' });
-    failure(patch, 403, 'HB_FORBIDDEN');
+    failure(patch, 404, 'HB_RECORD_NOT_FOUND');
     const list = await author1.get('/api/collections/blog_posts/records');
     expect((paged(list, 200, 1) as any[]).map((post) => post.id)).toEqual([publicPostId]);
   });

@@ -1,7 +1,7 @@
 {
-  "name": "blog-demo-integration",
+  "name": "kanban-demo-integration",
   "version": "1.0.0",
-  "description": "Integration tests for blog scenario",
+  "description": "Integration tests for the collaborative Kanban scenario",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,7 +11,6 @@
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
-    "axios": "^1.19.0",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   }

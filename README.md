@@ -154,15 +154,17 @@ hertabase/
 
 ## 🧪 测试
 
-Rust 测试只需要 Rust/Cargo。博客进程级集成测试还需要 Node.js 20+ 和 pnpm：它会先构建 release `hertabase`，动态选择端口启动内存数据库，并在测试结束时清理进程树。
+Rust 测试只需要 Rust/Cargo。Blog 与 Kanban 进程级集成测试还需要 Node.js 20+ 和 pnpm：开发测试默认构建 debug `hertabase`，动态选择端口启动隔离的内存数据库，并在测试结束时清理进程树。涉及 Rust 改动时，可在 debug 全部通过后单独运行一次 Kanban release 验证。
 
 ```bash
 pnpm test:rust
 pnpm test:integration
+pnpm test:integration:kanban
+pnpm test:integration:kanban:release
 pnpm test
 ```
 
-详细场景和运行约束见 [`packages/integration-tests/blog-demo/README.md`](packages/integration-tests/blog-demo/README.md)。
+详细场景和运行约束见 [`packages/integration-tests/blog-demo/README.md`](packages/integration-tests/blog-demo/README.md) 与 [`packages/integration-tests/kanban-demo/README.md`](packages/integration-tests/kanban-demo/README.md)。
 
 ---
 

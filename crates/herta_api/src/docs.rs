@@ -482,6 +482,11 @@ fn add_collection_paths(paths: &mut Map<String, Value>, collection: &CollectionD
             "patch": {
                 "summary": format!("Update a {} record", collection.name),
                 "security": [{}, {"bearerAuth": []}],
+                "parameters": [{
+                    "name": "appendFiles", "in": "query", "required": false,
+                    "description": "Comma-separated multi-file fields to append instead of replace",
+                    "schema": {"type": "string"}
+                }],
                 "requestBody": record_body(collection, &update, false),
                 "responses": success_response(&envelope_name)
             },
@@ -781,6 +786,10 @@ mod tests {
         };
         let document = generate_document(&[collection]);
         assert!(document["paths"]["/api/collections/posts/records"].is_object());
+        assert_eq!(
+            document["paths"]["/api/collections/posts/records/{id}"]["patch"]["parameters"][0]["name"],
+            "appendFiles"
+        );
         assert!(document["paths"]["/api/admin/logs"].is_object());
         assert_eq!(
             document["components"]["schemas"]["postsCreate"]["required"][0],

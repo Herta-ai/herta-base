@@ -57,7 +57,7 @@ impl<'a> RecordManager<'a> {
         let compiled_filter = params
             .filter
             .as_deref()
-            .map(|filter| compile_filter(filter, &allowed_fields))
+            .map(|filter| compile_filter(filter, &schema))
             .transpose()?;
         if let Some(filter) = &compiled_filter {
             where_sql.push_str(" AND (");
@@ -140,10 +140,10 @@ impl<'a> RecordManager<'a> {
         let mut record = records
             .into_iter()
             .find(|record| !record.is_null())
-            .ok_or(HbError::NotFound)?;
+            .ok_or(HbError::RecordNotFound)?;
         normalize_value(&mut record);
         if !record.get("deleted_at").is_none_or(Value::is_null) {
-            return Err(HbError::NotFound);
+            return Err(HbError::RecordNotFound);
         }
         sanitize_record(&schema, &mut record);
         if let Some(expand) = expand {
@@ -217,6 +217,7 @@ impl<'a> RecordManager<'a> {
         let schema = SchemaManager::new(self.db)
             .get_collection(collection)
             .await?;
+        self.ensure_record_visible(&schema, id, context).await?;
         validate_record(&schema, &mut data, false)?;
         let rule = compile_rule(&schema.rules.update, context, true)?;
         let mut value = self
@@ -236,6 +237,7 @@ impl<'a> RecordManager<'a> {
         let schema = SchemaManager::new(self.db)
             .get_collection(collection)
             .await?;
+        self.ensure_record_visible(&schema, id, context).await?;
         validate_record(&schema, &mut data, false)?;
         if data.as_object().is_none_or(Map::is_empty) {
             return Err(HbError::validation("update body cannot be empty"));
@@ -372,6 +374,7 @@ impl<'a> RecordManager<'a> {
         let schema = SchemaManager::new(self.db)
             .get_collection(collection)
             .await?;
+        self.ensure_record_visible(&schema, id, context).await?;
         let rule = compile_rule(&schema.rules.delete, context, true)?;
         let mut response = self
             .db
@@ -395,6 +398,35 @@ impl<'a> RecordManager<'a> {
             .into_iter()
             .find(|record| !record.is_null())
             .ok_or(HbError::Forbidden)
+    }
+
+    async fn ensure_record_visible(
+        &self,
+        schema: &CollectionDef,
+        id: &str,
+        context: &RuleContext,
+    ) -> HbResult<()> {
+        let rule = compile_rule(&schema.rules.view, context, true)?;
+        let mut response = self
+            .db
+            .inner()
+            .query(format!(
+                "SELECT id FROM ONLY $record WHERE deleted_at IS NONE AND ({rule})"
+            ))
+            .bind(("record", route_record_id(&schema.name, id)?))
+            .bind(("hb_auth", context.auth.clone()))
+            .bind(("hb_auth_record", context.auth_record.clone()))
+            .bind(("hb_request", json_request(&context.request_body)))
+            .await
+            .map_err(database_error)?
+            .check()
+            .map_err(database_error)?;
+        let records: Vec<Value> = response.take(0).map_err(database_error)?;
+        if records.iter().any(|record| !record.is_null()) {
+            Ok(())
+        } else {
+            Err(HbError::RecordNotFound)
+        }
     }
 
     async fn expand_records(
@@ -814,7 +846,7 @@ fn route_record_id(collection: &str, value: &str) -> HbResult<RecordId> {
         .split_once(':')
         .map_or((collection, value), |parts| parts);
     if table != collection {
-        return Err(HbError::NotFound);
+        return Err(HbError::RecordNotFound);
     }
     let key = key
         .strip_prefix('`')
@@ -826,7 +858,7 @@ fn route_record_id(collection: &str, value: &str) -> HbResult<RecordId> {
             .chars()
             .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
     {
-        return Err(HbError::NotFound);
+        return Err(HbError::RecordNotFound);
     }
     Ok(record_id(collection, key))
 }

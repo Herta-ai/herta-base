@@ -24,7 +24,7 @@
 ## 2. Admin API
 
 网页项目仅能由管理员通过 Admin API 管理，Admin UI 使用同一组接口。普通用户凭据返回
-`403 HB_FORBIDDEN`，缺少或无效的管理员凭据返回 `401 HB_AUTH_REQUIRED`。
+`403 HB_FORBIDDEN`；缺少管理员凭据返回 `401 HB_AUTH_REQUIRED`，已提供但无效的凭据返回 `401 HB_UNAUTHORIZED`。
 
 目标接口如下：
 

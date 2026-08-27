@@ -62,6 +62,7 @@
   - `assignees` (`array<relation<kb_users>>`)
   - `attachments` (`file`, `maxSelect: 5`, `extensions: ["png", "jpg", "pdf", "zip"]`)
   - `order` (`number`, 泳道内排序权重)
+  - `is_private` (`bool`, required)
 - **`kb_comments`** (`type: "base"`): 任务评论，含 `task` (`relation<kb_tasks>`), `author` (`relation<kb_users>`), `content` (`text`)。
 
 #### 3. 核心测试能力
@@ -75,17 +76,17 @@
 
 #### 4. 边缘用例与异常覆盖
 
-- [ ] 非工作区成员尝试通过 ID 探测查看私有任务，断言返回 `404 HB_RECORD_NOT_FOUND` 或 `403 HB_FORBIDDEN`。
-- [ ] 跨工作区关联任务（`task.workspace` 指向无权限的工作区），断言创建失败。
-- [ ] 订阅 SSE 时使用非法/过期 JWT 或越权 filter，断言返回 `401 HB_UNAUTHORIZED` / `403 HB_FORBIDDEN`。
-- [ ] 上传超过 5 个文件或非法扩展名（如 `.exe`），断言返回 `400 HB_VALIDATION_ERROR`。
+- [x] 非工作区成员尝试通过 ID 探测查看私有任务，断言返回 `404 HB_RECORD_NOT_FOUND` 或 `403 HB_FORBIDDEN`。
+- [x] 跨工作区关联任务（`task.workspace` 指向无权限的工作区），断言创建失败。
+- [x] 订阅 SSE 时使用非法/过期 JWT 或越权 filter，断言返回 `401 HB_UNAUTHORIZED` / `403 HB_FORBIDDEN`。
+- [x] 上传超过 5 个文件或非法扩展名（如 `.exe`），断言返回 `400 HB_VALIDATION_ERROR`。
 
 #### 5. 实施 TODO
 
-- [ ] 创建 `packages/integration-tests/kanban-demo/` 目录与配置
-- [ ] 编写测试服务端生命周期及工作区初始化脚本
-- [ ] 编写多用户同屏拖拽与 SSE 实时同步断言用例
-- [ ] 编写附件上传、更新与下载 Token 校验用例
+- [x] 创建 `packages/integration-tests/kanban-demo/` 目录与配置
+- [x] 编写测试服务端生命周期及工作区初始化脚本
+- [x] 编写多用户同屏拖拽与 SSE 实时同步断言用例
+- [x] 编写附件上传、更新与下载 Token 校验用例
 
 ---
 
@@ -339,7 +340,7 @@ packages/integration-tests/
 ## 📅 五、 阶段实施进度追踪
 
 - [x] **Demo 00: Blog Demo**（已完成基础 CRUD、Auth、简单 Relation 校验）
-- [ ] **Demo 01: Kanban Demo**（设计完成，待创建测试套件）
+- [x] **Demo 01: Kanban Demo**（已完成权限、关系展开、SSE、附件与错误场景集成测试）
 - [ ] **Demo 02: E-Commerce Demo**（设计完成，待创建测试套件）
 - [ ] **Demo 03: Chat Realtime Demo**（设计完成，待创建测试套件）
 - [ ] **Demo 04: LMS Media Demo**（设计完成，待创建测试套件）

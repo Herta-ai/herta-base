@@ -574,7 +574,7 @@ async fn collection_record_and_openapi_flow() {
     .await;
     assert_eq!(response.status_code, Some(StatusCode::NOT_FOUND));
     let body: Value = response.take_json().await.unwrap();
-    assert_eq!(body["error"]["error"], "HB_NOT_FOUND");
+    assert_eq!(body["error"]["error"], "HB_RECORD_NOT_FOUND");
 
     let mut response = TestClient::patch(format!(
         "http://localhost/api/collections/posts/records/{full_id}"
@@ -615,9 +615,9 @@ async fn collection_record_and_openapi_flow() {
             .send(&service)
             .await,
     ] {
-        assert_eq!(response.status_code, Some(StatusCode::FORBIDDEN));
+        assert_eq!(response.status_code, Some(StatusCode::NOT_FOUND));
         let body: Value = response.take_json().await.unwrap();
-        assert_eq!(body["error"]["error"], "HB_FORBIDDEN");
+        assert_eq!(body["error"]["error"], "HB_RECORD_NOT_FOUND");
     }
     let mut response = TestClient::get(&record_url)
         .bearer_auth(&admin)
@@ -625,7 +625,7 @@ async fn collection_record_and_openapi_flow() {
         .await;
     assert_eq!(response.status_code, Some(StatusCode::NOT_FOUND));
     let body: Value = response.take_json().await.unwrap();
-    assert_eq!(body["error"]["error"], "HB_NOT_FOUND");
+    assert_eq!(body["error"]["error"], "HB_RECORD_NOT_FOUND");
     let mut response = TestClient::get("http://localhost/api/collections/posts/records")
         .bearer_auth(&admin)
         .send(&service)
@@ -665,7 +665,7 @@ async fn record_file_upload_token_download_replace_and_clear_flow() {
                     "mimeTypes": ["text/plain"], "extensions": ["txt"]
                 }},
                 {"name": "attachments", "type": "file", "options": {
-                    "maxSelect": 2, "mimeTypes": ["text/plain"], "extensions": ["txt"]
+                    "maxSelect": 3, "mimeTypes": ["text/plain"], "extensions": ["txt"]
                 }}
             ],
             "indexes": []
@@ -693,7 +693,6 @@ async fn record_file_upload_token_download_replace_and_clear_flow() {
         &[
             ("avatar", "hello.txt", "text/plain", "hello world"),
             ("attachments", "one.txt", "text/plain", "first"),
-            ("attachments", "two.txt", "text/plain", "second"),
         ],
     );
     let mut response = TestClient::post("http://localhost/api/collections/assets/records")
@@ -709,7 +708,11 @@ async fn record_file_upload_token_download_replace_and_clear_flow() {
     let raw_id = record_id.split_once(':').unwrap().1;
     let avatar = created["data"]["avatar"].as_str().unwrap().to_owned();
     assert!(avatar.ends_with(".txt"));
-    assert_eq!(created["data"]["attachments"].as_array().unwrap().len(), 2);
+    let first_attachment = created["data"]["attachments"][0]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(created["data"]["attachments"].as_array().unwrap().len(), 1);
 
     let mut openapi = TestClient::get("http://localhost/api-doc/openapi.json")
         .send(&service)
@@ -808,6 +811,86 @@ async fn record_file_upload_token_download_replace_and_clear_flow() {
         .await;
     assert_eq!(response.status_code, Some(StatusCode::UNAUTHORIZED));
     let _: Value = response.take_json().await.unwrap();
+
+    let (body, content_type) =
+        multipart_body(None, &[("attachments", "two.txt", "text/plain", "second")]);
+    let mut response = TestClient::patch(format!(
+        "http://localhost/api/collections/assets/records/{raw_id}?appendFiles=attachments"
+    ))
+    .bearer_auth(&admin)
+    .add_header("content-type", content_type, true)
+    .body(body)
+    .send(&service)
+    .await;
+    let status = response.status_code;
+    let appended: Value = response.take_json().await.unwrap();
+    assert_eq!(status, Some(StatusCode::OK), "{appended}");
+    let attachments = appended["data"]["attachments"].as_array().unwrap();
+    assert_eq!(attachments.len(), 2);
+    assert_eq!(attachments[0], first_attachment);
+
+    let (body, content_type) = multipart_body(
+        None,
+        &[
+            ("attachments", "three.txt", "text/plain", "third"),
+            ("attachments", "four.txt", "text/plain", "fourth"),
+        ],
+    );
+    let mut response = TestClient::patch(format!(
+        "http://localhost/api/collections/assets/records/{raw_id}?appendFiles=attachments"
+    ))
+    .bearer_auth(&admin)
+    .add_header("content-type", content_type, true)
+    .body(body)
+    .send(&service)
+    .await;
+    assert_eq!(response.status_code, Some(StatusCode::BAD_REQUEST));
+    let body: Value = response.take_json().await.unwrap();
+    assert_eq!(body["error"]["error"], "HB_VALIDATION_ERROR");
+
+    let (body, content_type) = multipart_body(
+        Some(r#"{"attachments":[]}"#),
+        &[("attachments", "three.txt", "text/plain", "third")],
+    );
+    let mut response = TestClient::patch(format!(
+        "http://localhost/api/collections/assets/records/{raw_id}?appendFiles=attachments"
+    ))
+    .bearer_auth(&admin)
+    .add_header("content-type", content_type, true)
+    .body(body)
+    .send(&service)
+    .await;
+    assert_eq!(response.status_code, Some(StatusCode::BAD_REQUEST));
+    let _: Value = response.take_json().await.unwrap();
+
+    let (body, content_type) =
+        multipart_body(None, &[("avatar", "single.txt", "text/plain", "single")]);
+    let mut response = TestClient::patch(format!(
+        "http://localhost/api/collections/assets/records/{raw_id}?appendFiles=avatar"
+    ))
+    .bearer_auth(&admin)
+    .add_header("content-type", content_type, true)
+    .body(body)
+    .send(&service)
+    .await;
+    assert_eq!(response.status_code, Some(StatusCode::BAD_REQUEST));
+    let _: Value = response.take_json().await.unwrap();
+
+    let (body, content_type) = multipart_body(
+        None,
+        &[("attachments", "blocked.exe", "text/plain", "blocked")],
+    );
+    let mut response = TestClient::patch(format!(
+        "http://localhost/api/collections/assets/records/{raw_id}"
+    ))
+    .bearer_auth(&admin)
+    .add_header("content-type", content_type, true)
+    .body(body)
+    .send(&service)
+    .await;
+    assert_eq!(response.status_code, Some(StatusCode::BAD_REQUEST));
+    let body: Value = response.take_json().await.unwrap();
+    assert_eq!(body["error"]["error"], "HB_VALIDATION_ERROR");
 
     let (body, content_type) = multipart_body(
         None,
@@ -1083,7 +1166,7 @@ async fn realtime_sse_preflight_authentication_and_connected_frame() {
     .await;
     assert_eq!(response.status_code, Some(StatusCode::UNAUTHORIZED));
     let body: Value = response.take_json().await.unwrap();
-    assert_eq!(body["error"]["error"], "HB_AUTH_REQUIRED");
+    assert_eq!(body["error"]["error"], "HB_UNAUTHORIZED");
 
     let mut response =
         TestClient::get("http://localhost/api/realtime/public_posts?filter=unknown%20%3D%201")

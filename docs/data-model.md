@@ -39,7 +39,7 @@ Phase 3 的 JS 扩展来自 `hb_hooks/`，编译结果和注册表驻留内存�
 
 `options.maxSelect` 默认 `1`；值为 `1` 时存储服务端生成的文件名字符串，大于 `1` 时存储字符串数组，最大为 `100`。`options.maxSize` 限制单文件字节数，`options.mimeTypes` 和 `options.extensions` 分别限制 MIME 与不带点的扩展名。
 
-文件引用不包含目录分隔符，客户端不能通过 JSON 写入非空引用。文件上传使用记录 POST/PATCH 的 multipart 协议；PATCH 缺席保留、`null`/`[]` 清空、同字段上传整体替换。详见 [文件存储与上传](storage.md)。
+文件引用不包含目录分隔符，客户端不能通过 JSON 写入非空引用。文件上传使用记录 POST/PATCH 的 multipart 协议；PATCH 缺席保留、`null`/`[]` 清空、同字段上传整体替换，也可用 `appendFiles` 对多文件字段追加。详见 [文件存储与上传](storage.md)。
 
 ## 4. Schema 模式 (Schema Modes)
 

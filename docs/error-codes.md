@@ -25,7 +25,8 @@
   - `HB_VALIDATION_ERROR` (400) — 请求体数据验证失败。
   - `HB_INVALID_FILTER` (400) — 查询过滤表达式语法无效。
   - `HB_INVALID_SORT` (400) — 排序参数无效。
-  - `HB_AUTH_REQUIRED` (401) — 缺少认证令牌或令牌无效。
+  - `HB_AUTH_REQUIRED` (401) — 请求需要认证，但没有提供认证令牌。
+  - `HB_UNAUTHORIZED` (401) — 已提供的令牌无效、被篡改、已撤销或类型不匹配。
   - `HB_TOKEN_EXPIRED` (401) — JWT 认证令牌已过期。
   - `HB_FORBIDDEN` (403) — API Rule 拒绝该操作。
   - `HB_ACCOUNT_LOCKED` (423) — 连续登录失败达到阈值，账户处于临时锁定状态。
@@ -33,11 +34,12 @@
   - `HB_CAPABILITY_DENIED` (403) — JS 扩展没有使用某项宿主能力的授权。
   - `HB_OUTBOUND_DENIED` (403) — JS HTTP 请求目标未通过出站安全策略。
   - `HB_FILE_ACCESS_DENIED` (403) — JS 文件路径或操作超出沙盒授权范围。
-  - `HB_NOT_FOUND` (404) — 请求的具体记录或目标未找到。
+  - `HB_RECORD_NOT_FOUND` (404) — 记录不存在、已软删除或被 `view` Rule 隐藏。
+  - `HB_NOT_FOUND` (404) — 非记录类目标（例如文件或路由）未找到。
   - `HB_COLLECTION_NOT_FOUND` (404) — 指定的数据集合（Collection）不存在。
   - `HB_CONFLICT` (409) — 唯一性约束冲突。
   - `HB_PAYLOAD_TOO_LARGE` (413) — 上传载荷或请求体超过系统限制。
-  - `HB_UNSUPPORTED_MEDIA_TYPE` (415) — 文件 MIME、扩展名或目标字段不允许。
+  - `HB_UNSUPPORTED_MEDIA_TYPE` (415) — 文件 MIME 不匹配、客户端伪造文件引用或目标不是文件字段。
   - `HB_RANGE_NOT_SATISFIABLE` (416) — 文件 Range 非法、包含多个范围或超出对象长度。
   - `HB_RATE_LIMITED` (429) — 请求过于频繁，触发限流。
 

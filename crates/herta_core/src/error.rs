@@ -16,6 +16,8 @@ pub enum HbError {
     InvalidSort(String),
     #[error("Record not found")]
     NotFound,
+    #[error("Record not found")]
+    RecordNotFound,
     #[error("Collection not found: {0}")]
     CollectionNotFound(String),
     #[error("Conflict: {0}")]
@@ -28,6 +30,8 @@ pub enum HbError {
     RangeNotSatisfiable,
     #[error("Authentication required")]
     AuthRequired,
+    #[error("Authentication failed")]
+    Unauthorized,
     #[error("Authentication token has expired")]
     TokenExpired,
     #[error("Access is forbidden")]
@@ -55,12 +59,12 @@ impl HbError {
     pub fn status_code(&self) -> u16 {
         match self {
             Self::Validation { .. } | Self::InvalidFilter(_) | Self::InvalidSort(_) => 400,
-            Self::NotFound | Self::CollectionNotFound(_) => 404,
+            Self::NotFound | Self::RecordNotFound | Self::CollectionNotFound(_) => 404,
             Self::Conflict(_) => 409,
             Self::PayloadTooLarge => 413,
             Self::UnsupportedMediaType(_) => 415,
             Self::RangeNotSatisfiable => 416,
-            Self::AuthRequired | Self::TokenExpired => 401,
+            Self::AuthRequired | Self::Unauthorized | Self::TokenExpired => 401,
             Self::Forbidden => 403,
             Self::RateLimited => 429,
             Self::AccountLocked => 423,
@@ -74,12 +78,14 @@ impl HbError {
             Self::InvalidFilter(_) => "HB_INVALID_FILTER",
             Self::InvalidSort(_) => "HB_INVALID_SORT",
             Self::NotFound => "HB_NOT_FOUND",
+            Self::RecordNotFound => "HB_RECORD_NOT_FOUND",
             Self::CollectionNotFound(_) => "HB_COLLECTION_NOT_FOUND",
             Self::Conflict(_) => "HB_CONFLICT",
             Self::PayloadTooLarge => "HB_PAYLOAD_TOO_LARGE",
             Self::UnsupportedMediaType(_) => "HB_UNSUPPORTED_MEDIA_TYPE",
             Self::RangeNotSatisfiable => "HB_RANGE_NOT_SATISFIABLE",
             Self::AuthRequired => "HB_AUTH_REQUIRED",
+            Self::Unauthorized => "HB_UNAUTHORIZED",
             Self::TokenExpired => "HB_TOKEN_EXPIRED",
             Self::Forbidden => "HB_FORBIDDEN",
             Self::RateLimited => "HB_RATE_LIMITED",

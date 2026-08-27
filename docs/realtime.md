@@ -23,11 +23,14 @@ Authorization: Bearer <access-token>
 ## 权限与过滤
 
 实时订阅使用集合的 `view` API Rule，而不是 `list` Rule。管理员绕过规则；匿名用户只能
-连接允许公开查看的集合。行级规则和客户端 `filter` 会编译到同一个参数绑定的
-`LIVE SELECT ... WHERE` 中。
+连接允许公开查看的集合。行级规则和客户端 `filter` 会编译到同一个安全查询条件中；relation
+过滤按 schema 使用原生 RecordId 语义。
 
-过滤遵循 SurrealDB 原生 live query 语义：记录更新后不再匹配 `view` 或 `filter` 时，
-服务端不会人为补发 `delete`。Auth 集合事件会移除 `password_hash`、`token_key`、
+带 `filter` 建连时会执行数据驱动的权限预检：若当前存在匹配过滤器的活动记录，但没有任何一条
+通过调用者的 `view` Rule，则返回 `403 HB_FORBIDDEN`；当前没有匹配记录时允许建立面向未来记录的订阅。
+
+服务端以 SurrealDB LIVE SELECT 为快速路径，并以相同 `view` + `filter` 条件的快照检查补齐
+嵌入式引擎运行时可能遗漏的通知。记录更新后不再匹配条件时会发送 `delete`。Auth 集合事件会移除 `password_hash`、`token_key`、
 `failed_attempts` 和 `locked_until`。
 
 ## 事件格式

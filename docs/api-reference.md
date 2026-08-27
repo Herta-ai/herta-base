@@ -113,8 +113,9 @@ HertaBase 采用 RESTful 风格的 API 设计理念，致力于提供清晰、�
 
 ### GET /api/collections/{collection}/records/{id}
 
-- **描述**: 获取单条记录。`{id}` 可使用完整 `collection:key`（URL 编码后传入）或裸 `key`；完整 ID 的集合名不匹配时返回 404。PATCH、DELETE 和文件记录路径使用相同约定。
+- **描述**: 获取单条记录。`{id}` 可使用完整 `collection:key`（URL 编码后传入）或裸 `key`；完整 ID 的集合名不匹配时返回 404 `HB_RECORD_NOT_FOUND`。PATCH、DELETE 和文件记录路径使用相同约定。
 - **所需权限**: 由 API Rules 动态决定
+- **可选查询参数**: `appendFiles=attachments,images` 仅对列出的多文件字段追加本次 multipart 上传；组合数量必须满足 `maxSelect`。
 
 Relation 字段的请求和响应均使用完整 `target:key`。单值 relation 存储为原生 `record<target>`，多值 relation 存储为 `array<record<target>>`；裸 key、空 ID、错误目标集合、畸形 ID、超过 `maxSelect` 的数组和必填空数组返回 400 `HB_VALIDATION_ERROR`。
 
@@ -173,7 +174,7 @@ Relation 字段的请求和响应均使用完整 `target:key`。单值 relation 
 - **Content-Type**: `multipart/form-data`
 - **data part**: 可选的 JSON 对象，承载非文件字段。
 - **file part**: part 名称必须等于 file 字段名；多文件字段重复同名 part。
-- **PATCH**: 缺席保留，`null`/`[]` 清空，新上传整体替换。
+- **PATCH**: 缺席保留，`null`/`[]` 清空，新上传默认整体替换；`appendFiles` 可让指定多文件字段保留旧引用并追加新文件。
 
 JSON CRUD 保持兼容，但 JSON 中的非空 file 字段值返回 415，客户端不能伪造存储引用。
 
@@ -237,7 +238,7 @@ CRUD 和列表接口广泛支持以下参数：
 - `page`: 当前页码（默认 1）。
 - `perPage`: 每页记录数（默认 30）。
 - `sort`: 排序规则，例如 `sort=-created_at,title` （`-` 表示降序）。
-- `filter`: 受限且参数化的 SurrealQL 子集，支持 `=`, `!=`, `>`, `>=`, `<`, `<=`, `IN`, `CONTAINS`、`AND/OR` 和括号，例如 `filter=(status='active' AND score>=10)`。不支持函数、子查询或任意 SurrealQL。
+- `filter`: 受限且参数化的 SurrealQL 子集，支持 `=`, `!=`, `>`, `>=`, `<`, `<=`, `IN`, `CONTAINS`、`AND/OR` 和括号，例如 `filter=(status='active' AND score>=10)`。单值 relation 支持 `=`, `!=`, `IN`，多值 relation 支持 `CONTAINS`；关系 ID 会按字段 schema 绑定为原生 RecordId，并拒绝错误目标集合。不支持函数、子查询或任意 SurrealQL。
 - `expand`: 关联字段的急切加载（Eager Loading），例如 `expand=author,comments.user`。Phase 1 最多 10 条路径、每条最多 3 层，展开内容写入记录的 `expand` 对象并保留原 relation ID。
 
 ## 9. 标准响应格式
@@ -251,7 +252,7 @@ CRUD 和列表接口广泛支持以下参数：
   "error": {           // 请求失败时的错误详情（成功时为 null）
     "code": 404,
     "message": "Record not found",
-    "error": "HB_NOT_FOUND",
+    "error": "HB_RECORD_NOT_FOUND",
     "details": {}
   }
 }

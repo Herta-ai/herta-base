@@ -222,7 +222,7 @@ async fn collection_and_record_lifecycle() {
     assert_eq!(records.get("posts", id, None).await.unwrap()["id"], full_id);
     assert!(matches!(
         records.get("posts", &format!("other:{id}"), None).await,
-        Err(HbError::NotFound)
+        Err(HbError::RecordNotFound)
     ));
 
     let params = ListParams {
@@ -258,17 +258,17 @@ async fn collection_and_record_lifecycle() {
     records.delete("posts", full_id).await.unwrap();
     assert!(matches!(
         records.get("posts", full_id, None).await,
-        Err(HbError::NotFound)
+        Err(HbError::RecordNotFound)
     ));
     assert!(matches!(
         records
             .update("posts", full_id, json!({"summary": "too late"}))
             .await,
-        Err(HbError::Forbidden)
+        Err(HbError::RecordNotFound)
     ));
     assert!(matches!(
         records.delete("posts", full_id).await,
-        Err(HbError::Forbidden)
+        Err(HbError::RecordNotFound)
     ));
     let (remaining, total) = records.list("posts", &ListParams::default()).await.unwrap();
     assert_eq!(total, 0);
@@ -390,7 +390,7 @@ async fn auth_record_rules_cover_owner_crud() {
         records
             .get_authorized("documents", document_id, None, &stranger_context)
             .await,
-        Err(HbError::NotFound)
+        Err(HbError::RecordNotFound)
     ));
     assert!(matches!(
         records
@@ -401,13 +401,13 @@ async fn auth_record_rules_cover_owner_crud() {
                 &stranger_context,
             )
             .await,
-        Err(HbError::Forbidden)
+        Err(HbError::RecordNotFound)
     ));
     assert!(matches!(
         records
             .delete_authorized("documents", document_id, &stranger_context)
             .await,
-        Err(HbError::Forbidden)
+        Err(HbError::RecordNotFound)
     ));
     assert_eq!(
         records
@@ -850,13 +850,11 @@ async fn realtime_maps_record_changes_and_sanitizes_auth_records() {
         .unwrap()
         .check()
         .unwrap();
-    let event = timeout(Duration::from_secs(3), subscription.next())
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap();
-    assert_eq!(event.action, RealtimeAction::Delete);
-    assert_eq!(event.record, json!({"id": id}));
+    assert!(
+        timeout(Duration::from_millis(200), subscription.next())
+            .await
+            .is_err()
+    );
 
     let mut auth = posts_collection();
     auth.name = "members".into();
@@ -891,6 +889,120 @@ async fn realtime_maps_record_changes_and_sanitizes_auth_records() {
     ] {
         assert!(event.record.get(field).is_none());
     }
+}
+
+#[tokio::test]
+async fn realtime_supports_underscored_collection_names() {
+    let db = DbClient::memory().await.unwrap();
+    let mut collection = posts_collection();
+    collection.name = "kb_tasks".into();
+    SchemaManager::new(&db)
+        .create_collection(&collection)
+        .await
+        .unwrap();
+    let admin = RuleContext {
+        admin: true,
+        ..Default::default()
+    };
+    let mut subscription = RealtimeManager::new(&db)
+        .subscribe("kb_tasks", None, &admin)
+        .await
+        .unwrap();
+    RecordManager::new(&db)
+        .create("kb_tasks", json!({"title": "Live", "status": "active"}))
+        .await
+        .unwrap();
+    let event = timeout(Duration::from_secs(3), subscription.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(event.action, RealtimeAction::Create);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn realtime_emits_records_with_relation_fields() {
+    let db = DbClient::memory().await.unwrap();
+    let schema = SchemaManager::new(&db);
+    schema
+        .create_collection(&CollectionDef {
+            name: "kb_users".into(),
+            collection_type: CollectionType::Base,
+            schema_mode: SchemaMode::Strict,
+            fields: vec![FieldDef {
+                name: "name".into(),
+                field_type: FieldType::Text,
+                required: true,
+                options: None,
+            }],
+            indexes: vec![],
+            rules: Default::default(),
+        })
+        .await
+        .unwrap();
+    schema
+        .create_collection(&CollectionDef {
+            name: "kb_tasks".into(),
+            collection_type: CollectionType::Base,
+            schema_mode: SchemaMode::Strict,
+            fields: vec![
+                FieldDef {
+                    name: "title".into(),
+                    field_type: FieldType::Text,
+                    required: true,
+                    options: None,
+                },
+                FieldDef {
+                    name: "assignees".into(),
+                    field_type: FieldType::Relation,
+                    required: false,
+                    options: Some(json!({"collection": "kb_users", "maxSelect": 10})),
+                },
+            ],
+            indexes: vec![],
+            rules: Default::default(),
+        })
+        .await
+        .unwrap();
+    let user = RecordManager::new(&db)
+        .create("kb_users", json!({"name": "User"}))
+        .await
+        .unwrap();
+    let user_id = user["id"].as_str().unwrap().to_owned();
+    RecordManager::new(&db)
+        .create(
+            "kb_tasks",
+            json!({"title": "Existing", "assignees": [&user_id]}),
+        )
+        .await
+        .unwrap();
+    let admin = RuleContext {
+        admin: true,
+        ..Default::default()
+    };
+    let filter = format!("assignees CONTAINS '{user_id}'");
+    let mut subscription = RealtimeManager::new(&db)
+        .subscribe("kb_tasks", Some(&filter), &admin)
+        .await
+        .unwrap();
+    let writer = db.clone();
+    tokio::spawn(async move {
+        RecordManager::new(&writer)
+            .create(
+                "kb_tasks",
+                json!({"title": "Live", "assignees": [&user_id]}),
+            )
+            .await
+            .unwrap();
+    })
+    .await
+    .unwrap();
+    let event = timeout(Duration::from_secs(3), subscription.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(event.action, RealtimeAction::Create);
 }
 
 #[tokio::test]
@@ -941,9 +1053,68 @@ async fn realtime_uses_view_and_filter_native_matching_semantics() {
         .update("posts", key, json!({"status": "draft"}))
         .await
         .unwrap();
+    let event = timeout(Duration::from_secs(1), subscription.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(event.action, RealtimeAction::Delete);
+    assert_eq!(event.record, json!({"id": created["id"]}));
+}
+
+#[tokio::test]
+async fn realtime_filter_preflight_rejects_data_backed_unauthorized_filters() {
+    let db = DbClient::memory().await.unwrap();
+    let mut collection = posts_collection();
+    collection.rules.view = ApiRule::Expression("$record.status = 'active'".into());
+    SchemaManager::new(&db)
+        .create_collection(&collection)
+        .await
+        .unwrap();
+    let records = RecordManager::new(&db);
+    records
+        .create("posts", json!({"title": "secret board", "status": "draft"}))
+        .await
+        .unwrap();
+
+    assert!(matches!(
+        RealtimeManager::new(&db)
+            .subscribe(
+                "posts",
+                Some("title = 'secret board'"),
+                &RuleContext::default(),
+            )
+            .await,
+        Err(HbError::Forbidden)
+    ));
+
     assert!(
-        timeout(Duration::from_millis(150), subscription.next())
+        RealtimeManager::new(&db)
+            .subscribe(
+                "posts",
+                Some("title = 'future board'"),
+                &RuleContext::default(),
+            )
             .await
-            .is_err()
+            .is_ok()
+    );
+
+    records
+        .create("posts", json!({"title": "mixed board", "status": "draft"}))
+        .await
+        .unwrap();
+    records
+        .create("posts", json!({"title": "mixed board", "status": "active"}))
+        .await
+        .unwrap();
+    assert!(
+        RealtimeManager::new(&db)
+            .subscribe(
+                "posts",
+                Some("title = 'mixed board'"),
+                &RuleContext::default(),
+            )
+            .await
+            .is_ok()
     );
 }
