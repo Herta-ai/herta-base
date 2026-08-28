@@ -3,6 +3,9 @@ packages:
   - 'packages/*'
   - 'packages/integration-tests/*'
 
+overrides:
+  expect-type: 1.2.2
+
 allowBuilds:
   core-js: true
 

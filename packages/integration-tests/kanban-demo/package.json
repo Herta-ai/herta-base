@@ -5,11 +5,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "pretest": "pnpm --filter @hb/admin-ui build && cargo build --bin hertabase --manifest-path ../../../Cargo.toml",
+    "pretest": "pnpm --filter @hb/sdk build && pnpm --filter @hb/admin-ui build && cargo build --bin hertabase --manifest-path ../../../Cargo.toml",
     "test": "vitest run",
     "test:release": "pnpm --filter @hb/admin-ui build && cargo build --release --bin hertabase --manifest-path ../../../Cargo.toml && vitest run"
   },
   "devDependencies": {
+    "@hb/sdk": "workspace:*",
     "@types/node": "^26.1.2",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
