@@ -2,7 +2,7 @@
 
 ## HertaBaseClient
 
-```ts
+```text
 new HertaBaseClient(options?: HertaBaseClientOptions)
 ```
 

@@ -3,14 +3,17 @@
 所有 SDK 自身和标准 JSON API 错误都使用 `HertaError`：
 
 ```ts
-import { isHertaError } from "@hb/sdk";
+import { isHertaError } from '@hb/sdk'
 
 try {
-  await posts.get(id);
-} catch (error) {
-  if (!isHertaError(error)) throw error;
-  if (error.code === "HB_RECORD_NOT_FOUND") return null;
-  console.error(error.kind, error.status, error.code, error.details);
+  await posts.get(id)
+}
+catch (error) {
+  if (!isHertaError(error))
+    throw error
+  if (error.code === 'HB_RECORD_NOT_FOUND')
+    return null
+  console.error(error.kind, error.status, error.code, error.details)
 }
 ```
 

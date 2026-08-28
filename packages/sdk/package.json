@@ -1,18 +1,10 @@
 {
   "name": "@hb/sdk",
+  "type": "module",
   "version": "0.1.0",
   "description": "Official TypeScript SDK for HertaBase",
   "license": "MIT",
-  "files": [
-    "dist",
-    "docs",
-    "README.md"
-  ],
-  "type": "module",
   "sideEffects": false,
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "import": {
@@ -36,8 +28,19 @@
     },
     "./package.json": "./package.json"
   },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "README.md",
+    "dist",
+    "docs"
+  ],
   "publishConfig": {
     "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "scripts": {
     "build": "tsdown",
@@ -45,20 +48,19 @@
     "typecheck": "node ./node_modules/typescript/lib/tsc.js --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "oxlint src tests docs/examples",
-    "format": "node scripts/format.mjs",
-    "format:check": "node scripts/format.mjs --check",
+    "lint": "eslint . --max-warnings 0",
+    "format": "eslint . --fix",
+    "format:check": "eslint . --max-warnings 0",
     "pack:check": "pnpm build && pnpm pack --dry-run"
   },
   "devDependencies": {
+    "@antfu/eslint-config": "^9.3.0",
     "@types/node": "^26.1.2",
-    "oxfmt": "^0.64.0",
-    "oxlint": "^1.77.0",
+    "eslint": "^10.9.1",
+    "eslint-plugin-format": "^2.0.1",
+    "eslint-plugin-sonarjs": "^4.2.0",
     "tsdown": "^0.15.0",
     "typescript": "5.8.3",
     "vitest": "^4.1.10"
-  },
-  "engines": {
-    "node": ">=20"
   }
 }

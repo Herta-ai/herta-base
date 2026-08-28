@@ -1,7 +1,7 @@
-export { HertaBaseAdminClient } from "./admin-client";
-export { CollectionsAdminClient, LogsAdminClient, WebProjectsAdminClient } from "./admin-resources";
-export { MemoryAuthStore } from "./auth-store";
-export { HertaError, isHertaError, type HertaErrorKind } from "./errors";
+export { HertaBaseAdminClient } from './admin-client'
+export { CollectionsAdminClient, LogsAdminClient, WebProjectsAdminClient } from './admin-resources'
+export { MemoryAuthStore } from './auth-store'
+export { HertaError, type HertaErrorKind, isHertaError } from './errors'
 export type {
   ApiRule,
   AuthSession,
@@ -21,4 +21,4 @@ export type {
   WebProject,
   WebProjectDeploy,
   WebProjectPatch,
-} from "./types";
+} from './types'

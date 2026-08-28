@@ -5,16 +5,16 @@
 `hb.auth` 对应内置 `_users` 的别名路由 `/api/auth/*`：
 
 ```ts
-await hb.auth.register({ email, password, profile: { displayName: "Alice" } });
-await hb.auth.login({ email, password });
-const current = await hb.auth.me();
+await hb.auth.register({ email, password, profile: { displayName: 'Alice' } })
+await hb.auth.login({ email, password })
+const current = await hb.auth.me()
 ```
 
 自定义 Auth Collection 使用绑定客户端：
 
 ```ts
-const users = hb.auth.forCollection("blog_users");
-const session = await users.login({ email, password });
+const users = hb.auth.forCollection('blog_users')
+const session = await users.login({ email, password })
 ```
 
 Session 会记录 scope，后续刷新自动选择 `/api/auth/refresh`、`/api/auth/{collection}/refresh` 或 `/api/admin/auth/refresh`。在错误 scope 上调用 `me()` 或显式 `refresh()` 会抛出配置错误，防止刷新令牌发往错误端点。
@@ -34,15 +34,17 @@ Session 会记录 scope，后续刷新自动选择 `/api/auth/refresh`、`/api/a
 默认 `MemoryAuthStore` 不会跨页面刷新保存 Token。可实现：
 
 ```ts
-import type { AuthSession, AuthStore } from "@hb/sdk";
+import type { AuthSession, AuthStore } from '@hb/sdk'
 
 class MyStore implements AuthStore {
   async get(): Promise<AuthSession | null> {
-    /* 从安全存储读取 */ return null;
+    /* 从安全存储读取 */ return null
   }
+
   async set(session: AuthSession): Promise<void> {
     /* 保存 */
   }
+
   async clear(): Promise<void> {
     /* 删除 */
   }
@@ -54,9 +56,9 @@ class MyStore implements AuthStore {
 ## 会话操作
 
 ```ts
-const session = await hb.auth.getSession();
-await hb.auth.setSession(restoredSession);
-const unsubscribe = hb.auth.onChange((next) => console.log(next));
-await hb.auth.logout(); // 只清理客户端，不调用服务端撤销端点
-unsubscribe();
+const session = await hb.auth.getSession()
+await hb.auth.setSession(restoredSession)
+const unsubscribe = hb.auth.onChange(next => console.log(next))
+await hb.auth.logout() // 只清理客户端，不调用服务端撤销端点
+unsubscribe()
 ```

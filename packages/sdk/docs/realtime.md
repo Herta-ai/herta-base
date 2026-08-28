@@ -1,14 +1,15 @@
 # 实时订阅
 
 ```ts
-const subscription = await hb.collection<Task>("tasks").subscribe({
-  filter: "workspace = 'workspaces:one'",
-  onStatus: (status) => console.log(status),
+const subscription = await hb.collection<Task>('tasks').subscribe({
+  filter: 'workspace = \'workspaces:one\'',
+  onStatus: status => console.log(status),
   onEvent: (event) => {
-    if (event.type === "update") console.log(event.data.record);
+    if (event.type === 'update')
+      console.log(event.data.record)
   },
-  onError: (error) => console.error(error),
-});
+  onError: error => console.error(error),
+})
 ```
 
 `subscribe()` 在 SSE HTTP 握手成功后返回；401、403、404 等首次握手错误会直接拒绝 Promise。服务端的 `connected` 帧到达后，状态变为 `connected`。
@@ -23,11 +24,11 @@ const subscription = await hb.collection<Task>("tasks").subscribe({
 还可在创建后增加监听器：
 
 ```ts
-const off = subscription.onEvent(handler);
-const offStatus = subscription.onStatus(handlerStatus);
-off();
-offStatus();
-subscription.close();
+const off = subscription.onEvent(handler)
+const offStatus = subscription.onStatus(handlerStatus)
+off()
+offStatus()
+subscription.close()
 ```
 
 ## 重连
@@ -35,7 +36,7 @@ subscription.close();
 默认对网络错误、EOF、429 和 5xx 使用带抖动的指数退避：初始 500ms、上限 30 秒、倍率 2、无限尝试。可配置：
 
 ```ts
-reconnect: {
+const reconnect = {
   enabled: true,
   initialDelayMs: 1_000,
   maxDelayMs: 15_000,

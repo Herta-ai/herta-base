@@ -1,9 +1,9 @@
-export { HertaBaseClient, HertaBaseClient as HertaBaseSDK } from "./client";
-export { CollectionClient } from "./collection";
-export { FilesClient } from "./files";
-export { AuthClient } from "./auth";
-export { MemoryAuthStore } from "./auth-store";
-export { HertaError, isHertaError, type HertaErrorKind } from "./errors";
+export { AuthClient } from './auth'
+export { MemoryAuthStore } from './auth-store'
+export { HertaBaseClient, HertaBaseClient as HertaBaseSDK } from './client'
+export { CollectionClient } from './collection'
+export { HertaError, type HertaErrorKind, isHertaError } from './errors'
+export { FilesClient } from './files'
 export type {
   ApiEnvelope,
   ApiErrorPayload,
@@ -38,4 +38,4 @@ export type {
   RecordUpload,
   SubscribeOptions,
   UploadFile,
-} from "./types";
+} from './types'

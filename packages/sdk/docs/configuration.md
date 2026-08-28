@@ -2,13 +2,13 @@
 
 ```ts
 const hb = new HertaBaseClient({
-  baseUrl: "https://api.example.com",
+  baseUrl: 'https://api.example.com',
   timeoutMs: 30_000,
   refreshSkewMs: 30_000,
   authStore,
-  headers: async () => ({ "x-client-version": appVersion }),
+  headers: async () => ({ 'x-client-version': appVersion }),
   fetch: instrumentedFetch,
-});
+})
 ```
 
 | 配置            | 默认值                  | 说明                                    |
