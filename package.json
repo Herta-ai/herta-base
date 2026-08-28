@@ -6,11 +6,13 @@
   "scripts": {
     "dev": "pnpm dev:ui",
     "dev:ui": "pnpm --filter @hb/admin-ui dev",
+    "dev:blog": "pnpm --filter blog-demo dev",
     "dev:server": "cargo run -p herta_server serve",
     "dev:server:mem": "cargo run -p herta_server -- serve --db-engine memory",
     "build": "pnpm build:sdk && pnpm build:ui && pnpm build:server",
     "build:sdk": "pnpm --filter @hb/sdk build",
     "build:ui": "pnpm --filter @hb/admin-ui build",
+    "build:blog": "pnpm --filter blog-demo build",
     "build:server": "cargo build --release",
     "lint": "pnpm lint:sdk && pnpm lint:ui && pnpm lint:server",
     "lint:sdk": "pnpm --filter @hb/sdk lint",

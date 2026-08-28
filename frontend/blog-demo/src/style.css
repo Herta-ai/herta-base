@@ -1,0 +1,214 @@
+@import 'highlight.js/styles/github-dark-dimmed.css';
+
+:root {
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-serif: 'Noto Serif SC', 'Source Han Serif CN', Georgia, serif;
+}
+
+html {
+  scroll-behavior: smooth;
+  font-family: var(--font-sans);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.4);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.7);
+}
+
+/* Markdown Reading Content Styling */
+.markdown-body {
+  color: inherit;
+  font-family: var(--font-sans);
+  line-height: 1.85;
+  font-size: 1.0625rem;
+}
+
+.markdown-body p {
+  margin-top: 1.25em;
+  margin-bottom: 1.25em;
+  letter-spacing: 0.01em;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+  font-weight: 700;
+  line-height: 1.35;
+  margin-top: 1.75em;
+  margin-bottom: 0.75em;
+  scroll-margin-top: 5.5rem;
+  color: var(--un-prose-headings, inherit);
+}
+
+.markdown-body h1 {
+  font-size: 2rem;
+}
+
+.markdown-body h2 {
+  font-size: 1.5rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid rgba(229, 231, 235, 0.6);
+}
+.dark .markdown-body h2 {
+  border-bottom-color: rgba(63, 63, 70, 0.6);
+}
+
+.markdown-body h3 {
+  font-size: 1.25rem;
+}
+
+.markdown-body a {
+  color: #10b981;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.markdown-body a:hover {
+  color: #059669;
+}
+
+.markdown-body blockquote {
+  margin: 1.5em 0;
+  padding: 0.75em 1.25em;
+  border-left: 4px solid #10b981;
+  background-color: rgba(16, 185, 129, 0.05);
+  border-radius: 0 0.75rem 0.75rem 0;
+  color: inherit;
+  font-style: normal;
+}
+.dark .markdown-body blockquote {
+  background-color: rgba(16, 185, 129, 0.08);
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 1.5em;
+  margin: 1.25em 0;
+}
+
+.markdown-body ul {
+  list-style-type: disc;
+}
+
+.markdown-body ol {
+  list-style-type: decimal;
+}
+
+.markdown-body li {
+  margin-top: 0.35em;
+  margin-bottom: 0.35em;
+}
+
+.markdown-body code:not(pre code) {
+  padding: 0.15em 0.4em;
+  margin: 0 0.2em;
+  font-size: 0.875em;
+  font-family: 'JetBrains Mono', monospace;
+  background-color: rgba(156, 163, 175, 0.15);
+  border-radius: 0.375rem;
+  color: #059669;
+}
+.dark .markdown-body code:not(pre code) {
+  color: #34d399;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.markdown-body pre {
+  margin: 1.5em 0;
+  padding: 1.25em;
+  border-radius: 0.875rem;
+  background-color: #1e1e24;
+  overflow-x: auto;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.markdown-body pre code {
+  padding: 0;
+  background: transparent;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.markdown-body img {
+  max-width: 100%;
+  border-radius: 0.875rem;
+  margin: 1.5em auto;
+  display: block;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.markdown-body hr {
+  margin: 2.5em 0;
+  border: 0;
+  border-top: 1px solid rgba(229, 231, 235, 0.8);
+}
+.dark .markdown-body hr {
+  border-top-color: rgba(63, 63, 70, 0.8);
+}
+
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5em 0;
+}
+
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid rgba(229, 231, 235, 0.8);
+  padding: 0.6em 1em;
+  text-align: left;
+}
+.dark .markdown-body th,
+.dark .markdown-body td {
+  border-color: rgba(63, 63, 70, 0.8);
+}
+
+.markdown-body th {
+  background-color: rgba(156, 163, 175, 0.08);
+  font-weight: 600;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.35s ease-out forwards;
+}
+
+/* Shimmer Loading Skeleton */
+.skeleton-shimmer {
+  background: linear-gradient(90deg, rgba(229, 231, 235, 0.5) 0%, rgba(243, 244, 246, 0.8) 50%, rgba(229, 231, 235, 0.5) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.dark .skeleton-shimmer {
+  background: linear-gradient(90deg, rgba(39, 39, 42, 0.6) 0%, rgba(63, 63, 70, 0.6) 50%, rgba(39, 39, 42, 0.6) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
