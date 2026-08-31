@@ -1,4 +1,5 @@
 use herta_api::{ApiState, build_router, build_router_with_logger};
+use herta_auth::TokenClaims;
 use herta_core::HbConfig;
 use herta_db::{
     CollectionDef, CollectionType, DbClient, FieldDef, FieldType, LogEntry, SchemaManager,
@@ -6,6 +7,7 @@ use herta_db::{
 };
 use herta_storage::ObjectStoreStorage;
 use http_body_util::BodyExt;
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use salvo::{
     http::StatusCode,
     prelude::*,
@@ -14,6 +16,8 @@ use salvo::{
 use serde_json::{Value, json};
 use std::io::Write;
 use tokio::time::{Duration, timeout};
+
+const TEST_JWT_SECRET: &str = "hertabase-http-integration-test-secret";
 
 #[tokio::test]
 async fn request_logger_records_metadata_only() {
@@ -98,6 +102,7 @@ async fn web_service() -> (Service, tempfile::TempDir) {
     config.database.engine = "memory".into();
     config.paths.data_dir = data.path().to_string_lossy().into_owned();
     config.server.dev_mode = true;
+    config.auth.jwt_secret = Some(TEST_JWT_SECRET.into());
     config.auth.bootstrap_admin_email = Some("admin@example.com".into());
     config.auth.bootstrap_admin_password = Some("correct horse battery staple".into());
     let state = ApiState::new(db, config).await.unwrap();
@@ -359,6 +364,43 @@ fn web_multipart(archive: &[u8], fields: &[(&str, &str)]) -> (Vec<u8>, &'static 
     body.extend_from_slice(archive);
     write!(body, "\r\n--{BOUNDARY}--\r\n").unwrap();
     (body, "multipart/form-data; boundary=hertabase-web-boundary")
+}
+
+fn expired_access_token(token: &str) -> String {
+    let mut validation = Validation::new(Algorithm::HS256);
+    validation.validate_exp = false;
+    let mut claims = decode::<TokenClaims>(
+        token,
+        &DecodingKey::from_secret(TEST_JWT_SECRET.as_bytes()),
+        &validation,
+    )
+    .unwrap()
+    .claims;
+    claims.exp = 1;
+    encode(
+        &Header::new(Algorithm::HS256),
+        &claims,
+        &EncodingKey::from_secret(TEST_JWT_SECRET.as_bytes()),
+    )
+    .unwrap()
+}
+
+#[tokio::test]
+async fn web_project_upload_reports_an_expired_admin_token() {
+    let (service, _data) = web_service().await;
+    let expired = expired_access_token(&admin_token(&service).await);
+    let (body, content_type) = web_multipart(&web_archive("index", "script"), &[]);
+
+    let mut response = TestClient::post("http://localhost/_/web-projects")
+        .bearer_auth(expired)
+        .add_header("content-type", content_type, true)
+        .body(body)
+        .send(&service)
+        .await;
+
+    assert_eq!(response.status_code, Some(StatusCode::UNAUTHORIZED));
+    let error: Value = response.take_json().await.unwrap();
+    assert_eq!(error["error"]["error"], "HB_TOKEN_EXPIRED");
 }
 
 #[tokio::test]

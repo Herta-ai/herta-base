@@ -78,7 +78,11 @@ export class WebProjectsAdminClient {
     return this.transport.request(`/_/web-projects/${encodePath(name)}`)
   }
 
-  deploy(input: WebProjectDeploy): Promise<WebProject> {
+  async deploy(input: WebProjectDeploy): Promise<WebProject> {
+    // Validate/refresh the small authentication request before streaming an archive. Some HTTP
+    // servers close an unread multipart body when authentication fails early, which browsers can
+    // surface as a connection abort instead of exposing the 401 response.
+    await this.transport.request('/api/admin/auth/me')
     const form = new FormData()
     appendUploadFile(form, 'archive', input.archive)
     if (input.alias !== undefined)
@@ -116,5 +120,6 @@ export class WebProjectsAdminClient {
 }
 
 function metaNumber(meta: Record<string, unknown> | null, key: string, fallback: number): number {
-  return typeof meta?.[key] === 'number' ? meta[key] : fallback
+  const value = meta?.[key]
+  return typeof value === 'number' ? value : fallback
 }

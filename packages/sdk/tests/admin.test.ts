@@ -1,6 +1,7 @@
+import type { AuthSession } from '../src/admin'
 import { describe, expect, it, vi } from 'vitest'
 
-import { HertaBaseAdminClient } from '../src/admin'
+import { HertaBaseAdminClient, MemoryAuthStore } from '../src/admin'
 
 function envelope(
   data: unknown,
@@ -80,10 +81,55 @@ describe('hertaBaseAdminClient', () => {
     })
     await admin.webProjects.rollback('docs', '2026-08-28-12-00-00')
 
-    const form = calls[0]!.init?.body as FormData
+    expect(new URL(calls[0]!.url).pathname).toBe('/api/admin/auth/me')
+    const form = calls[1]!.init?.body as FormData
     expect((form.get('archive') as File).name).toBe('docs.zip')
     expect(form.get('alias')).toBe('/web/docs')
-    expect(new URL(calls[1]!.url).pathname).toBe('/_/web-projects/docs/rollback')
-    expect(calls[1]!.init?.body).toBe(JSON.stringify({ version: '2026-08-28-12-00-00' }))
+    expect(new URL(calls[2]!.url).pathname).toBe('/_/web-projects/docs/rollback')
+    expect(calls[2]!.init?.body).toBe(JSON.stringify({ version: '2026-08-28-12-00-00' }))
+  })
+
+  it('validates the admin session before uploading a web archive', async () => {
+    const session: AuthSession = {
+      accessToken: 'access-old',
+      refreshToken: 'refresh-old',
+      tokenType: 'Bearer',
+      expiresIn: 900,
+      expiresAt: Date.now() + 900_000,
+      scope: { kind: 'admin' },
+      user: {
+        id: '_admins:one',
+        collection: '_admins',
+        email: 'admin@example.com',
+        role: 'admin',
+        verified: true,
+        admin: true,
+      },
+    }
+    const store = new MemoryAuthStore(session)
+    const calls: string[] = []
+    const admin = new HertaBaseAdminClient({
+      baseUrl: 'https://example.test',
+      authStore: store,
+      fetch: async (input) => {
+        const path = new URL(String(input)).pathname
+        calls.push(path)
+        return new Response(
+          JSON.stringify({
+            data: null,
+            meta: null,
+            error: { code: 401, message: 'invalid', error: 'HB_UNAUTHORIZED' },
+          }),
+          { status: 401 },
+        )
+      },
+    })
+
+    await expect(admin.webProjects.deploy({
+      archive: { blob: new Blob(['zip']), filename: 'docs.zip' },
+    })).rejects.toMatchObject({ status: 401, code: 'HB_UNAUTHORIZED' })
+
+    expect(calls).toEqual(['/api/admin/auth/me', '/api/admin/auth/refresh'])
+    expect(await store.get()).toBeNull()
   })
 })

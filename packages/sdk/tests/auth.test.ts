@@ -128,6 +128,44 @@ describe('authentication', () => {
     expect(records).toBe(2)
   })
 
+  it('refreshes and retries once after HB_UNAUTHORIZED invalidates an access token', async () => {
+    const active: AuthSession = {
+      accessToken: 'access-old',
+      refreshToken: 'refresh-old',
+      tokenType: 'Bearer',
+      expiresIn: 900,
+      expiresAt: Date.now() + 900_000,
+      scope: { kind: 'default' },
+      user,
+    }
+    let records = 0
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname
+      if (path.endsWith('/refresh'))
+        return authResponse('access-new')
+      records += 1
+      if (records === 1) {
+        return new Response(
+          JSON.stringify({
+            data: null,
+            meta: null,
+            error: { code: 401, message: 'invalid', error: 'HB_UNAUTHORIZED' },
+          }),
+          { status: 401 },
+        )
+      }
+      return envelope({ id: 'posts:one' })
+    })
+    const client = new HertaBaseClient({
+      baseUrl: 'https://example.test',
+      fetch: fetcher,
+      authStore: new MemoryAuthStore(active),
+    })
+
+    await expect(client.collection('posts').get('one')).resolves.toMatchObject({ id: 'posts:one' })
+    expect(records).toBe(2)
+  })
+
   it('clears the session when refresh rotation fails', async () => {
     const expired: AuthSession = {
       accessToken: 'access-old',

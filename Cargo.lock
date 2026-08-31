@@ -2002,6 +2002,7 @@ dependencies = [
  "herta_db",
  "herta_storage",
  "http-body-util",
+ "jsonwebtoken",
  "mime",
  "mime-infer",
  "percent-encoding",

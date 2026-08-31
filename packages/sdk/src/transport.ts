@@ -89,23 +89,25 @@ export class Transport {
     options: InternalRequestOptions,
   ): Promise<FetchOutcome> {
     const first = await this.fetchOnce(path, options)
-    if (options.auth !== false && options.retryAuth !== false && first.response.status === 401) {
-      const envelope = await this.tryReadEnvelope(first.response)
-      if (envelope?.error?.error === 'HB_TOKEN_EXPIRED') {
-        try {
-          await this.authState.refresh(first.accessToken ?? undefined)
-        }
-        catch (cause) {
-          if (cause instanceof HertaError)
-            throw cause
-          throw new HertaError('Authentication refresh failed', {
-            kind: 'configuration',
-            request: first.request,
-            cause,
-          })
-        }
-        return this.fetchOnce(path, { ...options, retryAuth: false })
+    if (
+      options.auth !== false
+      && options.retryAuth !== false
+      && first.response.status === 401
+      && first.accessToken
+    ) {
+      try {
+        await this.authState.refresh(first.accessToken)
       }
+      catch (cause) {
+        if (cause instanceof HertaError)
+          throw cause
+        throw new HertaError('Authentication refresh failed', {
+          kind: 'configuration',
+          request: first.request,
+          cause,
+        })
+      }
+      return this.fetchOnce(path, { ...options, retryAuth: false })
     }
     return first
   }
