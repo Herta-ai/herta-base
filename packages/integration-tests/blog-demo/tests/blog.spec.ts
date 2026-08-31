@@ -13,11 +13,15 @@ const ADMIN_PASSWORD = 'correct horse battery staple';
 const PASSWORD = 'correct password 123';
 
 let admin: AxiosInstance;
+let superUser: AxiosInstance;
 let author1: AxiosInstance;
 let author2: AxiosInstance;
+let author3: AxiosInstance;
 let anonymous: AxiosInstance;
+let superUserId = '';
 let author1Id = '';
 let author2Id = '';
+let author3Id = '';
 let publicPostId = '';
 let privatePostId = '';
 let publicCommentId = '';
@@ -61,7 +65,7 @@ function jwtPayload(token: string): Record<string, any> {
   return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8')) as Record<string, any>;
 }
 
-describe.sequential('blog contract integration', () => {
+describe.sequential('博客系统契约集成测试', () => {
   beforeAll(async () => {
     await startServer();
     anonymous = axios.create({ baseURL: serverUrl(), validateStatus: () => true });
@@ -93,11 +97,11 @@ describe.sequential('blog contract integration', () => {
         { name: 'author', type: 'relation', required: true, options: { collection: 'blog_users', maxSelect: 1 } },
       ],
       rules: {
-        list: 'is_public = true OR author = $auth.record',
-        view: 'is_public = true OR author = $auth.record',
-        create: '$record.author = $auth.record',
-        update: 'author = $auth.record AND ($request.body.author IS NONE OR $request.body.author = $auth.id)',
-        delete: 'author = $auth.record',
+        list: 'is_public = true OR author = $auth.record OR $auth.role = "admin"',
+        view: 'is_public = true OR author = $auth.record OR $auth.role = "admin"',
+        create: '$record.author = $auth.record OR $auth.role = "admin"',
+        update: '$auth.role = "admin" OR (author = $auth.record AND ($request.body.author IS NONE OR $request.body.author = $auth.id))',
+        delete: '$auth.role = "admin" OR author = $auth.record',
       },
     });
     success(posts, 201);
@@ -112,11 +116,11 @@ describe.sequential('blog contract integration', () => {
         { name: 'author', type: 'relation', required: true, options: { collection: 'blog_users', maxSelect: 1 } },
       ],
       rules: {
-        list: 'post.is_public = true OR post.author = $auth.record OR author = $auth.record',
-        view: 'post.is_public = true OR post.author = $auth.record OR author = $auth.record',
-        create: '$record.author = $auth.record AND ($record.post.is_public = true OR $record.post.author = $auth.record)',
-        update: 'author = $auth.record',
-        delete: 'author = $auth.record',
+        list: 'post.is_public = true OR post.author = $auth.record OR author = $auth.record OR $auth.role = "admin"',
+        view: 'post.is_public = true OR post.author = $auth.record OR author = $auth.record OR $auth.role = "admin"',
+        create: '$record.author = $auth.record AND ($record.post.is_public = true OR $record.post.author = $auth.record OR $auth.role = "admin")',
+        update: 'author = $auth.record OR $auth.role = "admin"',
+        delete: '$auth.role = "admin" OR author = $auth.record OR post.author = $auth.record',
       },
     });
     success(comments, 201);
@@ -126,7 +130,7 @@ describe.sequential('blog contract integration', () => {
     await stopServer();
   });
 
-  it('registers and logs in with full auth IDs and JWT subjects', async () => {
+  it('用户注册与登录认证 (ID与JWT完整性)', async () => {
     const registered1 = await anonymous.post('/api/auth/blog_users/register', {
       email: 'author1@example.com', password: PASSWORD, displayName: 'Author One',
     });
@@ -150,9 +154,32 @@ describe.sequential('blog contract integration', () => {
     author2Id = auth2.user.id;
     expect(author2Id).toMatch(/^blog_users:/);
     author2 = withToken(auth2.accessToken);
+
+    const registered3 = await anonymous.post('/api/auth/blog_users/register', {
+      email: 'author3@example.com', password: PASSWORD,
+    });
+    const auth3 = success(registered3, 201) as any;
+    author3Id = auth3.user.id;
+    author3 = withToken(auth3.accessToken);
+
+    // 注册超级用户并由管理员写入 role = 'admin'
+    const registeredSuper = await anonymous.post('/api/auth/blog_users/register', {
+      email: 'super@example.com', password: PASSWORD, displayName: 'Super Admin',
+    });
+    const superAuth = success(registeredSuper, 201) as any;
+    superUserId = superAuth.user.id;
+    const rolePatch = await admin.patch(`/api/collections/blog_users/records/${encodeURIComponent(superUserId)}`, { role: 'admin' });
+    success(rolePatch, 200);
+
+    const superLogin = await anonymous.post('/api/auth/blog_users/login', {
+      email: 'super@example.com', password: PASSWORD,
+    });
+    const superLoggedIn = success(superLogin, 200) as any;
+    expect(jwtPayload(superLoggedIn.accessToken).role).toBe('admin');
+    superUser = withToken(superLoggedIn.accessToken);
   });
 
-  it('enforces native relation create rules and preserves schema-less fields', async () => {
+  it('文章关联创建与无模式字段保留', async () => {
     const forged = await author1.post('/api/collections/blog_posts/records', {
       title: 'forged', content: 'no', is_public: true, author: author2Id,
     });
@@ -173,7 +200,7 @@ describe.sequential('blog contract integration', () => {
     privatePostId = (success(privateCreated, 201) as any).id;
   });
 
-  it('accepts full and bare record paths, rejects mismatched collections, and expands relations', async () => {
+  it('文章详情查询与关联展开 (Expand)', async () => {
     const full = await author1.get(`/api/collections/blog_posts/records/${encodeURIComponent(publicPostId)}?expand=author`);
     const fullPost = success(full, 200) as any;
     expect(fullPost.id).toBe(publicPostId);
@@ -195,7 +222,7 @@ describe.sequential('blog contract integration', () => {
     }
   });
 
-  it('applies public/private post visibility and blocks ownership changes', async () => {
+  it('文章公开/私有可见性与归属保护', async () => {
     const anonymousPosts = await anonymous.get('/api/collections/blog_posts/records');
     expect((paged(anonymousPosts, 200, 1) as any[]).map((post) => post.id)).toEqual([publicPostId]);
     const author1Posts = await author1.get('/api/collections/blog_posts/records');
@@ -213,7 +240,7 @@ describe.sequential('blog contract integration', () => {
     failure(remove, 403, 'HB_FORBIDDEN');
   });
 
-  it('enforces public and private comment visibility and authorship', async () => {
+  it('评论发布与可见性行级规则', async () => {
     const forged = await author2.post('/api/collections/blog_comments/records', {
       post: publicPostId, content: 'forged', author: author1Id,
     });
@@ -241,7 +268,7 @@ describe.sequential('blog contract integration', () => {
     failure(outsiderPrivateComment, 403, 'HB_FORBIDDEN');
   });
 
-  it('lets administrators bypass business rules but not soft-delete protection', async () => {
+  it('系统超管越权与软删除保护', async () => {
     const adminList = await admin.get('/api/collections/blog_posts/records');
     expect((paged(adminList, 200, 2) as any[]).length).toBe(2);
     const attributedPrivateComment = await admin.post('/api/collections/blog_comments/records', {
@@ -259,7 +286,7 @@ describe.sequential('blog contract integration', () => {
     success(adminDeleteComment, 200);
   });
 
-  it('hides soft-deleted records and refuses repeated CRUD operations', async () => {
+  it('软删除记录隐藏与重复操作防护', async () => {
     const deletePost = await author1.delete(`/api/collections/blog_posts/records/${encodeURIComponent(privatePostId)}`);
     success(deletePost, 200);
     const getDeleted = await author1.get(`/api/collections/blog_posts/records/${encodeURIComponent(privatePostId)}`);
@@ -272,7 +299,72 @@ describe.sequential('blog contract integration', () => {
     expect((paged(list, 200, 1) as any[]).map((post) => post.id)).toEqual([publicPostId]);
   });
 
-  it('can start and stop a fresh server on another dynamic port', async () => {
+  it('文章删除权限 (超管删全站，创作者仅删自己)', async () => {
+    // author1 创建一篇文章
+    const created1 = await author1.post('/api/collections/blog_posts/records', {
+      title: 'Author1 Post to Delete', content: 'content', is_public: true, author: author1Id,
+    });
+    const post1 = success(created1, 201) as any;
+
+    // author2（普通用户，非作者）尝试删除 author1 的文章 -> 拒绝 403
+    const outsiderDelete = await author2.delete(`/api/collections/blog_posts/records/${encodeURIComponent(post1.id)}`);
+    failure(outsiderDelete, 403, 'HB_FORBIDDEN');
+
+    // superUser（超级用户 role='admin'）删除 author1 的文章 -> 成功 200
+    const superDelete = await superUser.delete(`/api/collections/blog_posts/records/${encodeURIComponent(post1.id)}`);
+    success(superDelete, 200);
+
+    // author2 创建文章，author2 本人删除 -> 成功 200
+    const created2 = await author2.post('/api/collections/blog_posts/records', {
+      title: 'Author2 Post', content: 'content', is_public: true, author: author2Id,
+    });
+    const post2 = success(created2, 201) as any;
+    const author2Delete = await author2.delete(`/api/collections/blog_posts/records/${encodeURIComponent(post2.id)}`);
+    success(author2Delete, 200);
+  });
+
+  it('评论删除权限 (超管/博主/评论者/访客多维校验)', async () => {
+    // author1 创建一篇文章
+    const postRes = await author1.post('/api/collections/blog_posts/records', {
+      title: 'Post For Comment Permission Tests', content: 'content', is_public: true, author: author1Id,
+    });
+    const testPost = success(postRes, 201) as any;
+
+    // author2 在 author1 的文章下发表评论 1
+    const c1Res = await author2.post('/api/collections/blog_comments/records', {
+      post: testPost.id, content: 'Comment by author2', author: author2Id,
+    });
+    const comment1 = success(c1Res, 201) as any;
+
+    // author3 在 author1 的文章下发表评论 2 与 评论 3
+    const c2Res = await author3.post('/api/collections/blog_comments/records', {
+      post: testPost.id, content: 'Comment 2 by author3', author: author3Id,
+    });
+    const comment2 = success(c2Res, 201) as any;
+
+    const c3Res = await author3.post('/api/collections/blog_comments/records', {
+      post: testPost.id, content: 'Comment 3 by author3', author: author3Id,
+    });
+    const comment3 = success(c3Res, 201) as any;
+
+    // 4. 其余人员无权删除：author2 尝试删除 author3 在 author1 文章下的评论 2 -> 拒绝 403
+    const strangerDelete = await author2.delete(`/api/collections/blog_comments/records/${encodeURIComponent(comment2.id)}`);
+    failure(strangerDelete, 403, 'HB_FORBIDDEN');
+
+    // 3. 评论作者可删除自己在任何文章下发表的评论：author2 删除自己的评论 1 -> 成功 200
+    const commentAuthorDelete = await author2.delete(`/api/collections/blog_comments/records/${encodeURIComponent(comment1.id)}`);
+    success(commentAuthorDelete, 200);
+
+    // 2. 文章作者可删除自己文章下的所有评论：author1 删除 author3 发表的评论 2 -> 成功 200
+    const postAuthorDelete = await author1.delete(`/api/collections/blog_comments/records/${encodeURIComponent(comment2.id)}`);
+    success(postAuthorDelete, 200);
+
+    // 1. 超级用户可删除全站任意评论：superUser 删除 author3 发表的评论 3 -> 成功 200
+    const superDeleteComment = await superUser.delete(`/api/collections/blog_comments/records/${encodeURIComponent(comment3.id)}`);
+    success(superDeleteComment, 200);
+  });
+
+  it('动态端口服务启动与停止', async () => {
     const first = serverUrl();
     await stopServer();
     const second = await startServer();
