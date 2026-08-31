@@ -100,14 +100,27 @@ const randomCover = () => {
 
     <!-- 专栏分类选择 -->
     <div class="space-y-1.5">
-      <label class="text-xs font-semibold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
-        <Layers class="w-3.5 h-3.5 text-emerald-500" />
-        专栏分类
-      </label>
+      <div class="flex items-center justify-between">
+        <label class="text-xs font-semibold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
+          <Layers class="w-3.5 h-3.5 text-emerald-500" />
+          所属专栏目录
+        </label>
+        <button
+          v-if="post.category"
+          type="button"
+          @click="post.category = ''"
+          class="text-[11px] text-zinc-400 hover:text-rose-500 transition-colors flex items-center gap-0.5 cursor-pointer"
+          title="清除选中的目录"
+        >
+          <X class="w-3 h-3" />
+          <span>清除选中</span>
+        </button>
+      </div>
       <select
         v-model="post.category"
         class="w-full input-base text-xs"
       >
+        <option value="">-- 未设置目录（留空） --</option>
         <option v-for="cat in blogStore.categories" :key="cat.id" :value="cat.name">
           {{ cat.name }}
         </option>

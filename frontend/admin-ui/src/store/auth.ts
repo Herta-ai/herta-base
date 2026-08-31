@@ -1,3 +1,4 @@
+import type { AuthSession, AuthStore } from '@hb/sdk/admin';
 import { Store } from '@tanstack/react-store';
 
 export interface AdminUser {
@@ -15,85 +16,133 @@ export interface AuthState {
   isAuthenticated: boolean;
 }
 
-const ACCESS_TOKEN_KEY = 'hb_access_token';
-const REFRESH_TOKEN_KEY = 'hb_refresh_token';
-const ADMIN_USER_KEY = 'hb_admin_user';
+const AUTH_SESSION_KEY = 'hb_admin_session';
 
 function loadInitialState(): AuthState {
   try {
-    const accessToken = localStorage.getItem(ACCESS_TOKEN_KEY);
-    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
-    const userStr = localStorage.getItem(ADMIN_USER_KEY);
-    const admin = userStr ? JSON.parse(userStr) : null;
+    const raw = localStorage.getItem(AUTH_SESSION_KEY);
+    if (raw) {
+      const session = JSON.parse(raw) as AuthSession;
+      if (session?.accessToken && session?.user) {
+        return {
+          admin: session.user,
+          accessToken: session.accessToken,
+          refreshToken: session.refreshToken || null,
+          isAuthenticated: true,
+        };
+      }
+    }
 
-    return {
-      admin,
-      accessToken,
-      refreshToken,
-      isAuthenticated: Boolean(accessToken && admin),
-    };
+    // 兼容迁移旧版存储 Key
+    const oldAccessToken = localStorage.getItem('hb_access_token');
+    const oldRefreshToken = localStorage.getItem('hb_refresh_token');
+    const oldUserStr = localStorage.getItem('hb_admin_user');
+    if (oldAccessToken && oldUserStr) {
+      const user = JSON.parse(oldUserStr);
+      const session: AuthSession = {
+        accessToken: oldAccessToken,
+        refreshToken: oldRefreshToken || '',
+        tokenType: 'Bearer',
+        expiresIn: 86400,
+        expiresAt: Date.now() + 86400000,
+        scope: { kind: 'admin' },
+        user,
+      };
+      localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
+      return {
+        admin: user,
+        accessToken: oldAccessToken,
+        refreshToken: oldRefreshToken || null,
+        isAuthenticated: true,
+      };
+    }
   } catch {
-    return {
-      admin: null,
-      accessToken: null,
-      refreshToken: null,
-      isAuthenticated: false,
-    };
-  }
-}
-
-export const authStore = new Store<AuthState>(loadInitialState());
-
-export function setAuthSession(data: {
-  accessToken: string;
-  refreshToken: string;
-  user: AdminUser;
-}) {
-  localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken);
-  localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
-  localStorage.setItem(ADMIN_USER_KEY, JSON.stringify(data.user));
-
-  authStore.setState(() => ({
-    accessToken: data.accessToken,
-    refreshToken: data.refreshToken,
-    admin: data.user,
-    isAuthenticated: true,
-  }));
-}
-
-export function updateTokens(accessToken: string, refreshToken: string, user?: AdminUser) {
-  localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
-  localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
-  if (user) {
-    localStorage.setItem(ADMIN_USER_KEY, JSON.stringify(user));
+    // ignore
   }
 
-  authStore.setState((state) => ({
-    ...state,
-    accessToken,
-    refreshToken,
-    admin: user || state.admin,
-    isAuthenticated: true,
-  }));
-}
-
-export function clearAuthSession() {
-  localStorage.removeItem(ACCESS_TOKEN_KEY);
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
-  localStorage.removeItem(ADMIN_USER_KEY);
-
-  authStore.setState(() => ({
+  return {
     admin: null,
     accessToken: null,
     refreshToken: null,
     isAuthenticated: false,
-  }));
+  };
+}
+
+export const authStore = new Store<AuthState>(loadInitialState());
+
+export class SdkAuthStoreAdapter implements AuthStore {
+  get(): AuthSession | null {
+    try {
+      const raw = localStorage.getItem(AUTH_SESSION_KEY);
+      if (raw) {
+        return JSON.parse(raw) as AuthSession;
+      }
+      const oldAccessToken = localStorage.getItem('hb_access_token');
+      const oldRefreshToken = localStorage.getItem('hb_refresh_token');
+      const oldUserStr = localStorage.getItem('hb_admin_user');
+      if (oldAccessToken && oldUserStr) {
+        const user = JSON.parse(oldUserStr);
+        const session: AuthSession = {
+          accessToken: oldAccessToken,
+          refreshToken: oldRefreshToken || '',
+          tokenType: 'Bearer',
+          expiresIn: 86400,
+          expiresAt: Date.now() + 86400000,
+          scope: { kind: 'admin' },
+          user,
+        };
+        localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
+        return session;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  set(session: AuthSession): void {
+    try {
+      localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
+      authStore.setState(() => ({
+        admin: session.user,
+        accessToken: session.accessToken,
+        refreshToken: session.refreshToken || null,
+        isAuthenticated: Boolean(session.accessToken && session.user),
+      }));
+    } catch {
+      // ignore
+    }
+  }
+
+  clear(): void {
+    try {
+      localStorage.removeItem(AUTH_SESSION_KEY);
+      authStore.setState(() => ({
+        admin: null,
+        accessToken: null,
+        refreshToken: null,
+        isAuthenticated: false,
+      }));
+    } catch {
+      // ignore
+    }
+  }
+}
+
+export const sdkAuthStore = new SdkAuthStoreAdapter();
+
+export function setAuthSession(session: AuthSession) {
+  sdkAuthStore.set(session);
+}
+
+export function clearAuthSession() {
+  sdkAuthStore.clear();
 }
 
 export function getAccessToken(): string | null {
-  return authStore.state.accessToken || localStorage.getItem(ACCESS_TOKEN_KEY);
+  return authStore.state.accessToken || sdkAuthStore.get()?.accessToken || null;
 }
 
 export function getRefreshToken(): string | null {
-  return authStore.state.refreshToken || localStorage.getItem(REFRESH_TOKEN_KEY);
+  return authStore.state.refreshToken || sdkAuthStore.get()?.refreshToken || null;
 }

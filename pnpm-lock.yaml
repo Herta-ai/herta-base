@@ -17,6 +17,9 @@ importers:
 
   frontend/admin-ui:
     dependencies:
+      '@hb/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
       '@iconify/json':
         specifier: ^2.2.509
         version: 2.2.509
@@ -41,9 +44,6 @@ importers:
       '@tanstack/react-table':
         specifier: ^9.0.0
         version: 9.0.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      axios:
-        specifier: ^1.19.0
-        version: 1.19.0(debug@4.4.3)
       dayjs:
         specifier: ^1.11.21
         version: 1.11.21

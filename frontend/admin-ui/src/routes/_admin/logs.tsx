@@ -1,7 +1,7 @@
 import Button from '@jetbrains/ring-ui-built/components/button/button';
 import { useQuery } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 
 import { AdminPageLayout } from '../../components/layout/AdminPageLayout';
 import { JbCard } from '../../components/ui/JbCard';
@@ -32,11 +32,8 @@ function SystemLogsPage() {
   const [timeRange, setTimeRange] = useState<TimeRangeOption>('all');
 
   // UI state
-  const [autoScroll, setAutoScroll] = useState(true);
   const [pollingEnabled, setPollingEnabled] = useState(true);
   const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
-
-  const logEndRef = useRef<HTMLDivElement>(null);
 
   // Debounce search
   useEffect(() => {
@@ -57,7 +54,7 @@ function SystemLogsPage() {
   const queryParams: LogQueryParams = useMemo(() => {
     const params: LogQueryParams = { page, perPage };
     if (selectedType !== 'all') params.logType = selectedType;
-    if (selectedLevel !== 'ALL') params.level = selectedLevel.toLowerCase();
+    if (selectedLevel !== 'ALL') params.level = selectedLevel.toLowerCase() as LogQueryParams['level'];
     if (debouncedKeyword.trim()) params.q = debouncedKeyword.trim();
     if (fromTime) params.from = fromTime;
     return params;
@@ -72,23 +69,14 @@ function SystemLogsPage() {
     queryKey: ['admin-logs', queryParams],
     queryFn: async () => {
       const res = await hbApi.logs.list(queryParams);
-      return res.data;
+      return res;
     },
     refetchInterval: pollingEnabled ? LOG_POLL_INTERVAL_MS : false,
   });
 
-  const logs = useMemo(() => logsResponse?.data || [], [logsResponse]);
-  const meta = logsResponse?.meta as
-    | { total?: number; page?: number; perPage?: number }
-    | undefined;
-  const total = meta?.total ?? logs.length;
+  const logs = useMemo(() => logsResponse?.items || [], [logsResponse]);
+  const total = logsResponse?.total ?? logs.length;
   const totalPages = Math.max(1, Math.ceil(total / perPage));
-
-  useEffect(() => {
-    if (autoScroll && logs.length > 0) {
-      logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [logs, autoScroll]);
 
   const handleCopyLogs = () => {
     if (logs.length === 0) return;
@@ -149,21 +137,6 @@ function SystemLogsPage() {
               className={`i-ph:broadcast-bold text-11px ${pollingEnabled ? 'animate-pulse' : ''}`}
             />
             <span>{pollingEnabled ? 'Live Polling: ON' : 'Live Polling: OFF'}</span>
-          </Button>
-
-          <Button
-            onClick={() => setAutoScroll(!autoScroll)}
-            style={{
-              height: 24,
-              fontSize: 11,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              color: autoScroll ? 'var(--jb-accent-blue)' : 'var(--jb-text-muted)',
-            }}
-          >
-            <span className="i-ph:arrow-down-bold text-11px" />
-            <span>{t('logs.auto_scroll')}</span>
           </Button>
 
           <Button
@@ -355,7 +328,6 @@ function SystemLogsPage() {
               );
             })
           )}
-          <div ref={logEndRef} />
         </div>
 
         {/* Footer */}

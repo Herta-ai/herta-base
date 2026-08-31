@@ -10,6 +10,7 @@ import { JbStatusTag } from '../../../components/ui/JbStatusTag';
 import { useToast } from '../../../components/ui/Toast';
 import {
   hbApi,
+  isHertaError,
   type CollectionModel,
   type FieldDef,
   type FieldTypeName,
@@ -64,7 +65,7 @@ function CollectionsOverviewPage() {
     queryKey: ['collections'],
     queryFn: async () => {
       const res = await hbApi.collections.list();
-      return res.data.data || [];
+      return res || [];
     },
   });
 
@@ -78,11 +79,8 @@ function CollectionsOverviewPage() {
       toast.success(t('collections.created_success'));
       closeModal();
     },
-    onError: (err: {
-      response?: { data?: { error?: { message?: string } } };
-      message?: string;
-    }) => {
-      toast.error(err.response?.data?.error?.message || err.message || 'Create failed');
+    onError: (err: unknown) => {
+      toast.error(isHertaError(err) ? err.message : ((err as Error)?.message || 'Create failed'));
     },
   });
 
@@ -94,11 +92,8 @@ function CollectionsOverviewPage() {
       toast.success(t('collections.updated_success'));
       closeModal();
     },
-    onError: (err: {
-      response?: { data?: { error?: { message?: string } } };
-      message?: string;
-    }) => {
-      toast.error(err.response?.data?.error?.message || err.message || 'Update failed');
+    onError: (err: unknown) => {
+      toast.error(isHertaError(err) ? err.message : ((err as Error)?.message || 'Update failed'));
     },
   });
 
@@ -108,11 +103,8 @@ function CollectionsOverviewPage() {
       queryClient.invalidateQueries({ queryKey: ['collections'] });
       toast.success(t('collections.deleted_success'));
     },
-    onError: (err: {
-      response?: { data?: { error?: { message?: string } } };
-      message?: string;
-    }) => {
-      toast.error(err.response?.data?.error?.message || err.message || 'Delete failed');
+    onError: (err: unknown) => {
+      toast.error(isHertaError(err) ? err.message : ((err as Error)?.message || 'Delete failed'));
     },
   });
 
@@ -147,6 +139,7 @@ function CollectionsOverviewPage() {
       createMutation.mutate({
         name: name.trim(),
         type,
+        schema_mode: 'schema-less',
         fields: cleanedFields,
         rules,
       });

@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@hb/sdk": "workspace:*",
     "@iconify/json": "^2.2.509",
     "@iconify/utils": "^3.1.4",
     "@jetbrains/ring-ui-built": "^7.0.122",
@@ -20,7 +21,6 @@
     "@tanstack/react-router": "^1.170.19",
     "@tanstack/react-store": "^0.11.0",
     "@tanstack/react-table": "^9.0.0",
-    "axios": "^1.19.0",
     "dayjs": "^1.11.21",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"

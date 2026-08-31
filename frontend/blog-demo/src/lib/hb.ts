@@ -209,7 +209,7 @@ export async function performDatabaseInitialization(params: {
         list: 'is_public = true OR author = $auth.record',
         view: 'is_public = true OR author = $auth.record',
         create: '$record.author = $auth.record',
-        update: 'author = $auth.record',
+        update: 'is_public = true OR author = $auth.record',
         delete: 'author = $auth.record',
       },
     })

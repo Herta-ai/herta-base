@@ -24,6 +24,18 @@ function loadInitialComments(): BlogComment[] {
   return [...SEED_COMMENTS]
 }
 
+function loadInitialCategories(): BlogCategory[] {
+  if (typeof window === 'undefined') return [...SEED_CATEGORIES]
+  const saved = localStorage.getItem('herta_blog_categories_local')
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved)
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+    } catch {}
+  }
+  return [...SEED_CATEGORIES]
+}
+
 export const useBlogStore = defineStore('blog', () => {
   const themeStore = useThemeStore()
   const authStore = useAuthStore()
@@ -31,7 +43,7 @@ export const useBlogStore = defineStore('blog', () => {
   // 文章与分类状态
   const posts = ref<BlogPost[]>(loadInitialPosts())
   const currentPost = ref<BlogPost | null>(null)
-  const categories = ref<BlogCategory[]>([...SEED_CATEGORIES])
+  const categories = ref<BlogCategory[]>(loadInitialCategories())
   const comments = ref<BlogComment[]>(loadInitialComments())
 
   // 点赞记录（本地存储）
@@ -73,13 +85,32 @@ export const useBlogStore = defineStore('blog', () => {
   })
 
   /**
-   * 动态计算分类文章计数
+   * 动态计算分类文章计数（包含「未设置目录」等文章）
    */
   const computedCategories = computed<BlogCategory[]>(() => {
-    return categories.value.map(c => {
+    const list = categories.value.map(c => {
       const count = posts.value.filter(p => p.category === c.name && (p.is_public !== false)).length
       return { ...c, count }
     })
+
+    // 统计未设置目录或已被删除目录关联的文章
+    const uncategorizedCount = posts.value.filter(p => {
+      if (!p.is_public) return false
+      return p.category === '未设置目录' || (!p.category && !categories.value.some(c => c.name === p.category))
+    }).length
+
+    if (uncategorizedCount > 0 && !categories.value.some(c => c.name === '未设置目录')) {
+      list.push({
+        id: 'cat-uncategorized',
+        name: '未设置目录',
+        slug: 'uncategorized',
+        description: '暂未归属或原所属专栏目录已被删除的文章。',
+        color: '#71717a',
+        count: uncategorizedCount,
+      })
+    }
+
+    return list
   })
 
   /**
@@ -104,7 +135,11 @@ export const useBlogStore = defineStore('blog', () => {
 
     // 分类过滤
     if (filter.value.category) {
-      result = result.filter(p => p.category === filter.value.category)
+      if (filter.value.category === '未设置目录' || filter.value.category === 'uncategorized') {
+        result = result.filter(p => !p.category || p.category === '未设置目录' || p.category === '' || !categories.value.some(c => c.name === p.category))
+      } else {
+        result = result.filter(p => p.category === filter.value.category)
+      }
     }
 
     // 标签过滤
@@ -159,11 +194,12 @@ export const useBlogStore = defineStore('blog', () => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('herta_blog_posts_local', JSON.stringify(posts.value))
       localStorage.setItem('herta_blog_comments_local', JSON.stringify(comments.value))
+      localStorage.setItem('herta_blog_categories_local', JSON.stringify(categories.value))
     }
   }
 
   /**
-   * 初始化并检查服务端状态与拉取文章
+   * 初始化并检查服务端状态与拉取文章和评论
    */
   const init = async () => {
     loading.value = true
@@ -173,12 +209,31 @@ export const useBlogStore = defineStore('blog', () => {
       isCollectionsReady.value = status.hasCollections
 
       if (status.connected && status.hasCollections) {
-        await fetchRemotePosts()
+        await Promise.all([fetchRemotePosts(), fetchRemoteComments()])
       }
     } catch {
       // 保持演示数据
     } finally {
       loading.value = false
+    }
+  }
+
+  /**
+   * 从 HertaBase 服务端拉取评论数据
+   */
+  const fetchRemoteComments = async () => {
+    try {
+      const commentsCol = getCommentsCollection()
+      const res = await commentsCol.list({
+        sort: '-created_at',
+        perPage: 100,
+      })
+      if (res.items && res.items.length > 0) {
+        comments.value = res.items
+      }
+      persistLocal()
+    } catch (err) {
+      console.warn('拉取服务端评论失败，使用本地/演示缓存:', err)
     }
   }
 
@@ -232,6 +287,13 @@ export const useBlogStore = defineStore('blog', () => {
         } else {
           posts.value.unshift(fetched)
         }
+
+        // 异步向服务端上报浏览量 +1
+        if (isServerLive.value && isCollectionsReady.value) {
+          const nextViews = (fetched.views || 0) + 1
+          fetched.views = nextViews
+          postsCol.update(fetched.id, { views: nextViews }).catch(() => {})
+        }
         return fetched
       }
     } catch (err) {
@@ -271,7 +333,7 @@ export const useBlogStore = defineStore('blog', () => {
       cover_image: postData.cover_image || 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=1200&auto=format&fit=crop&q=80',
       is_public: postData.is_public !== false,
       featured: !!postData.featured,
-      category: postData.category || '架构设计',
+      category: postData.category || '',
       tags: postData.tags || ['技术'],
       views: 1,
       likes: 0,
@@ -280,7 +342,12 @@ export const useBlogStore = defineStore('blog', () => {
 
     try {
       const created = await postsCol.create(serverPayload as any)
-      posts.value.unshift(created)
+      const idx = posts.value.findIndex(p => p.id === created.id)
+      if (idx === -1) {
+        posts.value.unshift(created)
+      } else {
+        posts.value[idx] = { ...posts.value[idx], ...created }
+      }
       persistLocal()
       themeStore.addToast({ type: 'success', message: '文章已成功发布到 HertaBase！' })
       return created
@@ -336,25 +403,42 @@ export const useBlogStore = defineStore('blog', () => {
   }
 
   /**
-   * 点赞/取消点赞
+   * 点赞/取消点赞（实时向后端发送真实记录请求）
    */
-  const toggleLike = (postId: string) => {
+  const toggleLike = async (postId: string) => {
     const post = posts.value.find(p => p.id === postId)
     if (!post) return
 
     const index = likedPostIds.value.indexOf(postId)
+    let newLikes = post.likes || 0
     if (index > -1) {
       likedPostIds.value.splice(index, 1)
-      post.likes = Math.max(0, (post.likes || 1) - 1)
+      newLikes = Math.max(0, newLikes - 1)
+      post.likes = newLikes
     } else {
       likedPostIds.value.push(postId)
-      post.likes = (post.likes || 0) + 1
+      newLikes = newLikes + 1
+      post.likes = newLikes
       themeStore.addToast({ type: 'success', message: '点赞成功，感谢鼓励！' })
     }
+
+    if (currentPost.value?.id === postId) {
+      currentPost.value.likes = newLikes
+    }
+
     if (typeof window !== 'undefined') {
       localStorage.setItem('herta_liked_posts', JSON.stringify(likedPostIds.value))
     }
     persistLocal()
+
+    if (isServerLive.value && isCollectionsReady.value) {
+      try {
+        const postsCol = getPostsCollection()
+        await postsCol.update(postId, { likes: newLikes })
+      } catch (err: any) {
+        console.warn('点赞数据同步到服务端失败:', err)
+      }
+    }
   }
 
   /**
@@ -373,34 +457,49 @@ export const useBlogStore = defineStore('blog', () => {
     author_name?: string
     author_email?: string
   }): Promise<BlogComment> => {
-    const newComment: BlogComment = {
-      id: `comment-${Date.now()}`,
+    const authorId = authStore.user?.id
+    const payload = {
       post: commentData.post,
-      content: commentData.content,
-      author_name: authStore.user?.displayName || commentData.author_name || '匿名读者',
-      author_email: authStore.user?.email || commentData.author_email,
-      author: authStore.user?.id,
-      created_at: new Date().toISOString(),
+      content: commentData.content.trim(),
+      author_name: authStore.user?.displayName || commentData.author_name?.trim() || '匿名读者',
+      author_email: authStore.user?.email || commentData.author_email?.trim() || '',
+      author: authorId || undefined,
     }
 
     if (isServerLive.value && isCollectionsReady.value) {
       try {
         const commentsCol = getCommentsCollection()
-        const { id: _id, created_at: _ca, updated_at: _ua, deleted_at: _da, ...serverPayload } = newComment as any
-        const created = await commentsCol.create(serverPayload as any)
-        comments.value.unshift(created)
+        const created = await commentsCol.create(payload as any)
+        const idx = comments.value.findIndex(c => c.id === created.id)
+        if (idx === -1) {
+          comments.value.unshift(created)
+        } else {
+          comments.value[idx] = created
+        }
         persistLocal()
         themeStore.addToast({ type: 'success', message: '评论发表成功！' })
         return created
       } catch (err: any) {
-        console.warn('评论同步到服务端失败:', err)
+        const msg = isHertaError(err) ? err.message : (err?.message || '评论同步到服务端失败')
+        themeStore.addToast({ type: 'error', message: msg })
+        throw err
       }
     }
 
-    comments.value.unshift(newComment)
+    // 离线备用
+    const localComment: BlogComment = {
+      id: `comment-${Date.now()}`,
+      post: commentData.post,
+      content: payload.content,
+      author_name: payload.author_name,
+      author_email: payload.author_email,
+      author: authorId,
+      created_at: new Date().toISOString(),
+    }
+    comments.value.unshift(localComment)
     persistLocal()
-    themeStore.addToast({ type: 'success', message: '评论发表成功！' })
-    return newComment
+    themeStore.addToast({ type: 'success', message: '评论发表成功（本地离线）！' })
+    return localComment
   }
 
   /**
@@ -419,6 +518,116 @@ export const useBlogStore = defineStore('blog', () => {
     comments.value = comments.value.filter(c => c.id !== commentId)
     persistLocal()
     themeStore.addToast({ type: 'info', message: '评论已删除' })
+    return true
+  }
+
+  /**
+   * 创建新专栏目录
+   */
+  const createCategory = (data: {
+    name: string
+    slug?: string
+    description?: string
+    color?: string
+    icon?: string
+  }): BlogCategory => {
+    const trimmedName = data.name.trim()
+    if (!trimmedName) {
+      themeStore.addToast({ type: 'warning', message: '目录名称不能为空' })
+      throw new Error('目录名称不能为空')
+    }
+
+    if (categories.value.some(c => c.name.toLowerCase() === trimmedName.toLowerCase())) {
+      themeStore.addToast({ type: 'warning', message: '已存在同名目录' })
+      throw new Error('已存在同名目录')
+    }
+
+    const newCat: BlogCategory = {
+      id: `cat-${Date.now()}`,
+      name: trimmedName,
+      slug: data.slug?.trim() || trimmedName.toLowerCase().replace(/[\s/]+/g, '-'),
+      description: data.description?.trim() || '',
+      color: data.color || '#10b981',
+      icon: data.icon || 'Folder',
+    }
+
+    categories.value.push(newCat)
+    persistLocal()
+    themeStore.addToast({ type: 'success', message: `目录「${trimmedName}」已成功创建` })
+    return newCat
+  }
+
+  /**
+   * 更新专栏目录
+   */
+  const updateCategory = async (id: string, updateData: Partial<BlogCategory>): Promise<boolean> => {
+    const idx = categories.value.findIndex(c => c.id === id)
+    if (idx === -1) return false
+
+    const oldName = categories.value[idx].name
+    const newName = updateData.name?.trim() || oldName
+
+    // 如果重命名了目录名称，将归属该旧目录的所有文章全部同步更新为新目录名称
+    if (newName !== oldName) {
+      const affectedPosts = posts.value.filter(p => p.category === oldName)
+      affectedPosts.forEach(p => {
+        p.category = newName
+      })
+      if (isServerLive.value && isCollectionsReady.value) {
+        const postsCol = getPostsCollection()
+        affectedPosts.forEach(p => {
+          postsCol.update(p.id, { category: newName }).catch(() => {})
+        })
+      }
+    }
+
+    categories.value[idx] = {
+      ...categories.value[idx],
+      ...updateData,
+      name: newName,
+      slug: updateData.slug?.trim() || categories.value[idx].slug,
+    }
+    persistLocal()
+    themeStore.addToast({ type: 'success', message: '目录信息已更新' })
+    return true
+  }
+
+  /**
+   * 删除专栏目录，把管理的文章全部设置成「未设置目录」
+   */
+  const deleteCategory = async (idOrName: string): Promise<boolean> => {
+    const target = categories.value.find(c => c.id === idOrName || c.name === idOrName)
+    if (!target) return false
+
+    const catName = target.name
+    categories.value = categories.value.filter(c => c.id !== target.id)
+
+    // 关键需求：把管理的文章全部设置成未设置目录
+    const affectedPosts = posts.value.filter(p => p.category === catName || p.category === target.slug)
+    affectedPosts.forEach(p => {
+      p.category = '未设置目录'
+    })
+
+    if (currentPost.value && (currentPost.value.category === catName || currentPost.value.category === target.slug)) {
+      currentPost.value.category = '未设置目录'
+    }
+
+    if (isServerLive.value && isCollectionsReady.value) {
+      try {
+        const postsCol = getPostsCollection()
+        await Promise.all(
+          affectedPosts.map(p => postsCol.update(p.id, { category: '未设置目录' }).catch(() => {}))
+        )
+      } catch (err) {
+        console.warn('向服务端批量更新文章目录失败:', err)
+      }
+    }
+
+    persistLocal()
+    themeStore.addToast({
+      type: 'info',
+      message: `已删除目录「${catName}」，关联的 ${affectedPosts.length} 篇文章已归入「未设置目录」`,
+    })
     return true
   }
 
@@ -448,5 +657,8 @@ export const useBlogStore = defineStore('blog', () => {
     getCommentsByPostId,
     addComment,
     deleteComment,
+    createCategory,
+    updateCategory,
+    deleteCategory,
   }
 })

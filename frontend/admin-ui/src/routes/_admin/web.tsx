@@ -9,7 +9,7 @@ import { JbCard } from '../../components/ui/JbCard';
 import { JbModal } from '../../components/ui/JbModal';
 import { JbStatusTag } from '../../components/ui/JbStatusTag';
 import { useToast } from '../../components/ui/Toast';
-import { hbApi, type WebProjectModel } from '../../lib/api';
+import { hbApi, isHertaError, type WebProjectModel } from '../../lib/api';
 import { useI18n } from '../../lib/i18n';
 
 export const Route = createFileRoute('/_admin/web')({ component: WebProjectsPage });
@@ -21,42 +21,35 @@ function formatFileSize(bytes: number): string {
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+  return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
 }
 
-function formatVersionTimestamp(version: string): string {
-  const parts = version.split('-');
-  if (parts.length === 6) {
-    const [year, month, day, hour, min, sec] = parts;
-    return `${year}-${month}-${day} ${hour}:${min}:${sec}`;
-  }
-  return version;
+function formatVersionTimestamp(v: string): string {
+  const parsed = dayjs(v);
+  return parsed.isValid() ? parsed.format('YYYY-MM-DD HH:mm:ss') : v;
 }
 
 function WebProjectsPage() {
-  const { t } = useI18n();
   const queryClient = useQueryClient();
+  const { t } = useI18n();
   const toast = useToast();
 
-  // Form State
-  const archiveRef = useRef<HTMLInputElement>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isDragOver, setIsDragOver] = useState(false);
   const [alias, setAlias] = useState('');
   const [spaFallback, setSpaFallback] = useState(true);
   const [cacheControl, setCacheControl] = useState(DEFAULT_CACHE_CONTROL);
   const [notFound, setNotFound] = useState('');
-
-  // Modals & Panels State
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showGuide, setShowGuide] = useState(false);
+  const archiveRef = useRef<HTMLInputElement>(null);
+
   const [editingProject, setEditingProject] = useState<WebProjectModel | null>(null);
   const [editAlias, setEditAlias] = useState('');
   const [editSpaFallback, setEditSpaFallback] = useState(true);
-  const [editCacheControl, setEditCacheControl] = useState('');
+  const [editCacheControl, setEditCacheControl] = useState(DEFAULT_CACHE_CONTROL);
   const [editNotFound, setEditNotFound] = useState('');
 
-  // Version History Modal State
   const [versionsModalProject, setVersionsModalProject] = useState<WebProjectModel | null>(null);
 
   // 1. Query Web Projects
@@ -69,7 +62,7 @@ function WebProjectsPage() {
     queryKey: ['webProjects'],
     queryFn: async () => {
       const res = await hbApi.webProjects.list();
-      return res.data.data || [];
+      return res || [];
     },
   });
 
@@ -85,7 +78,7 @@ function WebProjectsPage() {
     queryFn: async () => {
       if (!versionsModalProject?.name) return [];
       const res = await hbApi.webProjects.versions(versionsModalProject.name);
-      return res.data.data || [];
+      return res || [];
     },
     enabled: Boolean(versionsModalProject?.name),
   });
@@ -99,18 +92,18 @@ function WebProjectsPage() {
       if (!file) {
         throw new Error('Please select a build archive file first.');
       }
-      const formData = new FormData();
-      formData.append('archive', file);
-      if (alias.trim()) formData.append('alias', alias.trim());
-      formData.append('spaFallback', String(spaFallback));
-      if (cacheControl.trim()) formData.append('cacheControl', cacheControl.trim());
-      if (notFound.trim()) formData.append('notFound', notFound.trim());
-      return hbApi.webProjects.deploy(formData);
+      return hbApi.webProjects.deploy({
+        archive: file,
+        alias: alias.trim() || undefined,
+        spaFallback,
+        cacheControl: cacheControl.trim() || undefined,
+        notFound: notFound.trim() || undefined,
+      });
     },
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['webProjects'] });
       queryClient.invalidateQueries({ queryKey: ['webProjectVersions'] });
-      toast.success(t('web.deploy_success', { id: res.data?.data?.name || 'OK' }));
+      toast.success(t('web.deploy_success', { id: res?.name || 'OK' }));
       setSelectedFile(null);
       if (archiveRef.current) archiveRef.current.value = '';
       setAlias('');
@@ -118,11 +111,8 @@ function WebProjectsPage() {
       setCacheControl(DEFAULT_CACHE_CONTROL);
       setSpaFallback(true);
     },
-    onError: (err: {
-      response?: { data?: { error?: { message?: string } } };
-      message?: string;
-    }) => {
-      toast.error(err.response?.data?.error?.message || err.message || 'Deploy failed');
+    onError: (err: unknown) => {
+      toast.error(isHertaError(err) ? err.message : ((err as Error)?.message || 'Deploy failed'));
     },
   });
 
@@ -147,11 +137,8 @@ function WebProjectsPage() {
       toast.success(t('web.update_success'));
       setEditingProject(null);
     },
-    onError: (err: {
-      response?: { data?: { error?: { message?: string } } };
-      message?: string;
-    }) => {
-      toast.error(err.response?.data?.error?.message || err.message || 'Update failed');
+    onError: (err: unknown) => {
+      toast.error(isHertaError(err) ? err.message : ((err as Error)?.message || 'Update failed'));
     },
   });
 
@@ -168,11 +155,8 @@ function WebProjectsPage() {
       );
       setVersionsModalProject(null);
     },
-    onError: (err: {
-      response?: { data?: { error?: { message?: string } } };
-      message?: string;
-    }) => {
-      toast.error(err.response?.data?.error?.message || err.message || 'Rollback failed');
+    onError: (err: unknown) => {
+      toast.error(isHertaError(err) ? err.message : ((err as Error)?.message || 'Rollback failed'));
     },
   });
 
@@ -186,11 +170,8 @@ function WebProjectsPage() {
       queryClient.invalidateQueries({ queryKey: ['webProjectVersions'] });
       toast.success(t('web.deleted_success'));
     },
-    onError: (err: {
-      response?: { data?: { error?: { message?: string } } };
-      message?: string;
-    }) => {
-      toast.error(err.response?.data?.error?.message || err.message || 'Delete failed');
+    onError: (err: unknown) => {
+      toast.error(isHertaError(err) ? err.message : ((err as Error)?.message || 'Delete failed'));
     },
   });
 

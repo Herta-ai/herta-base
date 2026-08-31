@@ -8,7 +8,7 @@ import { JbCard } from '../../../components/ui/JbCard';
 import { JbModal } from '../../../components/ui/JbModal';
 import { JbStatusTag } from '../../../components/ui/JbStatusTag';
 import { useToast } from '../../../components/ui/Toast';
-import { hbApi, type RecordModel, type CollectionModel } from '../../../lib/api';
+import { hbApi, isHertaError, type RecordModel, type CollectionModel } from '../../../lib/api';
 import { useI18n } from '../../../lib/i18n';
 import { useRealtimeCollection, type RealtimeEvent } from '../../../lib/sse';
 
@@ -22,7 +22,7 @@ function CollectionRecordsPage() {
   const { t } = useI18n();
   const toast = useToast();
 
-  // Table state
+  // Query & Pagination State
   const [page, setPage] = useState(1);
   const perPage = 30;
   const [filter, setFilter] = useState('');
@@ -40,7 +40,7 @@ function CollectionRecordsPage() {
     queryKey: ['collection', collectionName],
     queryFn: async () => {
       const res = await hbApi.collections.get(collectionName);
-      return res.data.data;
+      return res;
     },
   });
 
@@ -61,15 +61,12 @@ function CollectionRecordsPage() {
         sort: sort.trim() || undefined,
         expand: expand.trim() || undefined,
       });
-      return res.data;
+      return res;
     },
   });
 
-  const records = recordsRes?.data || [];
-  const meta = recordsRes?.meta as
-    | { total?: number; totalItems?: number; page?: number; perPage?: number }
-    | undefined;
-  const totalCount = meta?.total ?? meta?.totalItems ?? records.length;
+  const records = recordsRes?.items || [];
+  const totalCount = recordsRes?.total ?? records.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / perPage));
 
   // 3. Realtime SSE
@@ -86,11 +83,8 @@ function CollectionRecordsPage() {
       toast.success(t('records.saved_success'));
       closeModal();
     },
-    onError: (err: {
-      response?: { data?: { error?: { message?: string } } };
-      message?: string;
-    }) => {
-      toast.error(err.response?.data?.error?.message || err.message || 'Create record failed');
+    onError: (err: unknown) => {
+      toast.error(isHertaError(err) ? err.message : ((err as Error)?.message || 'Create record failed'));
     },
   });
 
@@ -102,11 +96,8 @@ function CollectionRecordsPage() {
       toast.success(t('records.saved_success'));
       closeModal();
     },
-    onError: (err: {
-      response?: { data?: { error?: { message?: string } } };
-      message?: string;
-    }) => {
-      toast.error(err.response?.data?.error?.message || err.message || 'Update record failed');
+    onError: (err: unknown) => {
+      toast.error(isHertaError(err) ? err.message : ((err as Error)?.message || 'Update record failed'));
     },
   });
 
@@ -116,11 +107,8 @@ function CollectionRecordsPage() {
       queryClient.invalidateQueries({ queryKey: ['records', collectionName] });
       toast.success(t('records.deleted_success'));
     },
-    onError: (err: {
-      response?: { data?: { error?: { message?: string } } };
-      message?: string;
-    }) => {
-      toast.error(err.response?.data?.error?.message || err.message || 'Delete record failed');
+    onError: (err: unknown) => {
+      toast.error(isHertaError(err) ? err.message : ((err as Error)?.message || 'Delete record failed'));
     },
   });
 

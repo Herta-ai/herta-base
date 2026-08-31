@@ -104,7 +104,7 @@ const goToPost = (post: any) => {
               <div class="text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-3">热门专栏分类</div>
               <div class="flex flex-wrap gap-2 mb-6">
                 <button
-                  v-for="cat in blogStore.categories"
+                  v-for="cat in blogStore.computedCategories"
                   :key="cat.id"
                   @click="query = cat.name"
                   class="px-3 py-1.5 rounded-xl bg-zinc-100 hover:bg-emerald-50 hover:text-emerald-600 dark:bg-zinc-800 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-400 text-xs font-medium text-zinc-600 dark:text-zinc-300 transition"

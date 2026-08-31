@@ -70,7 +70,7 @@ function SettingsPage() {
       const endTime = performance.now();
       setSqlExecutionTime(Math.round(endTime - startTime));
       setSqlResult(
-        res.data?.data?.results || [{ status: 'OK', message: 'Query executed successfully' }],
+        res?.results || [{ status: 'OK', message: 'Query executed successfully' }],
       );
       toast.success('SQL query executed successfully');
     } catch {
@@ -97,7 +97,7 @@ function SettingsPage() {
     queryKey: ['collections'],
     queryFn: async () => {
       const res = await hbApi.collections.list();
-      return res.data.data || [];
+      return res || [];
     },
   });
 

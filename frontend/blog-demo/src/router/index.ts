@@ -3,7 +3,7 @@ import HomeView from '../views/HomeView.vue'
 import { isDatabaseInitialized } from '../lib/hb'
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
       path: '/',

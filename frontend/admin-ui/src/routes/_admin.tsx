@@ -74,7 +74,7 @@ function AdminLayout() {
     queryKey: ['collections'],
     queryFn: async () => {
       const res = await hbApi.collections.list();
-      return res.data.data || [];
+      return res || [];
     },
     enabled: auth.isAuthenticated,
   });

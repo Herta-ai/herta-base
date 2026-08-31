@@ -10,13 +10,13 @@ const blogStore = useBlogStore()
 
 const currentCategory = computed(() => {
   const nameOrSlug = route.params.name as string
-  return blogStore.categories.find(c => c.name === nameOrSlug || c.slug === nameOrSlug)
+  return blogStore.computedCategories.find(c => c.name === nameOrSlug || c.slug === nameOrSlug)
 })
 
 const updateFilter = () => {
   const nameOrSlug = route.params.name as string
   if (nameOrSlug) {
-    const found = blogStore.categories.find(c => c.name === nameOrSlug || c.slug === nameOrSlug)
+    const found = blogStore.computedCategories.find(c => c.name === nameOrSlug || c.slug === nameOrSlug)
     blogStore.filter.category = found ? found.name : nameOrSlug
   } else {
     blogStore.filter.category = undefined

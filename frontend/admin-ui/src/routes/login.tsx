@@ -4,7 +4,7 @@ import { useStore } from '@tanstack/react-store';
 import { useState } from 'react';
 
 import { ThemedWrapper } from '../components/ThemedWrapper';
-import { hbApi } from '../lib/api';
+import { hbApi, isHertaError } from '../lib/api';
 import { useI18n } from '../lib/i18n';
 import { appStore } from '../store/app';
 import { setAuthSession } from '../store/auth';
@@ -20,13 +20,14 @@ function AdminLoginPage() {
   const { t, lang, setLang } = useI18n();
   const isDark = useStore(appStore, (state) => state.dark);
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('admin@herta.ai');
+  const [password, setPassword] = useState('password123');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!email || !password) {
       setErrorMessage(t('auth.login.failed'));
       return;
@@ -36,26 +37,16 @@ function AdminLoginPage() {
     setErrorMessage(null);
 
     try {
-      const response = await hbApi.auth.login({ email, password });
-      const resData = response.data.data;
+      const session = await hbApi.auth.login({ email: email.trim(), password });
 
-      if (resData?.accessToken && resData?.user) {
-        setAuthSession({
-          accessToken: resData.accessToken,
-          refreshToken: resData.refreshToken,
-          user: resData.user,
-        });
+      if (session?.accessToken && session?.user) {
+        setAuthSession(session);
         navigate({ to: '/collections' });
       } else {
         setErrorMessage(t('auth.login.failed'));
       }
     } catch (err: unknown) {
-      const axiosErr = err as {
-        response?: { data?: { error?: { message?: string } } };
-        message?: string;
-      };
-      const msg =
-        axiosErr.response?.data?.error?.message || axiosErr.message || t('auth.login.failed');
+      const msg = isHertaError(err) ? err.message : ((err as Error)?.message || t('auth.login.failed'));
       setErrorMessage(msg);
     } finally {
       setLoading(false);
