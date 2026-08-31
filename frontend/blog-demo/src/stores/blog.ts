@@ -503,21 +503,23 @@ export const useBlogStore = defineStore('blog', () => {
   }
 
   /**
-   * 删除评论
+   * 删除评论（按行级规则权限严格执行服务端删除）
    */
   const deleteComment = async (commentId: string): Promise<boolean> => {
     if (isServerLive.value && isCollectionsReady.value) {
       try {
         const commentsCol = getCommentsCollection()
         await commentsCol.delete(commentId)
-      } catch (err) {
-        console.warn('服务端删除评论失败:', err)
+      } catch (err: any) {
+        const msg = isHertaError(err) ? err.message : (err?.message || '删除评论失败，无权操作该评论')
+        themeStore.addToast({ type: 'error', message: msg })
+        throw err
       }
     }
 
     comments.value = comments.value.filter(c => c.id !== commentId)
     persistLocal()
-    themeStore.addToast({ type: 'info', message: '评论已删除' })
+    themeStore.addToast({ type: 'info', message: '评论已成功删除' })
     return true
   }
 

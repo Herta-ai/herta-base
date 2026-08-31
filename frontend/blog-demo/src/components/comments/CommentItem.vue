@@ -13,8 +13,19 @@ const authStore = useAuthStore()
 const blogStore = useBlogStore()
 
 const canDelete = () => {
+  // 1. 超级管理员可删除全站任意评论
   if (authStore.isAdmin) return true
-  if (authStore.user?.id && authStore.user.id === props.comment.author) return true
+
+  const currentUserId = authStore.user?.id
+  if (!currentUserId) return false
+
+  // 2. 当前登录用户是此评论的撰写者
+  if (props.comment.author === currentUserId) return true
+
+  // 3. 当前登录用户是该文章的创作者/作者（可删除自己文章下的所有评论）
+  const postAuthor = blogStore.currentPost?.author || blogStore.posts.find(p => p.id === props.comment.post)?.author
+  if (postAuthor && postAuthor === currentUserId) return true
+
   return false
 }
 

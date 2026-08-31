@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBlogStore } from '../stores/blog'
+import { useAuthStore } from '../stores/auth'
 import { useThemeStore } from '../stores/theme'
 import type { BlogCategory } from '../types/blog'
 import {
@@ -27,10 +28,18 @@ import { formatDate } from '../lib/utils'
 
 const router = useRouter()
 const blogStore = useBlogStore()
+const authStore = useAuthStore()
 const themeStore = useThemeStore()
 
 // 顶级视图模式：文章管理 vs 专栏目录管理
 const viewMode = ref<'posts' | 'categories'>('posts')
+
+// 权限判定：是否具有某文章的管理权（超管或创作者本人）
+const canManagePost = (post: any) => {
+  if (authStore.isAdmin) return true
+  if (authStore.user?.id && post.author === authStore.user.id) return true
+  return false
+}
 
 // 文章筛选
 const currentTab = ref<'all' | 'published' | 'draft'>('all')
@@ -109,11 +118,19 @@ const stats = computed(() => {
 })
 
 const togglePublishStatus = async (post: any) => {
+  if (!canManagePost(post)) {
+    themeStore.addToast({ type: 'warning', message: '您无权修改其他人创建文章的状态' })
+    return
+  }
   const newStatus = !post.is_public
   await blogStore.updatePost(post.id, { is_public: newStatus })
 }
 
 const deletePost = async (post: any) => {
+  if (!canManagePost(post)) {
+    themeStore.addToast({ type: 'warning', message: '您无权删除其他人创建的文章' })
+    return
+  }
   if (confirm(`确定要删除文章《${post.title}》吗？`)) {
     await blogStore.deletePost(post.id)
   }
@@ -435,6 +452,7 @@ const filterByThisCategory = (catName: string) => {
                   </router-link>
 
                   <router-link
+                    v-if="canManagePost(post)"
                     :to="`/editor?id=${post.id}`"
                     class="p-1.5 rounded-lg text-zinc-500 hover:text-blue-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
                     title="编辑文章"
@@ -443,6 +461,7 @@ const filterByThisCategory = (catName: string) => {
                   </router-link>
 
                   <button
+                    v-if="canManagePost(post)"
                     @click="togglePublishStatus(post)"
                     class="p-1.5 rounded-lg text-zinc-500 hover:text-amber-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer"
                     :title="post.is_public ? '转为草稿' : '公开发布'"
@@ -452,6 +471,7 @@ const filterByThisCategory = (catName: string) => {
                   </button>
 
                   <button
+                    v-if="canManagePost(post)"
                     @click="deletePost(post)"
                     class="p-1.5 rounded-lg text-zinc-500 hover:text-rose-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition cursor-pointer"
                     title="删除文章"

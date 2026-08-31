@@ -181,6 +181,14 @@ export async function performDatabaseInitialization(params: {
 
   // 3. 创建 blog_posts 文章集合与 API 规则
   onProgress?.('正在创建文章集合 (blog_posts) 与行级权限规则...')
+  const postRules = {
+    list: 'is_public = true OR author = $auth.record OR $auth.role = "admin"',
+    view: 'is_public = true OR author = $auth.record OR $auth.role = "admin"',
+    create: '$record.author = $auth.record OR $auth.role = "admin"',
+    update: 'is_public = true OR author = $auth.record OR $auth.role = "admin"',
+    delete: '$auth.role = "admin" OR author = $auth.record',
+  }
+
   try {
     await adminClient.collections.create({
       name: 'blog_posts',
@@ -205,20 +213,25 @@ export async function performDatabaseInitialization(params: {
           options: { collection: 'blog_users', maxSelect: 1 },
         },
       ],
-      rules: {
-        list: 'is_public = true OR author = $auth.record',
-        view: 'is_public = true OR author = $auth.record',
-        create: '$record.author = $auth.record',
-        update: 'is_public = true OR author = $auth.record',
-        delete: 'author = $auth.record',
-      },
+      rules: postRules,
     })
   } catch (err: any) {
-    console.warn('blog_posts 集合可能已存在:', err?.message)
+    // 若已存在，自动增量同步更新规则
+    try {
+      await adminClient.collections.update('blog_posts', { rules: postRules })
+    } catch {}
   }
 
   // 4. 创建 blog_comments 评论集合
   onProgress?.('正在创建评论集合 (blog_comments)...')
+  const commentRules = {
+    list: true,
+    view: true,
+    create: true,
+    update: '$auth.role = "admin" OR author = $auth.record',
+    delete: '$auth.role = "admin" OR author = $auth.record OR post.author = $auth.record',
+  }
+
   try {
     await adminClient.collections.create({
       name: 'blog_comments',
@@ -240,19 +253,16 @@ export async function performDatabaseInitialization(params: {
         { name: 'author_name', type: 'text' },
         { name: 'author_email', type: 'text' },
       ],
-      rules: {
-        list: true,
-        view: true,
-        create: true,
-        update: 'author = $auth.record',
-        delete: 'author = $auth.record',
-      },
+      rules: commentRules,
     })
   } catch (err: any) {
-    console.warn('blog_comments 集合可能已存在:', err?.message)
+    // 若已存在，自动增量同步更新规则
+    try {
+      await adminClient.collections.update('blog_comments', { rules: commentRules })
+    } catch {}
   }
 
-  // 5. 注册 Blog 超级管理员账号
+  // 5. 注册 Blog 超级管理员账号并赋予 admin 权限
   onProgress?.('正在注册并授权博客超级管理员账号...')
   const auth = hb.auth.forCollection('blog_users')
   let session
@@ -262,7 +272,7 @@ export async function performDatabaseInitialization(params: {
       password: params.blogAdminPassword,
       profile: {
         displayName: params.blogAdminName.trim() || '站长',
-        role: '站长 / 超级管理员',
+        role: 'admin',
         bio: params.blogAdminBio?.trim() || '博客超级管理员，致力于记录技术演进与思考。',
       },
     })
@@ -273,6 +283,16 @@ export async function performDatabaseInitialization(params: {
       password: params.blogAdminPassword,
     })
   }
+
+  // 确保超管在数据库中的 role 字段为 'admin'
+  try {
+    const blogUsersCol = hb.collection('blog_users')
+    await blogUsersCol.update(session.user.id, {
+      role: 'admin',
+      displayName: params.blogAdminName.trim() || '站长',
+      bio: params.blogAdminBio?.trim() || '博客超级管理员，致力于记录技术演进与思考。',
+    })
+  } catch {}
 
   // 6. 使用该超管账号发布 HelloWorld 文章
   onProgress?.('正在初始化并发布首篇 HelloWorld 欢迎文章...')

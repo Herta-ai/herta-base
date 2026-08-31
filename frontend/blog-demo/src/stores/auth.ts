@@ -43,7 +43,10 @@ export const useAuthStore = defineStore('auth', () => {
   initFromStorage()
 
   const isAuthenticated = computed(() => !!user.value && !!token.value)
-  const isAdmin = computed(() => user.value?.role?.includes('站长') || user.value?.role?.includes('admin'))
+  const isAdmin = computed(() => {
+    const r = user.value?.role
+    return r === 'admin' || r?.includes('admin') || r?.includes('站长') || r?.includes('超级管理员') || r?.includes('管理员')
+  })
 
   /**
    * 登录

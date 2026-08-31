@@ -3,6 +3,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { BlogPost } from '../types/blog'
 import { useBlogStore } from '../stores/blog'
+import { useAuthStore } from '../stores/auth'
 import { useThemeStore } from '../stores/theme'
 import MarkdownEditor from '../components/editor/MarkdownEditor.vue'
 import PostInspector from '../components/editor/PostInspector.vue'
@@ -13,6 +14,7 @@ import confetti from 'canvas-confetti'
 const route = useRoute()
 const router = useRouter()
 const blogStore = useBlogStore()
+const authStore = useAuthStore()
 const themeStore = useThemeStore()
 
 const saving = ref(false)
@@ -35,6 +37,11 @@ onMounted(async () => {
   if (editId) {
     const existing = await blogStore.getPostBySlugOrId(editId)
     if (existing) {
+      if (existing.author && authStore.user?.id && !authStore.isAdmin && existing.author !== authStore.user.id) {
+        themeStore.addToast({ type: 'warning', message: '您无权编辑其他人创建的文章' })
+        router.push('/admin')
+        return
+      }
       isEditing.value = true
       Object.assign(postForm, existing)
     }
