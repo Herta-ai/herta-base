@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { BlogUser } from '../types/blog'
-import { getAuthClient, isHertaError } from '../lib/hb'
+import { getAuthClient, isHertaError, persistentAuthStore } from '../lib/hb'
 import { SEED_USERS } from '../lib/seed-data'
 import { useThemeStore } from './theme'
 
@@ -14,20 +14,35 @@ export interface UserProfile {
 export const useAuthStore = defineStore('auth', () => {
   const themeStore = useThemeStore()
   const user = ref<BlogUser | null>(null)
-  const token = ref<string | null>(localStorage.getItem('herta_blog_token') || null)
+  const token = ref<string | null>(null)
   const loading = ref(false)
 
-  // 从本地缓存恢复用户数据
-  const cachedUser = localStorage.getItem('herta_blog_user')
-  if (cachedUser) {
+  // 严格从 SDK 的持久化 AuthSession 中恢复登录态
+  const initFromStorage = () => {
     try {
-      user.value = JSON.parse(cachedUser)
+      const session = persistentAuthStore.get()
+      if (session && session.accessToken && session.user) {
+        user.value = {
+          id: session.user.id,
+          email: session.user.email,
+          displayName: (session.user as any).displayName || session.user.email?.split('@')[0] || '创作者',
+          role: (session.user as any).role || '创作者',
+          avatar: (session.user as any).avatar,
+        }
+        token.value = session.accessToken
+      } else {
+        user.value = null
+        token.value = null
+      }
     } catch {
-      // ignore JSON parse error
+      user.value = null
+      token.value = null
     }
   }
 
-  const isAuthenticated = computed(() => !!user.value)
+  initFromStorage()
+
+  const isAuthenticated = computed(() => !!user.value && !!token.value)
   const isAdmin = computed(() => user.value?.role?.includes('站长') || user.value?.role?.includes('admin'))
 
   /**
@@ -36,33 +51,21 @@ export const useAuthStore = defineStore('auth', () => {
   const login = async (email: string, password: string): Promise<boolean> => {
     loading.value = true
     try {
-      // 尝试调用 HertaBase SDK 登录
+      // 调用 HertaBase SDK 真实认证接口
       const auth = getAuthClient()
-      const res = await auth.login<UserProfile>({ email, password })
+      const res = await auth.login<UserProfile>({ email: email.trim(), password })
       user.value = {
         id: res.user.id,
         email: res.user.email,
         displayName: res.user.displayName || email.split('@')[0],
-        role: res.user.role || '会员',
+        role: res.user.role || '创作者',
         avatar: res.user.avatar,
       }
       token.value = res.accessToken
-      localStorage.setItem('herta_blog_token', res.accessToken)
-      localStorage.setItem('herta_blog_user', JSON.stringify(user.value))
       themeStore.addToast({ type: 'success', message: `欢迎回来，${user.value.displayName}！` })
       return true
     } catch (err: any) {
-      // 如果后端离线或未初始化集合，允许演示管理员账号登录
-      if (email === 'admin@herta.ai' && password === '123456') {
-        user.value = SEED_USERS[0]
-        token.value = 'demo-admin-token'
-        localStorage.setItem('herta_blog_token', token.value)
-        localStorage.setItem('herta_blog_user', JSON.stringify(user.value))
-        themeStore.addToast({ type: 'success', message: `演示管理员已登录：${user.value.displayName}` })
-        return true
-      }
-
-      const msg = isHertaError(err) ? err.message : (err?.message || '登录失败，请检查账号密码')
+      const msg = isHertaError(err) ? err.message : (err?.message || '登录失败，请检查账号密码或后端连接')
       themeStore.addToast({ type: 'error', message: msg })
       return false
     } finally {
@@ -89,25 +92,12 @@ export const useAuthStore = defineStore('auth', () => {
         role: res.user.role || '创作者',
       }
       token.value = res.accessToken
-      localStorage.setItem('herta_blog_token', res.accessToken)
-      localStorage.setItem('herta_blog_user', JSON.stringify(user.value))
       themeStore.addToast({ type: 'success', message: `注册成功，欢迎加入 HertaBlog！` })
       return true
     } catch (err: any) {
-      // 演示模式降级注册
-      const newUser: BlogUser = {
-        id: `blog_users:guest-${Date.now()}`,
-        email,
-        displayName: displayName || email.split('@')[0],
-        role: '创作者',
-        avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(displayName)}`,
-      }
-      user.value = newUser
-      token.value = `demo-token-${Date.now()}`
-      localStorage.setItem('herta_blog_token', token.value)
-      localStorage.setItem('herta_blog_user', JSON.stringify(user.value))
-      themeStore.addToast({ type: 'success', message: `演示账号已创建并登录！` })
-      return true
+      const msg = isHertaError(err) ? err.message : (err?.message || '注册失败，请检查邮箱是否已存在或后端连接')
+      themeStore.addToast({ type: 'error', message: msg })
+      return false
     } finally {
       loading.value = false
     }
@@ -123,10 +113,9 @@ export const useAuthStore = defineStore('auth', () => {
     } catch {
       // ignore
     }
+    persistentAuthStore.clear()
     user.value = null
     token.value = null
-    localStorage.removeItem('herta_blog_token')
-    localStorage.removeItem('herta_blog_user')
     themeStore.addToast({ type: 'info', message: '您已成功退出登录' })
   }
 

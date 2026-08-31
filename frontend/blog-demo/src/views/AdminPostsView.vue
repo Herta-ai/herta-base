@@ -117,25 +117,31 @@ const deletePost = async (post: any) => {
       <!-- 表格上方过滤与搜索栏 -->
       <div class="p-4 border-b border-zinc-200 dark:border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-4">
         <!-- 状态选项卡 -->
-        <div class="flex p-1 rounded-xl bg-zinc-100 dark:bg-zinc-800/80 w-full sm:w-auto">
+        <div class="flex p-1 rounded-xl bg-zinc-100 dark:bg-zinc-800/90 border border-zinc-200 dark:border-zinc-700/80 w-full sm:w-auto">
           <button
             @click="currentTab = 'all'"
-            class="flex-1 sm:flex-initial px-3.5 py-1.5 text-xs font-bold rounded-lg transition"
-            :class="currentTab === 'all' ? 'bg-white dark:bg-zinc-700 text-emerald-600 dark:text-emerald-400 shadow-xs' : 'text-zinc-500'"
+            class="flex-1 sm:flex-initial px-3.5 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer"
+            :class="currentTab === 'all'
+              ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/20'
+              : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/60 dark:hover:bg-zinc-700/60'"
           >
             全部 ({{ stats.total }})
           </button>
           <button
             @click="currentTab = 'published'"
-            class="flex-1 sm:flex-initial px-3.5 py-1.5 text-xs font-bold rounded-lg transition"
-            :class="currentTab === 'published' ? 'bg-white dark:bg-zinc-700 text-emerald-600 dark:text-emerald-400 shadow-xs' : 'text-zinc-500'"
+            class="flex-1 sm:flex-initial px-3.5 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer"
+            :class="currentTab === 'published'
+              ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/20'
+              : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/60 dark:hover:bg-zinc-700/60'"
           >
             已公开发布 ({{ stats.published }})
           </button>
           <button
             @click="currentTab = 'draft'"
-            class="flex-1 sm:flex-initial px-3.5 py-1.5 text-xs font-bold rounded-lg transition"
-            :class="currentTab === 'draft' ? 'bg-white dark:bg-zinc-700 text-emerald-600 dark:text-emerald-400 shadow-xs' : 'text-zinc-500'"
+            class="flex-1 sm:flex-initial px-3.5 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer"
+            :class="currentTab === 'draft'
+              ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/20'
+              : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200/60 dark:hover:bg-zinc-700/60'"
           >
             草稿箱 ({{ stats.draft }})
           </button>

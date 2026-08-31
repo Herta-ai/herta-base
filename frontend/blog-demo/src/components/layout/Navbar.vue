@@ -67,7 +67,9 @@ const handleLogout = async () => {
           :key="link.path"
           :to="link.path"
           class="px-3.5 py-2 rounded-xl text-sm font-medium transition flex items-center gap-1.5"
-          :class="route.path === link.path ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400' : 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-white'"
+          :class="route.path === link.path
+            ? 'bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 font-semibold border border-emerald-200/60 dark:border-emerald-800/60'
+            : 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-white border border-transparent'"
         >
           <component :is="link.icon" class="w-4 h-4" />
           {{ link.name }}
@@ -89,8 +91,9 @@ const handleLogout = async () => {
         <!-- 暗黑模式切换 -->
         <button
           @click="themeStore.toggleDark()"
-          class="p-2 rounded-xl text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition"
+          class="w-9 h-9 rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-700/80 flex-center text-zinc-600 dark:text-amber-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition cursor-pointer shadow-xs"
           title="切换深色/浅色模式"
+          aria-label="切换深色/浅色模式"
         >
           <Sun v-if="themeStore.isDark" class="w-4.5 h-4.5 text-amber-400" />
           <Moon v-else class="w-4.5 h-4.5 text-zinc-600" />

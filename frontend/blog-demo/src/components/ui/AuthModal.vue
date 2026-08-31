@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useThemeStore } from '../../stores/theme'
 import { useAuthStore } from '../../stores/auth'
 import Modal from './Modal.vue'
-import { Lock, Mail, User, ShieldCheck, Sparkles } from 'lucide-vue-next'
+import { Lock, Mail, User, ShieldCheck, Sparkles, AlertCircle } from 'lucide-vue-next'
 
 const themeStore = useThemeStore()
 const authStore = useAuthStore()
@@ -11,38 +11,54 @@ const authStore = useAuthStore()
 const email = ref('')
 const password = ref('')
 const displayName = ref('')
+const errorMessage = ref('')
+
+watch(() => themeStore.authMode, () => {
+  errorMessage.value = ''
+})
 
 const handleLogin = async () => {
   if (!email.value || !password.value) {
+    errorMessage.value = '请填写完整的邮箱与密码'
     themeStore.addToast({ type: 'warning', message: '请填写完整的邮箱与密码' })
     return
   }
+  errorMessage.value = ''
   const ok = await authStore.login(email.value, password.value)
   if (ok) {
     themeStore.closeAuth()
     email.value = ''
     password.value = ''
+    errorMessage.value = ''
+  } else {
+    errorMessage.value = '登录失败：账号密码不正确，或后端集合未初始化'
   }
 }
 
 const handleRegister = async () => {
   if (!email.value || !password.value || !displayName.value) {
+    errorMessage.value = '请填写昵称、邮箱与密码'
     themeStore.addToast({ type: 'warning', message: '请填写昵称、邮箱与密码' })
     return
   }
+  errorMessage.value = ''
   const ok = await authStore.register(email.value, password.value, displayName.value)
   if (ok) {
     themeStore.closeAuth()
     email.value = ''
     password.value = ''
     displayName.value = ''
+    errorMessage.value = ''
+  } else {
+    errorMessage.value = '注册失败：邮箱可能已存在或后端数据库异常'
   }
 }
 
 const fillDemoAdmin = () => {
   email.value = 'admin@herta.ai'
-  password.value = '123456'
-  displayName.value = '黑塔空间站主管'
+  password.value = 'password123'
+  displayName.value = '黑塔站长'
+  errorMessage.value = ''
 }
 </script>
 
@@ -86,6 +102,15 @@ const fillDemoAdmin = () => {
         </button>
       </div>
 
+      <!-- 内置错误提示框 -->
+      <div
+        v-if="errorMessage"
+        class="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-600 dark:text-rose-400 flex items-center gap-2 animate-fade-in"
+      >
+        <AlertCircle class="w-4 h-4 shrink-0 text-rose-500" />
+        <span>{{ errorMessage }}</span>
+      </div>
+
       <!-- 表单字段 -->
       <form @submit.prevent="themeStore.authMode === 'login' ? handleLogin() : handleRegister()" class="space-y-3.5 pt-1">
         <div v-if="themeStore.authMode === 'register'" class="space-y-1">
@@ -94,6 +119,7 @@ const fillDemoAdmin = () => {
             <User class="w-4 h-4 text-zinc-400 absolute left-3.5 top-3" />
             <input
               v-model="displayName"
+              @input="errorMessage = ''"
               type="text"
               placeholder="请输入您的昵称"
               class="input-base pl-10 text-sm"
@@ -108,6 +134,7 @@ const fillDemoAdmin = () => {
             <Mail class="w-4 h-4 text-zinc-400 absolute left-3.5 top-3" />
             <input
               v-model="email"
+              @input="errorMessage = ''"
               type="email"
               placeholder="user@example.com"
               class="input-base pl-10 text-sm"
@@ -122,6 +149,7 @@ const fillDemoAdmin = () => {
             <Lock class="w-4 h-4 text-zinc-400 absolute left-3.5 top-3" />
             <input
               v-model="password"
+              @input="errorMessage = ''"
               type="password"
               placeholder="••••••••"
               class="input-base pl-10 text-sm"

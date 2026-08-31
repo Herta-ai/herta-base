@@ -193,7 +193,9 @@ export const useBlogStore = defineStore('blog', () => {
         expand: 'author',
         perPage: 50,
       })
-      posts.value = res.items || []
+      if (res.items && res.items.length > 0) {
+        posts.value = res.items
+      }
       persistLocal()
     } catch (err) {
       console.warn('拉取服务端文章失败，使用本地/演示缓存:', err)
@@ -204,39 +206,64 @@ export const useBlogStore = defineStore('blog', () => {
    * 根据 Slug 或 ID 获取文章
    */
   const getPostBySlugOrId = async (identifier: string): Promise<BlogPost | null> => {
-    // 优先从内存中查找
-    let found = posts.value.find(p => p.id === identifier || p.slug === identifier)
+    // 优先从服务端精确获取
+    try {
+      const postsCol = getPostsCollection()
+      let fetched: BlogPost | null = null
+      try {
+        fetched = await postsCol.get(identifier, { expand: 'author' })
+      } catch {
+        // 若以 ID 查询失败，尝试以 slug 检索
+        const listRes = await postsCol.list({
+          filter: `slug = "${identifier}"`,
+          expand: 'author',
+          perPage: 1,
+        })
+        if (listRes.items && listRes.items.length > 0) {
+          fetched = listRes.items[0]
+        }
+      }
+
+      if (fetched) {
+        currentPost.value = fetched
+        const idx = posts.value.findIndex(p => p.id === fetched!.id)
+        if (idx !== -1) {
+          posts.value[idx] = fetched
+        } else {
+          posts.value.unshift(fetched)
+        }
+        return fetched
+      }
+    } catch (err) {
+      console.warn('从服务端获取文章详情失败:', err)
+    }
+
+    // 内存/本地后备查找
+    const found = posts.value.find(p => p.id === identifier || p.slug === identifier)
     if (found) {
-      // 增加浏览量计数
       found.views = (found.views || 0) + 1
       currentPost.value = found
       return found
-    }
-
-    // 尝试从服务端拉取
-    if (isServerLive.value && isCollectionsReady.value) {
-      try {
-        const postsCol = getPostsCollection()
-        const res = await postsCol.get(identifier, { expand: 'author' })
-        if (res) {
-          currentPost.value = res
-          return res
-        }
-      } catch (err) {
-        console.warn('获取单篇文章失败:', err)
-      }
     }
 
     return null
   }
 
   /**
-   * 创建文章
+   * 创建文章（直接调用 HertaBase 后端接口）
    */
   const createPost = async (postData: Partial<BlogPost>): Promise<BlogPost> => {
-    const now = new Date().toISOString()
-    const newPost: BlogPost = {
-      id: `blog_posts:${Date.now()}`,
+    const authorId = authStore.user?.id
+    if (!authorId) {
+      themeStore.openAuth('login')
+      themeStore.addToast({ type: 'warning', message: '请先登录创作者账号后再发布文章' })
+      throw new Error('请先登录创作者账号')
+    }
+
+    const postsCol = getPostsCollection()
+
+    // 构造符合 API Rules 的新建 payload
+    const serverPayload = {
       title: postData.title || '无标题文章',
       slug: postData.slug || `post-${Date.now()}`,
       content: postData.content || '',
@@ -248,82 +275,64 @@ export const useBlogStore = defineStore('blog', () => {
       tags: postData.tags || ['技术'],
       views: 1,
       likes: 0,
-      author: authStore.user?.id || 'blog_users:admin',
-      created_at: now,
-      updated_at: now,
+      author: authorId,
     }
 
-    // 尝试写入 HertaBase 服务端
-    if (isServerLive.value && isCollectionsReady.value) {
-      try {
-        const postsCol = getPostsCollection()
-        const created = await postsCol.create(newPost as any)
-        posts.value.unshift(created)
-        persistLocal()
-        themeStore.addToast({ type: 'success', message: '文章已成功同步到 HertaBase！' })
-        return created
-      } catch (err: any) {
-        const msg = isHertaError(err) ? err.message : (err?.message || '同步服务端失败')
-        console.warn('服务端创建失败，已保存在本地:', msg)
-        themeStore.addToast({ type: 'warning', message: `已保存到本地（服务端提示: ${msg}）` })
-      }
+    try {
+      const created = await postsCol.create(serverPayload as any)
+      posts.value.unshift(created)
+      persistLocal()
+      themeStore.addToast({ type: 'success', message: '文章已成功发布到 HertaBase！' })
+      return created
+    } catch (err: any) {
+      const msg = isHertaError(err) ? err.message : (err?.message || '发布文章失败，请检查后端集合与权限')
+      themeStore.addToast({ type: 'error', message: msg })
+      throw err
     }
-
-    posts.value.unshift(newPost)
-    persistLocal()
-    themeStore.addToast({ type: 'success', message: '文章发布成功！' })
-    return newPost
   }
 
   /**
-   * 更新文章
+   * 更新文章（直接调用 HertaBase 后端接口）
    */
   const updatePost = async (id: string, updateData: Partial<BlogPost>): Promise<boolean> => {
-    const idx = posts.value.findIndex(p => p.id === id)
-    if (idx === -1) return false
+    const postsCol = getPostsCollection()
+    const { id: _id, created_at: _ca, updated_at: _ua, deleted_at: _da, ...serverPayload } = updateData as any
 
-    const updated = {
-      ...posts.value[idx],
-      ...updateData,
-      updated_at: new Date().toISOString(),
-    }
-
-    if (isServerLive.value && isCollectionsReady.value) {
-      try {
-        const postsCol = getPostsCollection()
-        await postsCol.update(id, updateData as any)
-        themeStore.addToast({ type: 'success', message: '文章已更新并同步到 HertaBase！' })
-      } catch (err: any) {
-        console.warn('服务端更新失败:', err)
+    try {
+      const updated = await postsCol.update(id, serverPayload as any)
+      const idx = posts.value.findIndex(p => p.id === id)
+      if (idx !== -1) {
+        posts.value[idx] = updated
       }
+      if (currentPost.value?.id === id) {
+        currentPost.value = updated
+      }
+      persistLocal()
+      themeStore.addToast({ type: 'success', message: '文章已更新并同步到 HertaBase！' })
+      return true
+    } catch (err: any) {
+      const msg = isHertaError(err) ? err.message : (err?.message || '更新文章失败')
+      themeStore.addToast({ type: 'error', message: msg })
+      throw err
     }
-
-    posts.value[idx] = updated
-    if (currentPost.value?.id === id) {
-      currentPost.value = updated
-    }
-    persistLocal()
-    themeStore.addToast({ type: 'success', message: '文章更新成功！' })
-    return true
   }
 
   /**
-   * 删除文章
+   * 删除文章（直接调用 HertaBase 后端接口）
    */
   const deletePost = async (id: string): Promise<boolean> => {
-    if (isServerLive.value && isCollectionsReady.value) {
-      try {
-        const postsCol = getPostsCollection()
-        await postsCol.delete(id)
-      } catch (err) {
-        console.warn('服务端删除失败:', err)
-      }
+    try {
+      const postsCol = getPostsCollection()
+      await postsCol.delete(id)
+      posts.value = posts.value.filter(p => p.id !== id)
+      persistLocal()
+      themeStore.addToast({ type: 'info', message: '文章已成功删除' })
+      return true
+    } catch (err: any) {
+      const msg = isHertaError(err) ? err.message : (err?.message || '删除文章失败')
+      themeStore.addToast({ type: 'error', message: msg })
+      throw err
     }
-
-    posts.value = posts.value.filter(p => p.id !== id)
-    persistLocal()
-    themeStore.addToast({ type: 'info', message: '文章已成功删除' })
-    return true
   }
 
   /**
@@ -377,7 +386,8 @@ export const useBlogStore = defineStore('blog', () => {
     if (isServerLive.value && isCollectionsReady.value) {
       try {
         const commentsCol = getCommentsCollection()
-        const created = await commentsCol.create(newComment as any)
+        const { id: _id, created_at: _ca, updated_at: _ua, deleted_at: _da, ...serverPayload } = newComment as any
+        const created = await commentsCol.create(serverPayload as any)
         comments.value.unshift(created)
         persistLocal()
         themeStore.addToast({ type: 'success', message: '评论发表成功！' })

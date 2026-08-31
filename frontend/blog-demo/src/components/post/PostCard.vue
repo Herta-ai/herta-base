@@ -110,12 +110,15 @@ const handleLike = (e: Event) => {
             {{ post.views || 0 }}
           </span>
           <button
-            @click="handleLike"
-            class="flex items-center gap-1 hover:text-rose-500 transition cursor-pointer"
-            :class="isLiked ? 'text-rose-500 font-semibold' : ''"
+            @click.stop="handleLike"
+            class="flex items-center gap-1.5 px-2.5 py-1 rounded-full transition-all duration-200 cursor-pointer text-xs"
+            :class="isLiked
+              ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-500 font-semibold border border-rose-200/60 dark:border-rose-900/60'
+              : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-50/50 dark:hover:bg-rose-950/30 border border-zinc-200/50 dark:border-zinc-700/50'"
+            title="喜欢/点赞"
           >
-            <Heart class="w-3.5 h-3.5" :class="isLiked ? 'fill-rose-500' : ''" />
-            {{ post.likes || 0 }}
+            <Heart class="w-3.5 h-3.5" :class="isLiked ? 'fill-rose-500 text-rose-500' : ''" />
+            <span>{{ post.likes || 0 }}</span>
           </button>
         </div>
       </div>

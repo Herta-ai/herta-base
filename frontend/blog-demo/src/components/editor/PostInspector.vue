@@ -90,7 +90,7 @@ const randomCover = () => {
         <button
           @click="generateSlugFromTitle"
           type="button"
-          class="btn-secondary text-[11px] px-2.5 shrink-0"
+          class="btn-secondary text-[11px] px-3 shrink-0"
           title="根据标题自动生成"
         >
           自动
@@ -124,10 +124,18 @@ const randomCover = () => {
         <span
           v-for="(tag, index) in post.tags || []"
           :key="tag"
-          class="badge-base bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs"
+          class="badge-base bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100 border border-zinc-200/90 dark:border-zinc-700 text-xs py-1 pl-2.5 pr-1.5 inline-flex items-center gap-1.5 shadow-2xs"
         >
-          #{{ tag }}
-          <button @click="removeTag(index)" class="hover:text-rose-500 ml-1"><X class="w-3 h-3" /></button>
+          <span>#{{ tag }}</span>
+          <button
+            type="button"
+            @click="removeTag(index)"
+            class="w-4 h-4 rounded-full bg-zinc-200/80 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-300 hover:bg-rose-500 hover:text-white dark:hover:bg-rose-600 dark:hover:text-white flex-center transition-colors cursor-pointer"
+            title="移除标签"
+            aria-label="移除标签"
+          >
+            <X class="w-2.5 h-2.5" />
+          </button>
         </span>
       </div>
       <div class="flex gap-2">
@@ -138,8 +146,13 @@ const randomCover = () => {
           class="input-base text-xs"
           @keydown.enter.prevent="addTag"
         />
-        <button @click="addTag" type="button" class="btn-secondary text-xs px-2.5 shrink-0">
-          <Plus class="w-3.5 h-3.5" />
+        <button
+          @click="addTag"
+          type="button"
+          class="btn-secondary text-xs px-3 shrink-0 flex-center"
+          title="添加标签"
+        >
+          <Plus class="w-4 h-4" />
         </button>
       </div>
     </div>
@@ -152,10 +165,11 @@ const randomCover = () => {
           封面图片
         </label>
         <button
-          @click="randomCover"
           type="button"
-          class="text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+          @click="randomCover"
+          class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/80 hover:bg-emerald-100 dark:hover:bg-emerald-900 transition-colors cursor-pointer shadow-2xs"
         >
+          <Sparkles class="w-3 h-3 text-emerald-500" />
           随机高清封面
         </button>
       </div>
@@ -183,14 +197,34 @@ const randomCover = () => {
       ></textarea>
     </div>
 
-    <!-- 特色推荐开关 -->
-    <div class="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-800">
-      <div class="text-xs font-semibold text-zinc-700 dark:text-zinc-300">设为首页置顶头条</div>
-      <input
-        v-model="post.featured"
-        type="checkbox"
-        class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-      />
+    <!-- 特色置顶头条现代 Switch 开关 -->
+    <div
+      @click="post.featured = !post.featured"
+      class="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/80 dark:border-zinc-800 flex items-center justify-between cursor-pointer hover:border-emerald-500/40 dark:hover:border-emerald-500/40 transition select-none shadow-xs"
+    >
+      <div class="flex items-center gap-2.5">
+        <div
+          class="w-8 h-8 rounded-xl flex-center transition"
+          :class="post.featured ? 'bg-amber-500/15 text-amber-500' : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-400'"
+        >
+          <Sparkles class="w-4 h-4" />
+        </div>
+        <div>
+          <div class="text-xs font-bold text-zinc-800 dark:text-zinc-200">设为首页置顶头条</div>
+          <div class="text-[10px] text-zinc-400">将在首页大图头条位突出展示</div>
+        </div>
+      </div>
+
+      <!-- 完美对齐的滑动开关 Switch -->
+      <div
+        class="relative w-11 h-6 rounded-full transition-colors duration-200 flex items-center px-0.5 shrink-0"
+        :class="post.featured ? 'bg-emerald-500' : 'bg-zinc-300 dark:bg-zinc-700'"
+      >
+        <div
+          class="w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-200"
+          :class="post.featured ? 'translate-x-5' : 'translate-x-0'"
+        ></div>
+      </div>
     </div>
   </aside>
 </template>

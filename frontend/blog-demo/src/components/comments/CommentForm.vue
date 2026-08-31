@@ -58,9 +58,9 @@ const handleSubmit = async () => {
         <button
           type="button"
           @click="themeStore.openAuth('login')"
-          class="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline"
+          class="text-emerald-600 dark:text-emerald-400 font-semibold hover:text-emerald-500 transition-colors cursor-pointer"
         >
-          登录账号
+          立即登录
         </button>
       </div>
     </div>

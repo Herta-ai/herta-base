@@ -47,8 +47,8 @@ const handleSaveProfile = () => {
 
     <!-- 已登录个人中心 -->
     <div v-else class="space-y-8">
-      <!-- 个人信息头部 -->
-      <div class="card-base p-8 flex flex-col sm:flex-row items-center sm:items-start gap-6 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-transparent">
+      <!-- 用户资料主卡片 -->
+      <div class="card-base p-8 flex flex-col sm:flex-row items-center sm:items-start gap-6 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-transparent dark:from-emerald-950/30 dark:via-zinc-900/50 dark:to-transparent">
         <img
           :src="getAuthorAvatar(authStore.user?.displayName, authStore.user?.avatar)"
           :alt="authStore.user?.displayName"
@@ -119,7 +119,7 @@ const handleSaveProfile = () => {
           <h3 class="text-sm font-bold text-zinc-900 dark:text-zinc-100">
             我的创作文章 ({{ myPosts.length }})
           </h3>
-          <router-link to="/admin" class="text-xs text-emerald-600 dark:text-emerald-400 font-semibold hover:underline">
+          <router-link to="/admin" class="text-xs text-emerald-600 dark:text-emerald-400 font-semibold hover:text-emerald-500 transition">
             进入管理工作台 &rarr;
           </router-link>
         </div>

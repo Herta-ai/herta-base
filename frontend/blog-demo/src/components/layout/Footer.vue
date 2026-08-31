@@ -70,10 +70,10 @@ const scrollToTop = () => {
 
         <button
           @click="scrollToTop"
-          class="flex items-center gap-1 hover:text-emerald-500 transition"
+          class="group flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-500/30 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30 transition-all duration-200 cursor-pointer shadow-xs"
         >
-          <span>回到顶部</span>
-          <ArrowUp class="w-3.5 h-3.5" />
+          <span class="font-medium">回到顶部</span>
+          <ArrowUp class="w-3.5 h-3.5 group-hover:-translate-y-0.5 transition-transform duration-200 text-emerald-500" />
         </button>
       </div>
     </div>

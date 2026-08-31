@@ -41,12 +41,17 @@ const scrollToComments = () => {
     <div class="flex items-center gap-3">
       <button
         @click="handleLike"
-        class="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl transition duration-200 cursor-pointer text-sm font-bold shadow-sm"
-        :class="isLiked ? 'bg-rose-500 hover:bg-rose-600 text-white shadow-rose-500/20 scale-105' : 'bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300'"
+        class="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl transition-all duration-200 cursor-pointer text-sm font-bold shadow-sm"
+        :class="isLiked
+          ? 'bg-rose-500 hover:bg-rose-600 text-white shadow-rose-500/20 scale-105 border border-rose-600'
+          : 'bg-zinc-100 dark:bg-zinc-800/90 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 border border-zinc-200/80 dark:border-zinc-700/80 hover:border-rose-300 dark:hover:border-rose-800/60 hover:text-rose-500 dark:hover:text-rose-400'"
       >
-        <Heart class="w-4 h-4" :class="isLiked ? 'fill-white' : ''" />
+        <Heart class="w-4 h-4" :class="isLiked ? 'fill-white text-white' : 'text-rose-500'" />
         <span>{{ isLiked ? '已赞' : '点赞鼓励' }}</span>
-        <span class="px-1.5 py-0.5 rounded-md text-xs" :class="isLiked ? 'bg-rose-600' : 'bg-zinc-200 dark:bg-zinc-700'">
+        <span
+          class="px-2 py-0.5 rounded-md text-xs font-semibold"
+          :class="isLiked ? 'bg-rose-600 text-white' : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300'"
+        >
           {{ likes || 0 }}
         </span>
       </button>

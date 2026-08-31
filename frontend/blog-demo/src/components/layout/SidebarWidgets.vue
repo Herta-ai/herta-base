@@ -70,17 +70,27 @@ const selectTag = (tagName: string) => {
         <h3 class="text-sm font-bold text-zinc-900 dark:text-zinc-100">专栏分类</h3>
       </div>
 
-      <div class="space-y-1">
+      <div class="space-y-1.5">
         <button
           v-for="cat in blogStore.computedCategories"
           :key="cat.id"
           @click="selectCategory(cat.name)"
-          class="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition"
-          :class="blogStore.filter.category === cat.name ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 font-bold' : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800/80'"
+          class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer"
+          :class="blogStore.filter.category === cat.name
+            ? 'bg-emerald-500 text-white font-bold shadow-sm shadow-emerald-500/20'
+            : 'bg-zinc-100/80 dark:bg-zinc-800/80 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60'"
         >
-          <span>{{ cat.name }}</span>
-          <span class="px-2 py-0.5 rounded-full text-[11px] bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400">
-            {{ cat.count || 0 }}
+          <span class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full" :class="blogStore.filter.category === cat.name ? 'bg-white' : 'bg-emerald-500'"></span>
+            {{ cat.name }}
+          </span>
+          <span
+            class="px-2 py-0.5 rounded-full text-[11px] font-semibold transition"
+            :class="blogStore.filter.category === cat.name
+              ? 'bg-white/20 text-white'
+              : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300'"
+          >
+            {{ cat.count || 0 }} 篇
           </span>
         </button>
       </div>
@@ -98,8 +108,10 @@ const selectTag = (tagName: string) => {
           v-for="tag in blogStore.tags"
           :key="tag.name"
           @click="selectTag(tag.name)"
-          class="badge-base py-1 px-2.5 transition"
-          :class="blogStore.filter.tag === tag.name ? 'bg-emerald-500 text-white shadow-sm' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'"
+          class="badge-base py-1 px-2.5 transition cursor-pointer"
+          :class="blogStore.filter.tag === tag.name
+            ? 'bg-emerald-500 text-white shadow-xs font-bold'
+            : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 hover:text-zinc-900 dark:hover:text-zinc-100'"
         >
           #{{ tag.name }}
           <span class="opacity-60 text-[10px]">({{ tag.count }})</span>
@@ -108,7 +120,7 @@ const selectTag = (tagName: string) => {
     </div>
 
     <!-- 邮件周刊订阅 -->
-    <div class="card-base p-5 bg-gradient-to-br from-emerald-50/50 to-teal-50/30 dark:from-zinc-900 dark:to-zinc-900 border-emerald-100 dark:border-zinc-800">
+    <div class="card-base p-5 bg-gradient-to-br from-emerald-50/70 to-teal-50/40 dark:from-zinc-900 dark:to-zinc-900/80 border-emerald-100/80 dark:border-zinc-800">
       <div class="flex items-center gap-2 mb-2 text-emerald-600 dark:text-emerald-400">
         <Sparkles class="w-4 h-4" />
         <h3 class="text-sm font-bold text-zinc-900 dark:text-zinc-100">技术周刊订阅</h3>
@@ -117,18 +129,18 @@ const selectTag = (tagName: string) => {
         每月精选系统架构、Rust 与全栈技术深度好文，直达您的邮箱。
       </p>
 
-      <form @submit.prevent="handleSubscribe" class="space-y-2">
+      <form @submit.prevent="handleSubscribe" class="space-y-2 w-full">
         <input
           v-model="newsletterEmail"
           type="email"
           placeholder="your@email.com"
-          class="input-base text-xs py-2 bg-white dark:bg-zinc-800"
+          class="input-base text-xs py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700"
           required
         />
         <button
           type="submit"
           :disabled="subscribed"
-          class="w-full btn-primary text-xs py-2"
+          class="w-full btn-primary text-xs py-2 shadow-xs"
         >
           <CheckCircle2 v-if="subscribed" class="w-3.5 h-3.5" />
           <Send v-else class="w-3.5 h-3.5" />
@@ -138,14 +150,14 @@ const selectTag = (tagName: string) => {
     </div>
 
     <!-- HertaBase 状态快捷组件 -->
-    <div class="card-base p-4 border-dashed flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
+    <div class="card-base p-4 border-dashed border-zinc-200 dark:border-zinc-800 bg-zinc-50/60 dark:bg-zinc-900/60 flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
       <div class="flex items-center gap-2">
         <Database class="w-4 h-4 text-emerald-500" />
-        <span>底座: HertaBase BaaS</span>
+        <span class="font-medium text-zinc-700 dark:text-zinc-300">底座: HertaBase</span>
       </div>
       <button
         @click="themeStore.openSetup()"
-        class="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline"
+        class="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200/50 dark:border-emerald-800/50 transition cursor-pointer shadow-2xs"
       >
         状态与设置 &rarr;
       </button>

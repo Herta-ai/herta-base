@@ -41,7 +41,7 @@ const errorMessage = ref('')
 const form = reactive({
   // 1. HertaBase 后端管理员账号
   hbAdminEmail: 'admin@example.com',
-  hbAdminPassword: 'correct horse battery staple',
+  hbAdminPassword: 'Password123!',
 
   // 2. 博客超级管理员账号
   blogAdminEmail: 'admin@herta.ai',

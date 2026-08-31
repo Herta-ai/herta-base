@@ -10,6 +10,11 @@ const md: MarkdownIt = new MarkdownIt({
   linkify: true,
   typographer: true,
   highlight: (str: string, lang: string): string => {
+    // 拦截 Mermaid 图表代码块
+    if (lang && lang.trim().toLowerCase() === 'mermaid') {
+      return `<div class="mermaid-diagram my-6 flex justify-center overflow-x-auto p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xs" data-mermaid="${encodeURIComponent(str)}"><pre class="mermaid">${md.utils.escapeHtml(str)}</pre></div>`
+    }
+
     if (lang && hljs.getLanguage(lang)) {
       try {
         const highlighted = hljs.highlight(str, { language: lang, ignoreIllegals: true }).value
@@ -45,7 +50,8 @@ export function renderMarkdown(content: string = ''): string {
   if (!content) return ''
   const rawHtml = md.render(content)
   return DOMPurify.sanitize(rawHtml, {
-    ADD_ATTR: ['target', 'id', 'data-code'],
+    ADD_TAGS: ['svg', 'g', 'path', 'rect', 'circle', 'text', 'line', 'polygon', 'polyline', 'marker', 'defs', 'style', 'foreignObject', 'tspan', 'clippath', 'use'],
+    ADD_ATTR: ['target', 'id', 'data-code', 'data-mermaid', 'viewBox', 'd', 'fill', 'stroke', 'stroke-width', 'transform', 'class', 'style', 'xmlns', 'width', 'height', 'x', 'y', 'rx', 'ry', 'cx', 'cy', 'r', 'points', 'marker-end', 'marker-start', 'text-anchor', 'font-family', 'font-size', 'font-weight', 'preserveAspectRatio'],
   })
 }
 

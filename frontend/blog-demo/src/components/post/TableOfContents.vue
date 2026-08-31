@@ -46,7 +46,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div v-if="items.length > 0" class="card-base p-5 sticky top-24 max-h-[calc(100vh-8rem)] overflow-y-auto space-y-3">
+  <div v-if="items.length > 0" class="card-base p-5 max-h-[calc(100vh-6.5rem)] overflow-y-auto space-y-3 shadow-xs">
     <div class="flex items-center gap-2 pb-2 border-b border-zinc-100 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100">
       <ListTree class="w-4 h-4 text-emerald-500" />
       <h4 class="text-xs font-bold uppercase tracking-wider">文章大纲目录</h4>

@@ -6,7 +6,7 @@ import { getAuthorAvatar } from '../lib/utils'
 <template>
   <div class="max-w-4xl mx-auto space-y-10 animate-fade-in">
     <!-- 关于页面 Banner -->
-    <div class="card-base p-8 sm:p-12 bg-gradient-to-br from-emerald-500/10 via-teal-500/10 to-blue-500/10 border-emerald-200/50 dark:border-emerald-900/50 space-y-4">
+    <div class="card-base p-8 sm:p-12 bg-gradient-to-br from-emerald-500/10 via-teal-500/10 to-blue-500/10 dark:from-emerald-950/30 dark:via-zinc-900 dark:to-zinc-900 border-emerald-200/50 dark:border-emerald-900/50 space-y-4">
       <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500 text-white shadow-sm">
         <Sparkles class="w-3.5 h-3.5" />
         关于本站

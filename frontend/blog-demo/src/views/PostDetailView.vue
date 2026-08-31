@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useBlogStore } from '../stores/blog'
 import { useThemeStore } from '../stores/theme'
 import { renderMarkdown, extractTOC } from '../lib/markdown'
+import { renderMermaidDiagrams } from '../lib/mermaid'
 import { formatDate, calculateReadingTime, countWords, getAuthorAvatar, copyToClipboard } from '../lib/utils'
 import TableOfContents from '../components/post/TableOfContents.vue'
 import ShareBar from '../components/post/ShareBar.vue'
@@ -18,6 +19,7 @@ const blogStore = useBlogStore()
 const themeStore = useThemeStore()
 
 const loading = ref(true)
+const contentContainerRef = ref<HTMLElement | null>(null)
 const post = computed(() => blogStore.currentPost)
 
 const toc = computed(() => {
@@ -28,6 +30,16 @@ const renderedContent = computed(() => {
   return renderMarkdown(post.value?.content || '')
 })
 
+const updateDiagrams = () => {
+  nextTick(() => {
+    if (contentContainerRef.value) {
+      renderMermaidDiagrams(contentContainerRef.value, themeStore.isDark)
+    }
+  })
+}
+
+watch([renderedContent, () => themeStore.isDark], updateDiagrams)
+
 const loadPost = async () => {
   const idOrSlug = route.params.slug as string
   if (!idOrSlug) return
@@ -35,6 +47,7 @@ const loadPost = async () => {
   loading.value = true
   await blogStore.getPostBySlugOrId(idOrSlug)
   loading.value = false
+  updateDiagrams()
   window.scrollTo({ top: 0, behavior: 'instant' })
 }
 
@@ -156,10 +169,10 @@ onMounted(() => {
       </div>
 
       <!-- 正文双栏布局 (正文 + 目录) -->
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
         <!-- Markdown 正文 -->
         <div class="lg:col-span-8 space-y-8">
-          <div class="card-base p-6 sm:p-10">
+          <div class="card-base p-6 sm:p-10" ref="contentContainerRef">
             <div
               class="markdown-body max-w-none"
               v-html="renderedContent"
@@ -200,10 +213,12 @@ onMounted(() => {
           <CommentList :post-id="post.id" />
         </div>
 
-        <!-- 右侧文章大纲目录 (TOC) -->
-        <div class="hidden lg:block lg:col-span-4">
-          <TableOfContents :items="toc" />
-        </div>
+        <!-- 右侧文章大纲目录 (TOC) 随滚动贴顶 -->
+        <aside class="hidden lg:block lg:col-span-4">
+          <div class="sticky top-20">
+            <TableOfContents :items="toc" />
+          </div>
+        </aside>
       </div>
     </article>
   </div>

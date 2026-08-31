@@ -25,8 +25,8 @@ onMounted(() => {
 <template>
   <div class="space-y-8 animate-fade-in">
     <!-- 标签头部 Hero -->
-    <div class="card-base p-8 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 border-blue-200/50 dark:border-blue-900/50">
-      <div class="space-y-3">
+    <div class="card-base p-8 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 dark:from-blue-950/30 dark:via-zinc-900 dark:to-zinc-900 border-blue-200/50 dark:border-blue-900/50 relative overflow-hidden">
+      <div class="relative z-10 space-y-3">
         <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold bg-blue-500 text-white shadow-sm">
           <Tag class="w-3.5 h-3.5" />
           标签聚合

@@ -1,4 +1,5 @@
 import { HertaBaseClient, isHertaError } from '@hb/sdk'
+import type { AuthSession, AuthStore } from '@hb/sdk'
 import { HertaBaseAdminClient } from '@hb/sdk/admin'
 import type { BlogPost, BlogComment, BlogUser } from '../types/blog'
 
@@ -16,9 +17,40 @@ export function resolveApiBaseUrl(): string {
 
 export const API_BASE_URL = resolveApiBaseUrl()
 
-// 初始化单例客户端
+/**
+ * 本地持久化 AuthStore，确保页面刷新后 SDK 仍然携带 JWT 令牌调用后端
+ */
+export class LocalStorageAuthStore implements AuthStore {
+  private key = 'herta_blog_auth_session'
+
+  get(): AuthSession | null {
+    if (typeof window === 'undefined') return null
+    const raw = localStorage.getItem(this.key)
+    if (!raw) return null
+    try {
+      return JSON.parse(raw)
+    } catch {
+      return null
+    }
+  }
+
+  set(session: AuthSession): void {
+    if (typeof window === 'undefined') return
+    localStorage.setItem(this.key, JSON.stringify(session))
+  }
+
+  clear(): void {
+    if (typeof window === 'undefined') return
+    localStorage.removeItem(this.key)
+  }
+}
+
+export const persistentAuthStore = new LocalStorageAuthStore()
+
+// 初始化单例客户端，挂载持久化 AuthStore
 export const hb = new HertaBaseClient({
   baseUrl: API_BASE_URL,
+  authStore: persistentAuthStore,
 })
 
 export { isHertaError, HertaBaseAdminClient }
@@ -282,8 +314,6 @@ console.log("Hello, HertaBase World!");
     views: 1,
     likes: 1,
     author: session.user.id,
-    created_at: now,
-    updated_at: now,
   } as any)
 
   const superAdminUser: BlogUser = {

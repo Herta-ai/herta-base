@@ -5,9 +5,48 @@
   --font-serif: 'Noto Serif SC', 'Source Han Serif CN', Georgia, serif;
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 html {
   scroll-behavior: smooth;
   font-family: var(--font-sans);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+}
+
+/* Global Link Reset: Clean and modern, no default underlines */
+a {
+  text-decoration: none;
+  color: inherit;
+  transition: color 0.2s ease;
+}
+
+/* Form Inputs & Button Reset: removes browser default buttonface light background */
+button {
+  background-color: transparent;
+  background-image: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+input,
+textarea,
+select {
+  box-sizing: border-box;
+  font-family: inherit;
 }
 
 /* Custom Scrollbar */
@@ -21,12 +60,12 @@ html {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(156, 163, 175, 0.4);
+  background: rgba(156, 163, 175, 0.35);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(156, 163, 175, 0.7);
+  background: rgba(156, 163, 175, 0.65);
 }
 
 /* Markdown Reading Content Styling */
@@ -74,14 +113,26 @@ html {
 
 .markdown-body a {
   color: #10b981;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  text-decoration: none;
   font-weight: 500;
-  transition: color 0.2s ease;
+  border-bottom: 1.5px solid rgba(16, 185, 129, 0.25);
+  padding-bottom: 1px;
+  transition: all 0.2s ease;
 }
 
 .markdown-body a:hover {
   color: #059669;
+  border-bottom-color: #059669;
+}
+
+.dark .markdown-body a {
+  color: #34d399;
+  border-bottom-color: rgba(52, 211, 153, 0.3);
+}
+
+.dark .markdown-body a:hover {
+  color: #6ee7b7;
+  border-bottom-color: #6ee7b7;
 }
 
 .markdown-body blockquote {

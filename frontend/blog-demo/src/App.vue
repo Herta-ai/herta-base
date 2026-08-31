@@ -1,10 +1,19 @@
 <script setup lang="ts">
+import { onMounted } from 'vue'
+import { useBlogStore } from './stores/blog'
 import Navbar from './components/layout/Navbar.vue'
 import Footer from './components/layout/Footer.vue'
 import SearchModal from './components/ui/SearchModal.vue'
 import SetupModal from './components/ui/SetupModal.vue'
 import AuthModal from './components/ui/AuthModal.vue'
 import Toast from './components/ui/Toast.vue'
+import BackToTop from './components/ui/BackToTop.vue'
+
+const blogStore = useBlogStore()
+
+onMounted(() => {
+  blogStore.init()
+})
 </script>
 
 <template>
@@ -19,6 +28,9 @@ import Toast from './components/ui/Toast.vue'
 
     <!-- 底部页脚 -->
     <Footer />
+
+    <!-- 全局悬浮回到顶部 -->
+    <BackToTop />
 
     <!-- 全局弹窗与消息提示 -->
     <SearchModal />
