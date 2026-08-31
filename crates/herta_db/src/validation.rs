@@ -293,8 +293,12 @@ pub fn validate_record(def: &CollectionDef, value: &mut Value, is_create: bool) 
 }
 
 fn validate_field_value(field: &FieldDef, value: &Value) -> HbResult<()> {
-    if value.is_null() && !field.required {
-        return Ok(());
+    if value.is_null() {
+        return if field.required {
+            Err(field_error(&field.name, "is required"))
+        } else {
+            Ok(())
+        };
     }
     let valid = match field.field_type {
         FieldType::Text => value.is_string(),
@@ -309,7 +313,8 @@ fn validate_field_value(field: &FieldDef, value: &Value) -> HbResult<()> {
         FieldType::Number => value.is_number(),
         FieldType::Bool => value.is_boolean(),
         FieldType::Datetime => value.as_str().is_some_and(|value| value.contains('T')),
-        FieldType::Json => value.is_object() || value.is_array(),
+        // The input is already a serde_json::Value, so every non-null variant is valid JSON.
+        FieldType::Json => true,
         FieldType::Email => value
             .as_str()
             .is_some_and(|value| value.parse::<EmailAddress>().is_ok()),
@@ -570,10 +575,7 @@ mod tests {
             })),
         };
         assert!(validate_field(&valid).is_ok());
-        assert_eq!(
-            valid.field_type.surreal_kind(valid.options.as_ref()),
-            "array<string>"
-        );
+        assert_eq!(valid.surreal_kind(), "option<array<string>>");
 
         for options in [
             json!({"maxSelect": 0}),
@@ -632,5 +634,31 @@ mod tests {
         let mut malformed_options = many;
         malformed_options.options = Some(json!({"collection": "users", "maxSelect": "2"}));
         assert!(validate_field(&malformed_options).is_err());
+    }
+
+    #[test]
+    fn json_fields_accept_every_non_null_json_value() {
+        let required = FieldDef {
+            name: "payload".into(),
+            field_type: FieldType::Json,
+            required: true,
+            options: None,
+        };
+        for value in [
+            json!("text"),
+            json!(42),
+            json!(true),
+            json!({"nested": null}),
+            json!([1, null, {"ok": true}]),
+        ] {
+            assert!(validate_field_value(&required, &value).is_ok());
+        }
+        assert!(validate_field_value(&required, &Value::Null).is_err());
+
+        let optional = FieldDef {
+            required: false,
+            ..required
+        };
+        assert!(validate_field_value(&optional, &Value::Null).is_ok());
     }
 }

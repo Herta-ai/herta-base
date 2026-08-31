@@ -4,7 +4,7 @@ use herta_db::{
     LogManager, LogQuery, LogType, RealtimeAction, RealtimeManager, RecordManager, RuleContext,
     SchemaManager, SchemaMode, UpdateCollectionRequest, log_channel, spawn_log_worker,
 };
-use serde_json::json;
+use serde_json::{Value, json};
 use tokio::time::{Duration, timeout};
 
 #[tokio::test]
@@ -273,6 +273,76 @@ async fn collection_and_record_lifecycle() {
     let (remaining, total) = records.list("posts", &ListParams::default()).await.unwrap();
     assert_eq!(total, 0);
     assert!(remaining.is_empty());
+}
+
+#[tokio::test]
+async fn json_fields_round_trip_all_values_and_clear_optional_null() {
+    let db = DbClient::memory().await.unwrap();
+    let schema = SchemaManager::new(&db);
+    schema
+        .create_collection(&CollectionDef {
+            name: "json_records".into(),
+            collection_type: CollectionType::Base,
+            schema_mode: SchemaMode::Strict,
+            fields: vec![
+                FieldDef {
+                    name: "payload".into(),
+                    field_type: FieldType::Json,
+                    required: true,
+                    options: None,
+                },
+                FieldDef {
+                    name: "metadata".into(),
+                    field_type: FieldType::Json,
+                    required: false,
+                    options: None,
+                },
+            ],
+            indexes: vec![],
+            rules: Default::default(),
+        })
+        .await
+        .unwrap();
+
+    let records = RecordManager::new(&db);
+    for value in [
+        json!("text"),
+        json!(42),
+        json!(true),
+        json!({"nested": null, "items": [1, false]}),
+        json!([1, null, {"ok": true}]),
+    ] {
+        let created = records
+            .create("json_records", json!({"payload": value.clone()}))
+            .await
+            .unwrap();
+        assert_eq!(created["payload"], value);
+    }
+
+    assert!(records.create("json_records", json!({})).await.is_err());
+    assert!(
+        records
+            .create("json_records", json!({"payload": null}))
+            .await
+            .is_err()
+    );
+
+    let created = records
+        .create(
+            "json_records",
+            json!({"payload": {}, "metadata": "temporary"}),
+        )
+        .await
+        .unwrap();
+    let updated = records
+        .update(
+            "json_records",
+            created["id"].as_str().unwrap(),
+            json!({"metadata": null}),
+        )
+        .await
+        .unwrap();
+    assert!(updated.get("metadata").is_none_or(Value::is_null));
 }
 
 #[tokio::test]

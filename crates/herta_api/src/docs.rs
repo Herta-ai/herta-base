@@ -615,7 +615,9 @@ fn field_schema(field: &FieldDef) -> Value {
         FieldType::Number => json!({"type": "number"}),
         FieldType::Bool => json!({"type": "boolean"}),
         FieldType::Datetime => json!({"type": "string", "format": "date-time"}),
-        FieldType::Json => json!({}),
+        FieldType::Json => json!({
+            "description": "Any JSON value. A top-level null clears an optional field and is invalid for a required field."
+        }),
         FieldType::Email => json!({"type": "string", "format": "email"}),
         FieldType::Url => json!({"type": "string", "format": "uri"}),
         FieldType::Select => json!({
@@ -775,12 +777,20 @@ mod tests {
             name: "posts".into(),
             collection_type: CollectionType::Base,
             schema_mode: SchemaMode::Strict,
-            fields: vec![FieldDef {
-                name: "title".into(),
-                field_type: FieldType::Text,
-                required: true,
-                options: None,
-            }],
+            fields: vec![
+                FieldDef {
+                    name: "title".into(),
+                    field_type: FieldType::Text,
+                    required: true,
+                    options: None,
+                },
+                FieldDef {
+                    name: "metadata".into(),
+                    field_type: FieldType::Json,
+                    required: false,
+                    options: None,
+                },
+            ],
             indexes: vec![],
             rules: Default::default(),
         };
@@ -794,6 +804,10 @@ mod tests {
         assert_eq!(
             document["components"]["schemas"]["postsCreate"]["required"][0],
             "title"
+        );
+        assert_eq!(
+            document["components"]["schemas"]["postsCreate"]["properties"]["metadata"]["description"],
+            "Any JSON value. A top-level null clears an optional field and is invalid for a required field."
         );
         assert!(document["components"]["schemas"]["LogRecord"].is_object());
     }

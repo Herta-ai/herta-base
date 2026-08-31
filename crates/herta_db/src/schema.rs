@@ -188,12 +188,7 @@ impl<'a> SchemaManager<'a> {
 
 fn append_field_ddl(sql: &mut String, table: &str, field: &FieldDef) {
     let field_name = quote_identifier(&field.name);
-    let kind = field.field_type.surreal_kind(field.options.as_ref());
-    let kind = if field.required {
-        kind
-    } else {
-        format!("option<{kind}>")
-    };
+    let kind = field.surreal_kind();
     sql.push_str(&format!(
         "DEFINE FIELD {field_name} ON TABLE {table} TYPE {kind};\n"
     ));

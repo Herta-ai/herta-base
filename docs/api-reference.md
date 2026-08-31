@@ -93,6 +93,10 @@ HertaBase 采用 RESTful 风格的 API 设计理念，致力于提供清晰、�
 
 所有动态集合的数据操作，接口路径中的 `{collection}` 替换为实际集合名称。
 
+`json` 字段接受任意非空 JSON 值，包括对象、数组、字符串、数字和布尔值。对象或数组内部的
+`null` 会作为普通 JSON 内容保存；字段顶层的 `null` 对可选字段表示清空该字段，对必填字段
+返回 400 `HB_VALIDATION_ERROR`。PATCH 请求中缺席的字段保持原值不变。
+
 ### GET /api/collections/{collection}/records
 
 - **描述**: 获取记录列表。支持分页、排序和过滤。

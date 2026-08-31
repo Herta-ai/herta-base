@@ -99,6 +99,19 @@ pub struct FieldDef {
     pub options: Option<Value>,
 }
 
+impl FieldDef {
+    pub(crate) fn surreal_kind(&self) -> String {
+        let base = self.field_type.surreal_base_kind(self.options.as_ref());
+
+        // SurrealDB rejects option<any>; any already accepts NONE for an absent field.
+        if self.required || self.field_type == FieldType::Json {
+            base
+        } else {
+            format!("option<{base}>")
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum FieldType {
@@ -115,7 +128,7 @@ pub enum FieldType {
 }
 
 impl FieldType {
-    pub fn surreal_kind(&self, options: Option<&Value>) -> String {
+    fn surreal_base_kind(&self, options: Option<&Value>) -> String {
         match self {
             Self::Text | Self::Select | Self::Email | Self::Url => "string".into(),
             Self::File if file_is_many(options) => "array<string>".into(),
@@ -201,4 +214,29 @@ pub fn file_is_many(options: Option<&Value>) -> bool {
         .and_then(Value::as_u64)
         .unwrap_or(1)
         > 1
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn field(field_type: FieldType, required: bool) -> FieldDef {
+        FieldDef {
+            name: "value".into(),
+            field_type,
+            required,
+            options: None,
+        }
+    }
+
+    #[test]
+    fn field_definition_renders_required_and_optional_surreal_kinds() {
+        assert_eq!(field(FieldType::Text, true).surreal_kind(), "string");
+        assert_eq!(
+            field(FieldType::Text, false).surreal_kind(),
+            "option<string>"
+        );
+        assert_eq!(field(FieldType::Json, true).surreal_kind(), "any");
+        assert_eq!(field(FieldType::Json, false).surreal_kind(), "any");
+    }
 }
