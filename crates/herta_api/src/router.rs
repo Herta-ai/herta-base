@@ -14,7 +14,6 @@ use crate::{
     handlers::{auth, collections, docs, files, logs, realtime, records, web},
 };
 
-#[derive(Clone)]
 pub struct ApiState {
     pub db: DbClient,
     pub config: Arc<HbConfig>,
@@ -24,6 +23,8 @@ pub struct ApiState {
     pub realtime: RealtimeLimiter,
     pub web: web::WebHosting,
 }
+
+pub type SharedApiState = Arc<ApiState>;
 
 impl ApiState {
     pub async fn new(db: DbClient, config: HbConfig) -> herta_core::HbResult<Self> {

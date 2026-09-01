@@ -14,7 +14,7 @@ use salvo::{
     test::{ResponseExt, TestClient},
 };
 use serde_json::{Value, json};
-use std::io::Write;
+use std::{io::Write, sync::Arc};
 use tokio::time::{Duration, timeout};
 
 const TEST_JWT_SECRET: &str = "hertabase-http-integration-test-secret";
@@ -34,7 +34,7 @@ async fn request_logger_records_metadata_only() {
     let service = Service::new(build_router_with_logger(Some(
         herta_api::handlers::logging::RequestLogger::new(sender),
     )))
-    .hoop(affix_state::inject(state));
+    .hoop(affix_state::inject(Arc::new(state)));
 
     let mut response = TestClient::get("http://localhost/api-doc/openapi.json?token=secret")
         .add_header("referer", "https://example.test", true)
@@ -63,7 +63,7 @@ async fn request_logger_skips_log_stream_reads() {
     let service = Service::new(build_router_with_logger(Some(
         herta_api::handlers::logging::RequestLogger::new(sender),
     )))
-    .hoop(affix_state::inject(state));
+    .hoop(affix_state::inject(Arc::new(state)));
 
     let mut response = TestClient::get("http://localhost/api/admin/logs")
         .send(&service)
@@ -90,7 +90,7 @@ async fn service_with_db() -> (Service, DbClient) {
     config.auth.bootstrap_admin_password = Some("correct horse battery staple".into());
     let state = ApiState::new(db.clone(), config).await.unwrap();
     (
-        Service::new(build_router()).hoop(affix_state::inject(state)),
+        Service::new(build_router()).hoop(affix_state::inject(Arc::new(state))),
         db,
     )
 }
@@ -107,7 +107,7 @@ async fn web_service() -> (Service, tempfile::TempDir) {
     config.auth.bootstrap_admin_password = Some("correct horse battery staple".into());
     let state = ApiState::new(db, config).await.unwrap();
     (
-        Service::new(build_router()).hoop(affix_state::inject(state)),
+        Service::new(build_router()).hoop(affix_state::inject(Arc::new(state))),
         data,
     )
 }
@@ -137,7 +137,7 @@ async fn service_with_settings(
     )
     .await
     .unwrap();
-    Service::new(build_router()).hoop(affix_state::inject(state))
+    Service::new(build_router()).hoop(affix_state::inject(Arc::new(state)))
 }
 
 async fn realtime_service(access_token_ttl_seconds: u64, heartbeat_seconds: u64) -> Service {
@@ -175,7 +175,7 @@ async fn realtime_service(access_token_ttl_seconds: u64, heartbeat_seconds: u64)
     )
     .await
     .unwrap();
-    Service::new(build_router()).hoop(affix_state::inject(state))
+    Service::new(build_router()).hoop(affix_state::inject(Arc::new(state)))
 }
 
 async fn create_public_posts(service: &Service, admin: &str) {
@@ -1250,6 +1250,41 @@ async fn realtime_connection_limit_is_released_with_response_body() {
         .await;
     assert_eq!(released.status_code, Some(StatusCode::OK));
     drop(released.take_body());
+}
+
+#[tokio::test]
+async fn realtime_disconnect_cleans_up_and_reconnect_receives_native_events() {
+    let service = service().await;
+    let admin = admin_token(&service).await;
+    create_public_posts(&service, &admin).await;
+
+    let mut first = TestClient::get("http://localhost/api/realtime/public_posts")
+        .send(&service)
+        .await;
+    let mut first_body = first.take_body();
+    let connected = next_body_frame(&mut first_body).await;
+    assert!(connected.contains("event:connected"), "{connected}");
+    drop(first_body);
+
+    let mut second = TestClient::get("http://localhost/api/realtime/public_posts")
+        .send(&service)
+        .await;
+    let mut second_body = second.take_body();
+    let connected = next_body_frame(&mut second_body).await;
+    assert!(connected.contains("event:connected"), "{connected}");
+
+    let mut created = TestClient::post("http://localhost/api/collections/public_posts/records")
+        .bearer_auth(&admin)
+        .json(&json!({"title": "After reconnect"}))
+        .send(&service)
+        .await;
+    let status = created.status_code;
+    let body: Value = created.take_json().await.unwrap();
+    assert_eq!(status, Some(StatusCode::CREATED), "{body}");
+
+    let event = next_body_frame(&mut second_body).await;
+    assert!(event.contains("event:create"), "{event}");
+    assert!(event.contains("After reconnect"), "{event}");
 }
 
 #[tokio::test]

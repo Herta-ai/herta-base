@@ -50,8 +50,9 @@ HertaBase 通过基于 `clap` 构筑的 CLI 工具进行管理：
 * `HB_REALTIME_MAX_CONNECTIONS`：全局 SSE 连接上限，默认 `1000`。
 * `HB_REALTIME_MAX_CONNECTIONS_PER_IP`：单 IP SSE 连接上限，默认 `20`。
 * `HB_REALTIME_HEARTBEAT_SECONDS`：SSE 心跳间隔，默认 `30` 秒。
+* `HB_REALTIME_RECONCILIATION_SECONDS`：实时订阅一致性校验间隔，默认 `30` 秒。
 
-以上三个值必须大于零。操作系统文件描述符上限仍需在部署环境中单独配置。
+以上四个值必须大于零。操作系统文件描述符上限仍需在部署环境中单独配置。
 
 **网页部署配置（Phase 6）**
 
@@ -152,6 +153,7 @@ refresh_rate_limit_per_minute = 30
 max_connections = 1000
 max_connections_per_ip = 20
 heartbeat_seconds = 30
+reconciliation_seconds = 30
 
 [web]
 max_archive_size = 104857600

@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use crate::{
     response::{ApiFailure, ApiResponse, parse_error},
-    router::ApiState,
+    router::{ApiState, SharedApiState},
 };
 
 #[handler]
@@ -232,7 +232,8 @@ fn client_key(req: &Request) -> String {
 
 fn state(depot: &Depot) -> Result<&ApiState, ApiFailure> {
     depot
-        .get_typed::<ApiState>()
+        .get_typed::<SharedApiState>()
+        .map(AsRef::as_ref)
         .map_err(|_| ApiFailure(HbError::Internal))
 }
 

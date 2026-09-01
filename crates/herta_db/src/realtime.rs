@@ -3,15 +3,14 @@ use std::collections::{HashMap, VecDeque};
 use futures_util::StreamExt;
 use herta_core::{HbError, HbResult};
 use serde_json::{Value, json};
-use surrealdb::{
-    Notification,
-    types::{Action, Value as SurrealValue},
-};
+use surrealdb::types::{Action, Value as SurrealValue};
 use tokio::{
-    sync::mpsc,
+    sync::mpsc::{self, error::TrySendError},
     task::JoinHandle,
-    time::{Duration, Instant, Interval, interval_at},
+    time::{Duration, Instant, Interval, interval_at, timeout},
 };
+use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 
 use crate::{
     DbClient, SchemaManager,
@@ -21,6 +20,8 @@ use crate::{
     schema::database_error,
     validation::quote_identifier,
 };
+
+const LIVE_QUERY_DRAIN_QUIET_PERIOD: Duration = Duration::from_millis(50);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RealtimeAction {
@@ -36,8 +37,9 @@ pub struct RealtimeEvent {
 }
 
 pub struct RealtimeSubscription {
-    receiver: mpsc::Receiver<HbResult<RealtimeEvent>>,
-    worker: JoinHandle<()>,
+    receiver: mpsc::Receiver<HbResult<()>>,
+    worker: Option<JoinHandle<HbResult<()>>>,
+    cancellation: CancellationToken,
     db: DbClient,
     schema: CollectionDef,
     poll_sql: String,
@@ -48,13 +50,23 @@ pub struct RealtimeSubscription {
     poll: Interval,
 }
 
-pub struct RealtimeManager<'a> {
-    db: &'a DbClient,
+pub struct RealtimeManager {
+    db: DbClient,
+    reconciliation_period: Duration,
 }
 
-impl<'a> RealtimeManager<'a> {
-    pub fn new(db: &'a DbClient) -> Self {
-        Self { db }
+impl RealtimeManager {
+    pub fn new(db: &DbClient) -> Self {
+        Self {
+            db: db.clone(),
+            reconciliation_period: Duration::from_secs(30),
+        }
+    }
+
+    pub fn with_reconciliation_period(mut self, period: Duration) -> Self {
+        assert!(!period.is_zero(), "reconciliation period must be positive");
+        self.reconciliation_period = period;
+        self
     }
 
     pub async fn subscribe(
@@ -63,7 +75,7 @@ impl<'a> RealtimeManager<'a> {
         filter: Option<&str>,
         context: &RuleContext,
     ) -> HbResult<RealtimeSubscription> {
-        let schema = SchemaManager::new(self.db)
+        let schema = SchemaManager::new(&self.db)
             .get_collection(collection)
             .await?;
         let rule = compile_rule(&schema.rules.view, context, true)?;
@@ -100,20 +112,13 @@ impl<'a> RealtimeManager<'a> {
             }
         }
 
-        let mut where_sql = format!("({rule})");
         let mut poll_where_sql = format!("deleted_at IS NONE AND ({rule})");
         if let Some(filter) = &compiled_filter {
-            where_sql.push_str(" AND (");
-            where_sql.push_str(&filter.live_sql);
-            where_sql.push(')');
             poll_where_sql.push_str(" AND (");
             poll_where_sql.push_str(&filter.sql);
             poll_where_sql.push(')');
         }
-        let sql = format!(
-            "LIVE SELECT * FROM {} WHERE {where_sql}",
-            quote_identifier(collection)
-        );
+        let sql = format!("LIVE SELECT id FROM {}", quote_identifier(collection));
         let query = self
             .db
             .inner()
@@ -126,34 +131,18 @@ impl<'a> RealtimeManager<'a> {
             .map_err(database_error)?
             .check()
             .map_err(database_error)?;
-        let stream = response
-            .stream::<SurrealValue>(0usize)
-            .map_err(database_error)?;
-        let (sender, receiver) = mpsc::channel(64);
-        let worker_schema = schema.clone();
-        let worker = tokio::spawn(async move {
-            let mut stream = stream;
-            while let Some(notification) = stream.next().await {
-                let event = notification
-                    .map_err(database_error)
-                    .and_then(|notification| map_notification(&worker_schema, notification));
-                let done = event.is_err();
-                match event {
-                    Ok(Some(event)) => {
-                        if sender.send(Ok(event)).await.is_err() {
-                            break;
-                        }
-                    }
-                    Ok(None) => break,
-                    Err(error) => {
-                        let _ = sender.send(Err(error)).await;
-                    }
-                }
-                if done {
-                    break;
-                }
+        let live_query_id = response
+            .take::<Option<Uuid>>(0)
+            .map_err(database_error)?
+            .ok_or_else(|| HbError::Database("live query did not return an id".into()))?;
+        let stream = match response.stream::<SurrealValue>(0usize) {
+            Ok(stream) => stream,
+            Err(error) => {
+                let error = database_error(error);
+                let _ = kill_live_query(&self.db, live_query_id).await;
+                return Err(error);
             }
-        });
+        };
         let poll_sql = format!(
             "SELECT * FROM {} WHERE {poll_where_sql}",
             quote_identifier(collection)
@@ -162,11 +151,26 @@ impl<'a> RealtimeManager<'a> {
             .as_ref()
             .map_or_else(Vec::new, |filter| filter.bindings.clone());
         let snapshot =
-            fetch_matching(self.db, &schema, &poll_sql, &filter_bindings, context).await?;
-        let poll_period = Duration::from_millis(100);
+            match fetch_matching(&self.db, &schema, &poll_sql, &filter_bindings, context).await {
+                Ok(snapshot) => snapshot,
+                Err(error) => {
+                    let _ = kill_live_query(&self.db, live_query_id).await;
+                    return Err(error);
+                }
+            };
+        let (sender, receiver) = mpsc::channel(1);
+        let cancellation = CancellationToken::new();
+        let worker = tokio::spawn(run_live_worker(
+            stream,
+            sender,
+            cancellation.clone(),
+            self.db.clone(),
+            live_query_id,
+        ));
         Ok(RealtimeSubscription {
             receiver,
-            worker,
+            worker: Some(worker),
+            cancellation,
             db: self.db.clone(),
             schema,
             poll_sql,
@@ -174,9 +178,86 @@ impl<'a> RealtimeManager<'a> {
             context: context.clone(),
             snapshot,
             pending: VecDeque::new(),
-            poll: interval_at(Instant::now() + poll_period, poll_period),
+            poll: interval_at(
+                Instant::now() + self.reconciliation_period,
+                self.reconciliation_period,
+            ),
         })
     }
+}
+
+async fn run_live_worker(
+    mut stream: surrealdb::method::QueryStream<SurrealValue>,
+    sender: mpsc::Sender<HbResult<()>>,
+    cancellation: CancellationToken,
+    db: DbClient,
+    live_query_id: Uuid,
+) -> HbResult<()> {
+    loop {
+        let notification = tokio::select! {
+            _ = cancellation.cancelled() => break,
+            notification = stream.next() => notification,
+        };
+        let Some(notification) = notification else {
+            break;
+        };
+        match notification.map_err(database_error) {
+            Ok(notification) if notification.action == Action::Killed => break,
+            Ok(notification) if notification.action == Action::Error => {
+                let error = HbError::Database(format!(
+                    "live query failed: {}",
+                    notification.data.into_json_value()
+                ));
+                send_worker_error(&sender, &cancellation, error).await;
+                break;
+            }
+            Ok(_) => match sender.try_send(Ok(())) {
+                Ok(()) | Err(TrySendError::Full(_)) => {}
+                Err(TrySendError::Closed(_)) => break,
+            },
+            Err(error) => {
+                send_worker_error(&sender, &cancellation, error).await;
+                break;
+            }
+        }
+    }
+
+    let result = kill_live_query(&db, live_query_id).await;
+    if let Err(error) = &result {
+        tracing::warn!(%live_query_id, %error, "failed to clean up realtime live query");
+    } else {
+        drain_queued_notifications(&mut stream).await;
+    }
+    result
+}
+
+async fn drain_queued_notifications(stream: &mut surrealdb::method::QueryStream<SurrealValue>) {
+    // Keep the receiver alive while notifications already queued by SurrealDB's
+    // local router drain. Dropping it immediately races the router and makes
+    // SurrealDB 3.2.3 retry cleanup with a malformed bare-UUID KILL statement.
+    while let Ok(Some(_)) = timeout(LIVE_QUERY_DRAIN_QUIET_PERIOD, stream.next()).await {}
+}
+
+async fn send_worker_error(
+    sender: &mpsc::Sender<HbResult<()>>,
+    cancellation: &CancellationToken,
+    error: HbError,
+) {
+    tokio::select! {
+        _ = cancellation.cancelled() => {}
+        _ = sender.send(Err(error)) => {}
+    }
+}
+
+async fn kill_live_query(db: &DbClient, live_query_id: Uuid) -> HbResult<()> {
+    db.inner()
+        .query("KILL $live_query_id")
+        .bind(("live_query_id", live_query_id))
+        .await
+        .map_err(database_error)?
+        .check()
+        .map_err(database_error)?;
+    Ok(())
 }
 
 fn count(rows: &[Value]) -> u64 {
@@ -187,13 +268,21 @@ fn count(rows: &[Value]) -> u64 {
 }
 
 impl RealtimeSubscription {
+    pub async fn close(&mut self) -> HbResult<()> {
+        self.cancellation.cancel();
+        let Some(worker) = self.worker.take() else {
+            return Ok(());
+        };
+        worker.await.map_err(|_| HbError::Internal)?
+    }
+
     pub async fn next(&mut self) -> HbResult<Option<RealtimeEvent>> {
         loop {
             if let Some(event) = self.pending.pop_front() {
                 return Ok(Some(event));
             }
             enum Source {
-                Live(Option<HbResult<RealtimeEvent>>),
+                Live(Option<HbResult<()>>),
                 Poll,
             }
             let source = tokio::select! {
@@ -201,32 +290,11 @@ impl RealtimeSubscription {
                 _ = self.poll.tick() => Source::Poll,
             };
             match source {
-                Source::Live(Some(Ok(event))) => {
-                    if self.apply_live(&event) {
-                        return Ok(Some(event));
-                    }
-                }
+                Source::Live(Some(Ok(()))) => self.refresh().await?,
                 Source::Live(Some(Err(error))) => return Err(error),
-                Source::Live(None) => self.refresh().await?,
+                Source::Live(None) => return Ok(None),
                 Source::Poll => self.refresh().await?,
             }
-        }
-    }
-
-    fn apply_live(&mut self, event: &RealtimeEvent) -> bool {
-        let Some(id) = event.record.get("id").and_then(Value::as_str) else {
-            return true;
-        };
-        match event.action {
-            RealtimeAction::Create | RealtimeAction::Update => {
-                if self.snapshot.get(id) == Some(&event.record) {
-                    false
-                } else {
-                    self.snapshot.insert(id.to_owned(), event.record.clone());
-                    true
-                }
-            }
-            RealtimeAction::Delete => self.snapshot.remove(id).is_some(),
         }
     }
 
@@ -300,55 +368,6 @@ async fn fetch_matching(
 
 impl Drop for RealtimeSubscription {
     fn drop(&mut self) {
-        self.worker.abort();
-    }
-}
-
-fn map_notification(
-    schema: &CollectionDef,
-    notification: Notification<SurrealValue>,
-) -> HbResult<Option<RealtimeEvent>> {
-    let mut record = notification.data.into_json_value();
-    normalize_value(&mut record);
-
-    match notification.action {
-        Action::Create => {
-            sanitize_record(schema, &mut record);
-            Ok(Some(RealtimeEvent {
-                action: RealtimeAction::Create,
-                record,
-            }))
-        }
-        Action::Update
-            if record
-                .get("deleted_at")
-                .is_some_and(|value| !value.is_null()) =>
-        {
-            Ok(Some(RealtimeEvent {
-                action: RealtimeAction::Delete,
-                record: id_only(record),
-            }))
-        }
-        Action::Update => {
-            sanitize_record(schema, &mut record);
-            Ok(Some(RealtimeEvent {
-                action: RealtimeAction::Update,
-                record,
-            }))
-        }
-        Action::Delete => Ok(Some(RealtimeEvent {
-            action: RealtimeAction::Delete,
-            record: id_only(record),
-        })),
-        Action::Killed => Ok(None),
-        Action::Error => Err(HbError::Database(format!("live query failed: {record}"))),
-    }
-}
-
-fn id_only(record: Value) -> Value {
-    match record.get("id").cloned() {
-        Some(id) => json!({"id": id}),
-        None if record.is_string() => json!({"id": record}),
-        None => json!({"id": Value::Null}),
+        self.cancellation.cancel();
     }
 }

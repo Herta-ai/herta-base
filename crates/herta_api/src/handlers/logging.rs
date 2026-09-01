@@ -3,7 +3,7 @@ use herta_db::{LogEntry, LogSender, LogType};
 use salvo::prelude::*;
 
 use crate::handlers::auth::identity;
-use crate::router::ApiState;
+use crate::router::SharedApiState;
 
 /// Persists request metadata after the downstream handler has produced a response.
 pub struct RequestLogger {
@@ -39,7 +39,7 @@ impl RequestLogger {
         let remote_ip = req.remote_addr().ip().map(|ip| ip.to_string());
         let referer = header_value(req, "referer");
         let user_agent = header_value(req, "user-agent");
-        let auth = match depot.get_typed::<ApiState>() {
+        let auth = match depot.get_typed::<SharedApiState>() {
             Ok(state) => identity(req, state).await.unwrap_or_default(),
             Err(_) => AuthIdentity::Anonymous,
         };

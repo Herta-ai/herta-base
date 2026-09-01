@@ -5,7 +5,7 @@ use serde_json::json;
 use crate::{
     handlers::auth::require_admin,
     response::{ApiFailure, ApiResponse, parse_error},
-    router::ApiState,
+    router::SharedApiState,
 };
 
 #[handler]
@@ -15,7 +15,7 @@ pub async fn list(
     res: &mut Response,
 ) -> Result<(), ApiFailure> {
     let state = depot
-        .get_typed::<ApiState>()
+        .get_typed::<SharedApiState>()
         .map_err(|_| internal_state())?;
     require_admin(req, state).await?;
     let collections = SchemaManager::new(&state.db).list_collections().await?;
@@ -30,7 +30,7 @@ pub async fn create(
     res: &mut Response,
 ) -> Result<(), ApiFailure> {
     let state = depot
-        .get_typed::<ApiState>()
+        .get_typed::<SharedApiState>()
         .map_err(|_| internal_state())?;
     require_admin(req, state).await?;
     let definition: CollectionDef = req
@@ -53,7 +53,7 @@ pub async fn get(
     res: &mut Response,
 ) -> Result<(), ApiFailure> {
     let state = depot
-        .get_typed::<ApiState>()
+        .get_typed::<SharedApiState>()
         .map_err(|_| internal_state())?;
     require_admin(req, state).await?;
     let name = path(req, "name")?;
@@ -69,7 +69,7 @@ pub async fn update(
     res: &mut Response,
 ) -> Result<(), ApiFailure> {
     let state = depot
-        .get_typed::<ApiState>()
+        .get_typed::<SharedApiState>()
         .map_err(|_| internal_state())?;
     require_admin(req, state).await?;
     let name = path(req, "name")?;
@@ -92,7 +92,7 @@ pub async fn delete(
     res: &mut Response,
 ) -> Result<(), ApiFailure> {
     let state = depot
-        .get_typed::<ApiState>()
+        .get_typed::<SharedApiState>()
         .map_err(|_| internal_state())?;
     require_admin(req, state).await?;
     let name = path(req, "name")?;

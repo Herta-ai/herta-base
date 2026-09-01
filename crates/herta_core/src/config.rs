@@ -91,6 +91,7 @@ pub struct RealtimeConfig {
     pub max_connections: usize,
     pub max_connections_per_ip: usize,
     pub heartbeat_seconds: u64,
+    pub reconciliation_seconds: u64,
 }
 
 impl Default for RealtimeConfig {
@@ -99,6 +100,7 @@ impl Default for RealtimeConfig {
             max_connections: 1000,
             max_connections_per_ip: 20,
             heartbeat_seconds: 30,
+            reconciliation_seconds: 30,
         }
     }
 }
@@ -312,6 +314,10 @@ impl HbConfig {
             "HB_REALTIME_HEARTBEAT_SECONDS",
             &mut self.realtime.heartbeat_seconds,
         )?;
+        apply_u64_env(
+            "HB_REALTIME_RECONCILIATION_SECONDS",
+            &mut self.realtime.reconciliation_seconds,
+        )?;
         apply_usize_env("HB_WEB_MAX_ARCHIVE_SIZE", &mut self.web.max_archive_size)?;
         if let Ok(value) = std::env::var("HB_STORAGE_TYPE") {
             self.storage.storage_type = value;
@@ -392,8 +398,9 @@ impl HbConfig {
         if self.realtime.max_connections == 0
             || self.realtime.max_connections_per_ip == 0
             || self.realtime.heartbeat_seconds == 0
+            || self.realtime.reconciliation_seconds == 0
         {
-            bail!("realtime connection limits and heartbeat must be greater than zero");
+            bail!("realtime limits and intervals must be greater than zero");
         }
         if self.web.max_archive_size == 0 {
             bail!("web.max_archive_size must be greater than zero");
@@ -484,6 +491,7 @@ mod tests {
         assert_eq!(config.server.host, "0.0.0.0");
         assert_eq!(config.database.engine, "surrealkv");
         assert_eq!(config.realtime.heartbeat_seconds, 30);
+        assert_eq!(config.realtime.reconciliation_seconds, 30);
         assert_eq!(config.storage.storage_type, "local");
         assert_eq!(config.storage.file_token_ttl_seconds, 300);
         assert_eq!(config.web.max_archive_size, 100 * 1024 * 1024);
@@ -493,6 +501,10 @@ mod tests {
     fn realtime_values_must_be_positive() {
         let mut config = HbConfig::default();
         config.realtime.max_connections = 0;
+        assert!(config.validate().is_err());
+
+        let mut config = HbConfig::default();
+        config.realtime.reconciliation_seconds = 0;
         assert!(config.validate().is_err());
     }
 

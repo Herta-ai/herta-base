@@ -70,14 +70,16 @@ JWT 到期错误码为 `HB_TOKEN_EXPIRED`。
 
 ## 生命周期与限制
 
-客户端断开、令牌到期、数据库流结束或发生错误时，服务端会丢弃 live stream，SurrealDB
-随即清理查询，同时释放全局和单 IP 连接配额。
+客户端断开、令牌到期、数据库流结束或发生错误时，服务端会取消订阅并显式清理
+SurrealDB live query，同时释放全局和单 IP 连接配额。正常连接以 live query 为主通道，
+并按配置的低频周期执行一致性校验，以修复极端情况下遗漏的通知。
 
 ```toml
 [realtime]
 max_connections = 1000
 max_connections_per_ip = 20
 heartbeat_seconds = 30
+reconciliation_seconds = 30
 ```
 
 达到任一上限返回 `429 HB_RATE_LIMITED`。部署者仍需按预期并发量配置操作系统文件描述符、

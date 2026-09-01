@@ -8,6 +8,19 @@ use serde_json::{Value, json};
 use tokio::time::{Duration, timeout};
 
 #[tokio::test]
+async fn cloned_database_clients_share_the_same_surreal_session() {
+    let db = DbClient::memory().await.unwrap();
+    let cloned = db.clone();
+
+    let mut original = db.inner().query("RETURN session::id()").await.unwrap();
+    let original_id = original.take::<Option<uuid::Uuid>>(0).unwrap().unwrap();
+    let mut cloned = cloned.inner().query("RETURN session::id()").await.unwrap();
+    let cloned_id = cloned.take::<Option<uuid::Uuid>>(0).unwrap().unwrap();
+
+    assert_eq!(original_id, cloned_id);
+}
+
+#[tokio::test]
 async fn log_worker_persists_server_and_request_metadata() {
     let db = DbClient::memory().await.unwrap();
     let (sender, receiver) = log_channel();
@@ -958,6 +971,89 @@ async fn realtime_maps_record_changes_and_sanitizes_auth_records() {
         "locked_until",
     ] {
         assert!(event.record.get(field).is_none());
+    }
+}
+
+#[tokio::test]
+async fn realtime_keeps_native_live_query_alive_after_creator_handle_is_dropped() {
+    let db = DbClient::memory().await.unwrap();
+    SchemaManager::new(&db)
+        .create_collection(&posts_collection())
+        .await
+        .unwrap();
+    let creator = db.clone();
+    let mut subscription = RealtimeManager::new(&creator)
+        .subscribe(
+            "posts",
+            None,
+            &RuleContext {
+                admin: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    drop(creator);
+
+    RecordManager::new(&db)
+        .create("posts", json!({"title": "Native", "status": "active"}))
+        .await
+        .unwrap();
+    let event = timeout(Duration::from_secs(1), subscription.next())
+        .await
+        .expect("native live event timed out")
+        .unwrap()
+        .unwrap();
+    assert_eq!(event.action, RealtimeAction::Create);
+    assert_eq!(event.record["title"], "Native");
+
+    timeout(Duration::from_secs(1), subscription.close())
+        .await
+        .expect("subscription cleanup timed out")
+        .unwrap();
+    subscription.close().await.unwrap();
+    assert!(subscription.next().await.unwrap().is_none());
+}
+
+#[tokio::test]
+async fn realtime_routes_one_change_to_multiple_short_lived_request_handles() {
+    let db = DbClient::memory().await.unwrap();
+    SchemaManager::new(&db)
+        .create_collection(&posts_collection())
+        .await
+        .unwrap();
+    let context = RuleContext {
+        admin: true,
+        ..Default::default()
+    };
+    let mut subscriptions = Vec::new();
+    for _ in 0..3 {
+        let request_db = db.clone();
+        subscriptions.push(
+            RealtimeManager::new(&request_db)
+                .subscribe("posts", None, &context)
+                .await
+                .unwrap(),
+        );
+        drop(request_db);
+    }
+
+    RecordManager::new(&db)
+        .create("posts", json!({"title": "Fanout", "status": "active"}))
+        .await
+        .unwrap();
+    for subscription in &mut subscriptions {
+        let event = timeout(Duration::from_secs(1), subscription.next())
+            .await
+            .expect("native live event timed out")
+            .unwrap()
+            .unwrap();
+        assert_eq!(event.action, RealtimeAction::Create);
+        assert_eq!(event.record["title"], "Fanout");
+        timeout(Duration::from_secs(1), subscription.close())
+            .await
+            .expect("subscription cleanup timed out")
+            .unwrap();
     }
 }
 

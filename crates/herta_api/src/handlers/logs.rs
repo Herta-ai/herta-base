@@ -6,7 +6,7 @@ use serde_json::json;
 use crate::{
     handlers::auth::require_admin,
     response::{ApiFailure, ApiResponse},
-    router::ApiState,
+    router::SharedApiState,
 };
 
 /// List persisted server and request logs for the administrator console.
@@ -17,7 +17,7 @@ pub async fn list(
     res: &mut Response,
 ) -> Result<(), ApiFailure> {
     let state = depot
-        .get_typed::<ApiState>()
+        .get_typed::<SharedApiState>()
         .map_err(|_| ApiFailure(HbError::Internal))?;
     require_admin(req, state).await?;
 

@@ -13,7 +13,7 @@ use serde_json::Value;
 use crate::{
     handlers::auth::{identity, rule_context},
     response::{ApiFailure, ApiResponse, parse_error},
-    router::ApiState,
+    router::{ApiState, SharedApiState},
 };
 
 #[derive(Debug, Deserialize)]
@@ -329,7 +329,8 @@ fn valid_record_key(value: &str) -> bool {
 
 fn state(depot: &Depot) -> Result<&ApiState, ApiFailure> {
     depot
-        .get_typed::<ApiState>()
+        .get_typed::<SharedApiState>()
+        .map(AsRef::as_ref)
         .map_err(|_| ApiFailure(HbError::Internal))
 }
 

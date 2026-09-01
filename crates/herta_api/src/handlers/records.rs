@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::{
     handlers::auth::{identity, rule_context},
     response::{ApiFailure, ApiResponse, parse_error},
-    router::ApiState,
+    router::{ApiState, SharedApiState},
 };
 
 #[handler]
@@ -138,7 +138,8 @@ pub async fn delete(
 
 fn state(depot: &Depot) -> Result<&ApiState, ApiFailure> {
     depot
-        .get_typed::<ApiState>()
+        .get_typed::<SharedApiState>()
+        .map(AsRef::as_ref)
         .map_err(|_| ApiFailure(herta_core::HbError::Internal))
 }
 

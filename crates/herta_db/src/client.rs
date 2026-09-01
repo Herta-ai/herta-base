@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use herta_core::HbConfig;
 use surrealdb::{
@@ -8,7 +8,7 @@ use surrealdb::{
 
 #[derive(Clone)]
 pub struct DbClient {
-    db: Surreal<Db>,
+    db: Arc<Surreal<Db>>,
 }
 
 impl DbClient {
@@ -21,7 +21,7 @@ impl DbClient {
             Surreal::new::<SurrealKv>(path).await?
         };
         db.use_ns("hertabase").use_db("main").await?;
-        let client = Self { db };
+        let client = Self { db: Arc::new(db) };
         client.init_system_tables().await?;
         Ok(client)
     }
@@ -95,6 +95,6 @@ impl DbClient {
     }
 
     pub fn inner(&self) -> &Surreal<Db> {
-        &self.db
+        self.db.as_ref()
     }
 }

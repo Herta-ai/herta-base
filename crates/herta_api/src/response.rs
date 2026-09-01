@@ -67,7 +67,7 @@ impl From<HbError> for ApiFailure {
 impl Writer for ApiFailure {
     async fn write(self, _req: &mut Request, depot: &mut Depot, res: &mut Response) {
         let dev_mode = depot
-            .get_typed::<crate::router::ApiState>()
+            .get_typed::<crate::router::SharedApiState>()
             .map(|state| state.config.server.dev_mode)
             .unwrap_or(false);
         let status =

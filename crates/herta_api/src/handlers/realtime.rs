@@ -9,7 +9,7 @@ use chrono::{SecondsFormat, Utc};
 use futures_util::stream;
 use herta_auth::AuthIdentity;
 use herta_core::{HbError, HbResult};
-use herta_db::{DbClient, RealtimeAction, RealtimeManager, RealtimeSubscription};
+use herta_db::{RealtimeAction, RealtimeManager, RealtimeSubscription};
 use salvo::{
     http::header::{HeaderName, HeaderValue},
     prelude::*,
@@ -22,7 +22,7 @@ use uuid::Uuid;
 use crate::{
     handlers::auth::rule_context,
     response::{ApiFailure, error_value, parse_error},
-    router::{ApiState, RealtimePermit},
+    router::{ApiState, RealtimePermit, SharedApiState},
 };
 
 #[handler]
@@ -43,6 +43,9 @@ pub async fn subscribe(
         .map_or_else(|| "unknown".into(), |ip| ip.to_string());
     let permit = state.realtime.try_acquire(ip)?;
     let subscription = RealtimeManager::new(&state.db)
+        .with_reconciliation_period(Duration::from_secs(
+            state.config.realtime.reconciliation_seconds,
+        ))
         .subscribe(
             &collection,
             filter.as_deref(),
@@ -55,7 +58,6 @@ pub async fn subscribe(
         subscription_id: Uuid::now_v7().to_string(),
         collection,
         subscription,
-        _db: state.db.clone(),
         _permit: permit,
         heartbeat: interval_at(Instant::now() + heartbeat, heartbeat),
         expires: expires_at.map(expiry_sleep),
@@ -95,7 +97,6 @@ struct StreamState {
     subscription_id: String,
     collection: String,
     subscription: RealtimeSubscription,
-    _db: DbClient,
     _permit: RealtimePermit,
     heartbeat: Interval,
     expires: Option<Pin<Box<Sleep>>>,
@@ -141,6 +142,7 @@ async fn next_event(mut state: StreamState) -> Option<(Result<SseEvent, Infallib
     let event = match outcome {
         Outcome::Expired => {
             state.phase = Phase::Done;
+            let _ = state.subscription.close().await;
             event("error", error_value(&HbError::TokenExpired, state.dev_mode))
         }
         Outcome::Heartbeat => event("ping", json!({"timestamp": timestamp()})),
@@ -169,6 +171,7 @@ async fn next_event(mut state: StreamState) -> Option<(Result<SseEvent, Infallib
         Outcome::Notification(Ok(None)) => return None,
         Outcome::Notification(Err(error)) => {
             state.phase = Phase::Done;
+            let _ = state.subscription.close().await;
             event("error", error_value(&error, state.dev_mode))
         }
     };
@@ -209,6 +212,7 @@ fn event(name: &'static str, data: Value) -> SseEvent {
 
 fn state(depot: &Depot) -> Result<&ApiState, ApiFailure> {
     depot
-        .get_typed::<ApiState>()
+        .get_typed::<SharedApiState>()
+        .map(AsRef::as_ref)
         .map_err(|_| ApiFailure(HbError::Internal))
 }

@@ -28,7 +28,7 @@ use walkdir::WalkDir;
 use crate::{
     handlers::auth::require_admin,
     response::{ApiFailure, ApiResponse, parse_error},
-    router::ApiState,
+    router::{ApiState, SharedApiState},
 };
 
 const DEFAULT_CACHE_CONTROL: &str = "public, max-age=0, must-revalidate";
@@ -508,7 +508,8 @@ pub async fn serve_project(
 
 fn state(depot: &Depot) -> Result<&ApiState, ApiFailure> {
     depot
-        .get_typed::<ApiState>()
+        .get_typed::<SharedApiState>()
+        .map(AsRef::as_ref)
         .map_err(|_| ApiFailure(HbError::Internal))
 }
 

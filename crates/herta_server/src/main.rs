@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use clap::{Parser, Subcommand};
 mod db_log_layer;
@@ -110,7 +110,7 @@ async fn main() -> anyhow::Result<()> {
             };
             let state = ApiState::new(db, config.clone()).await?;
             let router = build_router_with_logger(request_logger).push(ui::router());
-            let service = Service::new(router).hoop(affix_state::inject(state));
+            let service = Service::new(router).hoop(affix_state::inject(Arc::new(state)));
             let address = format!("{}:{}", config.server.host, config.server.port);
             let acceptor = TcpListener::new(address.clone()).bind().await;
             tracing::info!(%address, "server listening");
