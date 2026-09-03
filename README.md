@@ -12,9 +12,9 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge)](http://makeapullrequest.com)
 [![Status](https://img.shields.io/badge/Status-Pre--Alpha-orange.svg?style=for-the-badge)](#)
 
-> 💡 **HertaBase** 是一个用 Rust 编写的开源 BaaS（后端即服务）。它将 Web 服务器、图/文档数据库、实时订阅引擎、JS 扩展运行时和精美的管理后台，全部打包进**一个极致轻量的独立二进制文件**中。
+> 💡 **HertaBase** 是一个用 Rust 编写的开源 BaaS（后端即服务）。它将 Web 服务器、图/文档/向量/时序数据库、实时订阅引擎、JS 扩展运行时和精美的管理后台，全部打包进**一个极致轻量的独立二进制文件**中。
 
-**⚠️ 注意：本项目目前处于 Pre-Alpha，Phase 5 记录文件上传与 LocalFS/S3 存储后端已实现，后续阶段仍在开发。**
+**⚠️ 注意：本项目目前处于 Pre-Alpha，JS运行时仍在开发。**
 
 [快速开始](#-快速开始) • [核心特性](#-核心特性) • [架构设计](#-架构设计) • [编写 Hooks](#-编写扩展-hooks) • [路线图](#-开发路线图-roadmap)
 
@@ -28,12 +28,12 @@ HertaBase 旨在提供极致的开发体验（DX），同时利用 Rust 生态�
 
 - 📦 **All-in-One 单文件部署**：无需配置复杂的环境，一个二进制文件包含数据库、API 和管理后台。
 - 🗄️ **强悍的 SurrealDB 引擎**：原生支持图关系（Graph）、文档（Document）、Schema-less/full 混合模式。支持从本地单文件（RocksDB）无缝迁移至分布式集群（TiKV）。
-- ⚡ **极速 JS 运行时**：内置 `rquickjs`，允许使用 JavaScript/TypeScript 编写生命周期 Hook，微秒级冷启动，内存占用极低。
+- ⚡ **极速 JS 运行时（计划中）**：内置 `rquickjs`，允许使用 JavaScript/TypeScript 编写生命周期 Hook，微秒级冷启动，内存占用极低。
 - 🔄 **原生实时订阅 (Realtime)**：基于 SurrealDB 的 `LIVE SELECT` 与 Salvo SSE，数据变更推送到客户端。
 - 📖 **OpenAPI 自动生成**：当在后台创建 Collection（表）时，系统自动生成 Swagger/Redoc API 文档。
 - 🛡️ **内建 Auth 与权限引擎**：开箱即用的 JWT 鉴权，支持细粒度的 API 访问规则（API Rules）。
 - 🎨 **现代化 Admin UI**：基于 React、Vite 和 TanStack Router 构建，并在编译时通过 `rust-embed` 静态嵌入到二进制中。
-- 🌐 **网页项目托管（计划中）**：上传前端构建产物，以 `/web/{project}/` 路由部署独立 SPA 或静态站点。
+- 🌐 **网页项目托管**：上传前端构建产物，以 `/web/{project}/` 路由部署独立 SPA 或静态站点。
 
 ---
 
