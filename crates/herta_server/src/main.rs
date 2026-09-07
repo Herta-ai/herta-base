@@ -64,26 +64,26 @@ async fn main() -> anyhow::Result<()> {
             db_engine,
             dev,
         } => {
-            let mut config = HbConfig::load(cli.config.as_deref())?;
-            if let Some(host) = host {
-                config.server.host = host;
-            }
-            if let Some(port) = port {
-                config.server.port = port;
-            }
-            if let Some(data_dir) = data_dir {
-                config.paths.data_dir = data_dir;
-            }
-            if let Some(hooks_dir) = hooks_dir {
-                config.paths.hooks_dir = hooks_dir;
-            }
-            if let Some(db_engine) = db_engine {
-                config.database.engine = db_engine;
-            }
-            if dev {
-                config.server.dev_mode = true;
-            }
-            config.validate()?;
+            let config = HbConfig::load_with_overrides(cli.config.as_deref(), |config| {
+                if let Some(host) = host {
+                    config.server.host = host;
+                }
+                if let Some(port) = port {
+                    config.server.port = port;
+                }
+                if let Some(data_dir) = data_dir {
+                    config.paths.data_dir = data_dir;
+                }
+                if let Some(hooks_dir) = hooks_dir {
+                    config.paths.hooks_dir = hooks_dir;
+                }
+                if let Some(db_engine) = db_engine {
+                    config.database.engine = db_engine;
+                }
+                if dev {
+                    config.server.dev_mode = true;
+                }
+            })?;
 
             let persist_logs = config.log.server_persist_enabled || config.log.http_persist_enabled;
             let (log_sender, log_receiver) = if persist_logs {

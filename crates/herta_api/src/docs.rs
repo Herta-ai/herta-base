@@ -57,6 +57,24 @@ pub fn generate_document(collections: &[CollectionDef]) -> Value {
 
 fn base_paths() -> Map<String, Value> {
     let mut paths = Map::new();
+    paths.insert("/api/admin/mail/send".into(), json!({"post": {
+        "summary": "Send an email (administrator only)",
+        "description": "Success means SMTP acceptance, not final delivery. Submission is not retried automatically.",
+        "security": [{"bearerAuth": []}],
+        "requestBody": json_body("MailMessage"),
+        "responses": {
+            "200": {"description": "SMTP accepted the message", "content": {"application/json": {
+                "schema": {"$ref": "#/components/schemas/MailReceiptEnvelope"}
+            }}},
+            "400": {"description": "Invalid message"},
+            "401": {"description": "Authentication required"},
+            "403": {"description": "Administrator access required"},
+            "413": {"description": "Message exceeds configured limits"},
+            "502": {"description": "SMTP submission failed"},
+            "503": {"description": "Mail service disabled"},
+            "504": {"description": "Submission timed out; acceptance may be unknown"}
+        }
+    }}));
     paths.insert(
         "/api/realtime/{collection}".into(),
         json!({
@@ -239,6 +257,26 @@ fn base_paths() -> Map<String, Value> {
 
 fn base_schemas() -> Map<String, Value> {
     let mut schemas = Map::new();
+    schemas.insert("MailAddress".into(), json!({
+        "type": "object", "additionalProperties": false, "required": ["address"],
+        "properties": {"address": {"type": "string", "format": "email"}, "name": {"type": "string"}}
+    }));
+    schemas.insert("MailMessage".into(), json!({
+        "type": "object", "additionalProperties": false, "required": ["to", "subject"],
+        "description": "At least one nonempty text or html body is required. Sender and byte limits follow server mail configuration. No attachments, cc or bcc.",
+        "properties": {
+            "from": {"$ref": "#/components/schemas/MailAddress"},
+            "to": {"type": "array", "minItems": 1, "items": {"$ref": "#/components/schemas/MailAddress"}},
+            "subject": {"type": "string", "minLength": 1},
+            "text": {"type": "string"}, "html": {"type": "string"},
+            "headers": {"type": "object", "description": "X-* headers only; CR/LF prohibited", "additionalProperties": {"type": "string"}}
+        },
+        "example": {"to": [{"address": "reader@example.com"}], "subject": "HertaBase test", "text": "Hello from HertaBase"}
+    }));
+    schemas.insert("MailReceiptEnvelope".into(), envelope(json!({
+        "type": "object", "required": ["messageId", "status"],
+        "properties": {"messageId": {"type": "string"}, "status": {"type": "string", "enum": ["accepted"]}}
+    })));
     schemas.insert(
         "ApiError".into(),
         json!({

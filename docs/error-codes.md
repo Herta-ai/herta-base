@@ -49,7 +49,9 @@
   - `HB_HOOK_OOM` (500) — JS Hook 执行消耗内存超出沙盒限制。
   - `HB_SCRIPT_LOAD_ERROR` (500) — JS 扩展加载、编译或注册失败。
   - `HB_ROUTE_CONFLICT` (500) — JS 自定义路由与已有路由冲突。
-  - `HB_CAPABILITY_UNAVAILABLE` (503) — JS API 依赖的宿主服务尚未启用。
+  - `HB_CAPABILITY_UNAVAILABLE` (503) — 所需宿主服务未启用；当前用于邮件驱动为 `disabled`，未来也用于 JS 能力。
+  - `HB_MAIL_SEND_FAILED` (502) — SMTP 连接、TLS、认证或提交失败；接口不返回 SMTP 原始错误或凭据。
+  - `HB_MAIL_TIMEOUT` (504) — SMTP 提交超时，接收端是否已经接受邮件可能未知；服务不会自动重试。
   - `HB_DB_ERROR` (500) — 底层 SurrealDB 数据库操作失败。
   - `HB_STORAGE_ERROR` (500) — 文件存储适配器（LocalFS / S3）操作失败。
   - `HB_INTERNAL_ERROR` (500) — 不可预期的系统内部错误。

@@ -14,6 +14,7 @@ pub struct HbConfig {
     pub realtime: RealtimeConfig,
     pub storage: StorageConfig,
     pub web: WebConfig,
+    pub mail: crate::MailConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -217,6 +218,14 @@ impl Default for LogConfig {
 
 impl HbConfig {
     pub fn load(config_path: Option<&Path>) -> anyhow::Result<Self> {
+        Self::load_with_overrides(config_path, |_| {})
+    }
+
+    /// Apply CLI overrides after environment variables, before validation.
+    pub fn load_with_overrides(
+        config_path: Option<&Path>,
+        overrides: impl FnOnce(&mut Self),
+    ) -> anyhow::Result<Self> {
         let path = config_path.map(Path::to_path_buf).or_else(|| {
             Path::new("hertabase.toml")
                 .exists()
@@ -226,18 +235,26 @@ impl HbConfig {
         let mut config = if let Some(path) = path {
             let content = std::fs::read_to_string(&path)
                 .with_context(|| format!("failed to read config file {}", path.display()))?;
-            toml::from_str(&content)
-                .with_context(|| format!("failed to parse config file {}", path.display()))?
+            // TOML's default diagnostics include source excerpts, which may contain SMTP secrets.
+            toml::from_str(&content).map_err(|error: toml::de::Error| {
+                anyhow::anyhow!(
+                    "failed to parse config file {} at byte {}: invalid TOML or configuration value",
+                    path.display(),
+                    error.span().map_or(0, |span| span.start)
+                )
+            })?
         } else {
             Self::default()
         };
 
         config.apply_env()?;
+        overrides(&mut config);
         config.validate()?;
         Ok(config)
     }
 
     fn apply_env(&mut self) -> anyhow::Result<()> {
+        self.mail.apply_env()?;
         if let Ok(value) = std::env::var("HB_HOST") {
             self.server.host = value;
         }
@@ -359,6 +376,7 @@ impl HbConfig {
     }
 
     pub fn validate(&self) -> anyhow::Result<()> {
+        self.mail.validate(self.server.dev_mode)?;
         if self.server.host.trim().is_empty() {
             bail!("server.host cannot be empty");
         }
@@ -483,6 +501,36 @@ fn apply_usize_env(name: &str, target: &mut usize) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn malformed_config_diagnostics_do_not_expose_smtp_secrets() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            file.path(),
+            "[mail.smtp]\npassword='private-password' invalid\n",
+        )
+        .unwrap();
+        let error = HbConfig::load(Some(file.path())).unwrap_err();
+        assert!(!format!("{error:?}").contains("private-password"));
+        assert!(error.to_string().contains("at byte"));
+    }
+
+    #[test]
+    fn cli_dev_override_is_applied_before_smtp_validation() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            file.path(),
+            "[mail]\ndriver='smtp'\n[mail.smtp]\nhost='localhost'\ntls='none'\n",
+        )
+        .unwrap();
+        assert!(HbConfig::load(Some(file.path())).is_err());
+        let config = HbConfig::load_with_overrides(Some(file.path()), |config| {
+            config.server.dev_mode = true;
+        })
+        .unwrap();
+        assert!(config.server.dev_mode);
+        assert_eq!(config.mail.smtp.tls, "none");
+    }
 
     #[test]
     fn partial_toml_uses_nested_defaults() {

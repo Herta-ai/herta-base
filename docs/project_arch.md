@@ -25,6 +25,7 @@ hertabase/
 │   ├── herta_db/            # SurrealDB 客户端封装、Schema 动态转换
 │   ├── herta_jsvm/          # rquickjs 运行时、沙盒、Rust↔JS FFI
 │   ├── herta_storage/       # 文件存储抽象适配器 (FS/S3)
+│   ├── herta_mail/          # SMTP 邮件发送与禁用驱动（lettre）
 │   └── herta_server/        # CLI 入口、前端静态资源嵌入 (rust-embed)
 │
 ├── frontend/                # 🌐 前端项目 (PNPM Workspace)
@@ -40,6 +41,10 @@ hertabase/
 ```
 
 `herta_storage` 只负责逻辑 key 安全、对象读写、范围读取与前缀删除；它不理解 Collection Rule 或记录字段。`herta_api` 负责 multipart 编排、文件令牌、记录成员关系校验和失败补偿，`herta_db` 负责 file 字段的单值/数组 schema 与记录校验，`herta_auth` 负责与账户 `token_key` 绑定的文件 JWT。完整边界见 [文件存储与上传](storage.md)。
+
+邮件契约、DTO 和配置位于 `herta_core`，`herta_mail` 负责 SMTP/TLS 与 MIME 编码，`herta_api`
+注入 `Arc<dyn Mailer>` 并提供管理员邮件发送入口。`packages/mailbox` 是独立的 Node.js 内存 SMTP
+收件箱，不进入生产 Rust 二进制，也不承担外发邮件。见 [邮件发送](mail.md)。
 
 ---
 

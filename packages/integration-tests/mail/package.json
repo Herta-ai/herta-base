@@ -1,0 +1,13 @@
+{
+  "name": "mail-integration",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "pretest": "pnpm --filter @hb/sdk build && pnpm --filter @hb/admin-ui build && cargo build --bin hertabase --manifest-path ../../../Cargo.toml",
+    "test": "node --test --test-concurrency=1 tests/*.test.js"
+  },
+  "devDependencies": {
+    "@hb/mailbox": "workspace:*"
+  }
+}

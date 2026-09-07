@@ -46,6 +46,12 @@ pub enum HbError {
     Storage(String),
     #[error("Internal error")]
     Internal,
+    #[error("Mail service is disabled")]
+    CapabilityUnavailable,
+    #[error("SMTP send failed")]
+    MailSendFailed,
+    #[error("SMTP send timed out; acceptance is unknown")]
+    MailTimeout,
 }
 
 impl HbError {
@@ -69,6 +75,9 @@ impl HbError {
             Self::RateLimited => 429,
             Self::AccountLocked => 423,
             Self::Database(_) | Self::Storage(_) | Self::Internal => 500,
+            Self::CapabilityUnavailable => 503,
+            Self::MailSendFailed => 502,
+            Self::MailTimeout => 504,
         }
     }
 
@@ -93,6 +102,9 @@ impl HbError {
             Self::Database(_) => "HB_DB_ERROR",
             Self::Storage(_) => "HB_STORAGE_ERROR",
             Self::Internal => "HB_INTERNAL_ERROR",
+            Self::CapabilityUnavailable => "HB_CAPABILITY_UNAVAILABLE",
+            Self::MailSendFailed => "HB_MAIL_SEND_FAILED",
+            Self::MailTimeout => "HB_MAIL_TIMEOUT",
         }
     }
 

@@ -1,0 +1,17 @@
+[package]
+name = "herta_mail"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+herta_core = { path = "../herta_core" }
+lettre.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

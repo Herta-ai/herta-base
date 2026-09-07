@@ -41,6 +41,7 @@ HertaBase 项目的开发生命周期分为 7 个核心阶段（Phases），按�
     * 提供五级结构化日志、受限环境变量和统一错误类型。
     * 将 HTTP Request/Response 映射给 JS，支持 `routerAdd()` 注册自定义路由。
 * **Step 4: 后台与外部服务**。支持 `cronAdd()` 定时任务、受 SSRF 策略保护的 HTTP 请求和基于 Mailer trait 的邮件发送。
+  Rust Mailer、SMTP、管理员邮件发送和纯内存测试收件箱已实现；JS 桥接与事务 outbox 尚未实现，见 [邮件发送](mail.md)。
 * **Step 5: 跨阶段能力桥接**。复用已实现的 Phase 5 Storage，补齐扩展文件服务；Phase 4
   目前只有集合变更 SSE，应用 topic 需要新增消息总线及客户端订阅契约。适配器缺失时明确返回
   能力不可用错误。

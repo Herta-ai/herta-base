@@ -86,20 +86,28 @@ HertaBase 通过基于 `clap` 构筑的 CLI 工具进行管理：
 
 生产模式拒绝 HTTP S3 endpoint。LocalFS 固定写入 `HB_DATA_DIR/storage`。完整说明见 [文件存储与上传](storage.md)。
 
-**邮件服务（Phase 3 目标配置，尚未实现）**
+**邮件服务（已实现）**
 
 * `HB_MAIL_DRIVER`：邮件驱动，可选 `disabled`（默认）或 `smtp`。
-* `HB_MAIL_FROM_ADDRESS`, `HB_MAIL_FROM_NAME`：默认发件地址和显示名称。
-* `HB_SMTP_HOST`, `HB_SMTP_PORT`, `HB_SMTP_USERNAME`, `HB_SMTP_PASSWORD`：SMTP 连接信息。
-* `HB_SMTP_TLS`：TLS 策略，可选 `required`, `starttls`, `none`；生产环境不允许 `none`。
+* `HB_MAIL_FROM_ADDRESS`, `HB_MAIL_FROM_NAME`：默认 `noreply@example.com`、`HertaBase`。
+* `HB_MAIL_ALLOWED_FROM_ADDRESSES`：逗号分隔的额外允许发件地址；默认仅允许默认发件地址。
+* `HB_MAIL_MAX_RECIPIENTS`：单封收件人数上限，默认 `50`。
+* `HB_MAIL_MAX_SUBJECT_BYTES`：主题 UTF-8 字节上限，默认 `998`。
+* `HB_MAIL_MAX_BODY_BYTES`：text 与 html 合计 UTF-8 字节上限，默认 `1048576`。
+* `HB_MAIL_MAX_HEADER_BYTES`：自定义邮件头名称和值合计 UTF-8 字节上限，默认 `8192`；仅允许 `X-*` 头。
+* `HB_MAIL_TIMEOUT_MS`：一次 SMTP 提交的总超时，默认 `10000` 毫秒，不自动重试。
+* `HB_SMTP_HOST`, `HB_SMTP_PORT`, `HB_SMTP_USERNAME`, `HB_SMTP_PASSWORD`：SMTP 连接信息，默认端口 `587`；用户名和密码须同时提供，均为空时不认证。
+* `HB_SMTP_TLS`：`required` 为连接时直接 TLS，`starttls`（默认）为强制 STARTTLS；两者验证证书且不降级。`none` 仅在 `server.dev_mode=true` 或 CLI `--dev` 下允许。
 
-邮件服务配置只负责建立宿主 `Mailer`。脚本还必须通过 `HB_JS_MAIL_ENABLED` 单独获得发送授权，
-SMTP 凭据永远不会暴露给 `$app.env()`。
+以上配置对应 `[mail]` / `[mail.smtp]` 同名字段，环境变量覆盖 TOML，CLI 覆盖后统一校验；所有限制和超时必须大于零。
+SMTP 凭据可从 TOML 或环境变量读取，不进入配置序列化、调试输出和 API 响应。推荐使用环境变量注入凭据。
+管理员可调用 `POST /api/admin/mail/send`。JS 邮件调用仍未实现，将来还需 `HB_JS_MAIL_ENABLED` 单独授权，
+SMTP 凭据永远不会暴露给 `$app.env()`。完整使用与测试步骤见 [邮件发送](mail.md)。
 
 **JS Sandbox（Phase 3 目标配置，尚未实现）**
 
-当前 `HbConfig` 尚无 `jsvm`、`mail` 字段，也未读取下列 `HB_JS_*` / `HB_MAIL_*` /
-`HB_SMTP_*` 环境变量；写入配置不会启用运行时。已实现的 `HB_HOOKS_DIR` 和 `--hooks-dir`
+当前 `HbConfig` 尚无 `jsvm` 字段，也未读取下列 `HB_JS_*` 环境变量；写入 JS 配置不会启用运行时。
+`mail`、`HB_MAIL_*`、`HB_SMTP_*` 已实现。已实现的 `HB_HOOKS_DIR` 和 `--hooks-dir`
 目前仅保存路径。实现前的契约缺口见 [JavaScript 扩展运行时设计](js-runtime.md) 第 16.1 节。
 
 * `HB_JS_ENABLED`：是否启用 JS 扩展运行时。
@@ -165,7 +173,7 @@ max_archive_size = 104857600
 [security.cors]
 origins = ["https://my-app.com", "https://admin.herta.ai"]
 
-# 以下 jsvm/mail 配置为 Phase 3 设计示例，当前二进制不支持。
+# 以下 jsvm 配置为 Phase 3 设计示例，尚未支持；mail 配置已实现。
 [jsvm]
 enabled = true
 memory_limit_mb = 16
@@ -205,6 +213,12 @@ max_runtime_ms = 30000
 driver = "disabled"
 from_address = "noreply@example.com"
 from_name = "HertaBase"
+allowed_from_addresses = []
+max_recipients = 50
+max_subject_bytes = 998
+max_body_bytes = 1048576
+max_header_bytes = 8192
+timeout_ms = 10000
 
 [mail.smtp]
 host = "smtp.example.com"

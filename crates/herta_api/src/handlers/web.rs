@@ -346,7 +346,7 @@ impl WebHosting {
             return Ok(());
         };
         let project_root = self.web_root.join(&project.name);
-        let Some((file, status)) = select_file(&project_root, &relative_path, &project)? else {
+        let Some((file, status)) = select_file(&project_root, &relative_path, project)? else {
             res.status_code(StatusCode::NOT_FOUND);
             return Ok(());
         };
@@ -529,7 +529,7 @@ fn deploy_options(form: &salvo::http::form::FormData) -> Result<DeployOptions, A
             "multipart contains an unknown field",
         )));
     }
-    let alias = field(form, "alias")?.map(|value| nonempty(value));
+    let alias = field(form, "alias")?.map(nonempty);
     let spa_fallback = field(form, "spaFallback")?
         .map(|value| {
             value
@@ -538,7 +538,7 @@ fn deploy_options(form: &salvo::http::form::FormData) -> Result<DeployOptions, A
         })
         .transpose()?;
     let cache_control = field(form, "cacheControl")?;
-    let not_found = field(form, "notFound")?.map(|value| nonempty(value));
+    let not_found = field(form, "notFound")?.map(nonempty);
     Ok(DeployOptions {
         alias,
         spa_fallback,

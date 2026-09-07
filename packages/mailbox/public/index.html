@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HertaBase · 测试收件箱</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <header>
+      <div class="brand">H<span>✦</span></div>
+      <div>
+        <h1>测试收件箱</h1>
+        <p>HertaBase Mailbox · 本地 SMTP 收件</p>
+      </div>
+      <span class="badge">仅存于内存</span>
+    </header>
+    <main>
+      <aside>
+        <form id="filter">
+          <label for="recipient">收件人</label>
+          <div class="search">
+            <input id="recipient" type="search" placeholder="reader@example.com" /><button>
+              筛选
+            </button>
+          </div>
+        </form>
+        <div class="toolbar">
+          <span id="count">0 封邮件</span><button id="refresh" type="button">刷新</button
+          ><button id="clear" type="button">清空</button>
+        </div>
+        <div id="messages" aria-live="polite"></div>
+        <p class="note">每 2 秒刷新 · 重启后邮件清空</p>
+      </aside>
+      <section id="empty" class="empty">
+        <span class="envelope">✉</span>
+        <h2>等待第一封邮件</h2>
+        <p>将 HertaBase 的 SMTP 指向本地测试邮箱，<br />发送后即可在这里查看内容。</p>
+      </section>
+      <article id="detail" hidden>
+        <div class="detail-heading">
+          <h2 id="subject"></h2>
+          <div><a id="download">下载 .eml</a><button id="delete" type="button">删除</button></div>
+        </div>
+        <dl id="metadata"></dl>
+        <nav aria-label="邮件内容">
+          <button data-tab="text" class="active">纯文本</button
+          ><button data-tab="html">HTML 预览</button><button data-tab="headers">邮件头</button>
+        </nav>
+        <pre id="text"></pre>
+        <iframe id="html" title="隔离的邮件 HTML 预览" sandbox hidden></iframe>
+        <pre id="headers" hidden></pre>
+      </article>
+    </main>
+    <footer>
+      <span id="status" role="status">就绪</span
+      ><span>收到邮件表示 SMTP 已接收；此邮箱不会向外投递。</span>
+    </footer>
+  </body>
+</html>

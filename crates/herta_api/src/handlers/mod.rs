@@ -4,6 +4,7 @@ pub mod docs;
 pub mod files;
 pub mod logging;
 pub mod logs;
+pub mod mail;
 pub mod realtime;
 pub mod records;
 pub mod web;

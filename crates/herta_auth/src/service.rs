@@ -981,10 +981,12 @@ fn id_string(value: &Value) -> Option<String> {
             .or_else(|| value.get("key")?.as_u64().map(|key| key.to_string()))?;
         format!("{table}:{key}")
     };
-    if let Some((table, key)) = raw.split_once(':') {
-        if key.starts_with('`') && key.ends_with('`') && key.len() >= 2 {
-            return Some(format!("{table}:{}", &key[1..key.len() - 1]));
-        }
+    if let Some((table, key)) = raw.split_once(':')
+        && key.starts_with('`')
+        && key.ends_with('`')
+        && key.len() >= 2
+    {
+        return Some(format!("{table}:{}", &key[1..key.len() - 1]));
     }
     Some(raw)
 }

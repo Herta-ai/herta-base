@@ -34,6 +34,7 @@ HertaBase 旨在提供极致的开发体验（DX），同时利用 Rust 生态�
 - 🛡️ **内建 Auth 与权限引擎**：开箱即用的 JWT 鉴权，支持细粒度的 API 访问规则（API Rules）。
 - 🎨 **现代化 Admin UI**：基于 React、Vite 和 TanStack Router 构建，并在编译时通过 `rust-embed` 静态嵌入到二进制中。
 - 🌐 **网页项目托管**：上传前端构建产物，以 `/web/{project}/` 路由部署独立 SPA 或静态站点。
+- ✉️ **SMTP 邮件发送**：Rust Mailer、管理员邮件发送接口及纯内存网页收件箱，使用说明见 [邮件发送](docs/mail.md)。本地收件箱通过 `pnpm dev:mailbox` 启动。
 
 ---
 

@@ -60,6 +60,13 @@ pub struct LogQuery {
     pub to: Option<String>,
 }
 
+type ValidatedLogFilters = (
+    Option<String>,
+    Option<String>,
+    Option<Datetime>,
+    Option<Datetime>,
+);
+
 impl LogQuery {
     pub fn page(&self) -> u64 {
         self.page.unwrap_or(DEFAULT_LOG_PAGE)
@@ -69,14 +76,7 @@ impl LogQuery {
         self.per_page.unwrap_or(DEFAULT_LOG_PER_PAGE)
     }
 
-    fn validate(
-        &self,
-    ) -> HbResult<(
-        Option<String>,
-        Option<String>,
-        Option<Datetime>,
-        Option<Datetime>,
-    )> {
+    fn validate(&self) -> HbResult<ValidatedLogFilters> {
         if self.page() == 0 {
             return Err(HbError::validation("page must be at least 1"));
         }

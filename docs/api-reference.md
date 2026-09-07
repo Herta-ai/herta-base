@@ -267,3 +267,23 @@ Collection 管理接口为 `GET/POST /_/collections` 和 `GET/PATCH/DELETE /_/co
 ## 10. 速率限制 (Rate Limiting)
 
 认证端点按单进程、单 IP、每分钟限流：注册 5 次、登录 10 次、刷新 30 次。超过限制返回 429 `HB_RATE_LIMITED`；当前版本不发送配额响应头。
+
+## 11. 管理员邮件发送
+
+`POST /api/admin/mail/send` 使用管理员 Bearer Token，通过配置的 SMTP 服务提交邮件。
+请求包含 `to`、`subject`、至少一个非空 `text` / `html`，以及可选 `from` 和 `headers`。
+省略 `from` 使用配置默认发件人，`headers` 仅支持 `X-*` 自定义头；首版不支持附件、cc、bcc。
+
+```json
+{
+  "to": [{ "address": "reader@example.com" }],
+  "subject": "HertaBase test",
+  "text": "Hello from HertaBase"
+}
+```
+
+成功返回 HTTP 200 和 `{ "data": { "messageId": "<uuid@hertabase.local>", "status": "accepted" }, "meta": null, "error": null }`。
+这表示 SMTP 接收端已确认接收，不代表公网邮箱最终投递。匿名返回 401，普通用户返回 403；
+邮件未启用返回 503 `HB_CAPABILITY_UNAVAILABLE`，SMTP 失败返回 502 `HB_MAIL_SEND_FAILED`，
+超时返回 504 `HB_MAIL_TIMEOUT`，无自动重试。校验失败和大小超限分别返回 400、413。
+配置、字段限制、内存收件箱和完整示例见 [邮件发送](mail.md)。

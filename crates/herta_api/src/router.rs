@@ -4,14 +4,15 @@ use std::{
 };
 
 use herta_auth::AuthService;
-use herta_core::HbConfig;
+use herta_core::{HbConfig, Mailer};
 use herta_db::DbClient;
+use herta_mail::mailer_from_config;
 use herta_storage::{Storage, storage_from_config};
 use salvo::{oapi::swagger_ui::SwaggerUi, prelude::*};
 
 use crate::{
     docs::OpenApiCache,
-    handlers::{auth, collections, docs, files, logs, realtime, records, web},
+    handlers::{auth, collections, docs, files, logs, mail, realtime, records, web},
 };
 
 pub struct ApiState {
@@ -20,6 +21,7 @@ pub struct ApiState {
     pub docs: OpenApiCache,
     pub auth: AuthService,
     pub storage: Arc<dyn Storage>,
+    pub mailer: Arc<dyn Mailer>,
     pub realtime: RealtimeLimiter,
     pub web: web::WebHosting,
 }
@@ -37,6 +39,16 @@ impl ApiState {
         config: HbConfig,
         storage: Arc<dyn Storage>,
     ) -> herta_core::HbResult<Self> {
+        let mailer = mailer_from_config(&config)?;
+        Self::new_with_services(db, config, storage, mailer).await
+    }
+
+    pub async fn new_with_services(
+        db: DbClient,
+        config: HbConfig,
+        storage: Arc<dyn Storage>,
+        mailer: Arc<dyn Mailer>,
+    ) -> herta_core::HbResult<Self> {
         let auth = AuthService::new(db.clone(), &config).await?;
         let realtime = RealtimeLimiter::new(
             config.realtime.max_connections,
@@ -49,6 +61,7 @@ impl ApiState {
             docs: OpenApiCache::empty(),
             auth,
             storage,
+            mailer,
             realtime,
             web,
         };
@@ -187,6 +200,7 @@ pub fn build_router_with_logger(
         .push(collection_auth)
         .push(admin_auth)
         .push(admin_logs)
+        .push(Router::with_path("api/admin/mail/send").post(mail::send))
         .push(web_projects)
         .push(files_router)
         .push(

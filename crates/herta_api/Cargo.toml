@@ -11,6 +11,7 @@ flate2.workspace = true
 futures-util.workspace = true
 herta_auth = { path = "../herta_auth" }
 herta_core = { path = "../herta_core" }
+herta_mail = { path = "../herta_mail" }
 herta_db = { path = "../herta_db" }
 herta_storage = { path = "../herta_storage" }
 mime.workspace = true
