@@ -86,7 +86,7 @@ HertaBase 通过基于 `clap` 构筑的 CLI 工具进行管理：
 
 生产模式拒绝 HTTP S3 endpoint。LocalFS 固定写入 `HB_DATA_DIR/storage`。完整说明见 [文件存储与上传](storage.md)。
 
-**邮件服务**
+**邮件服务（Phase 3 目标配置，尚未实现）**
 
 * `HB_MAIL_DRIVER`：邮件驱动，可选 `disabled`（默认）或 `smtp`。
 * `HB_MAIL_FROM_ADDRESS`, `HB_MAIL_FROM_NAME`：默认发件地址和显示名称。
@@ -96,7 +96,11 @@ HertaBase 通过基于 `clap` 构筑的 CLI 工具进行管理：
 邮件服务配置只负责建立宿主 `Mailer`。脚本还必须通过 `HB_JS_MAIL_ENABLED` 单独获得发送授权，
 SMTP 凭据永远不会暴露给 `$app.env()`。
 
-**JS Sandbox (Phase 3)**
+**JS Sandbox（Phase 3 目标配置，尚未实现）**
+
+当前 `HbConfig` 尚无 `jsvm`、`mail` 字段，也未读取下列 `HB_JS_*` / `HB_MAIL_*` /
+`HB_SMTP_*` 环境变量；写入配置不会启用运行时。已实现的 `HB_HOOKS_DIR` 和 `--hooks-dir`
+目前仅保存路径。实现前的契约缺口见 [JavaScript 扩展运行时设计](js-runtime.md) 第 16.1 节。
 
 * `HB_JS_ENABLED`：是否启用 JS 扩展运行时。
 * `HB_JS_MEMORY_LIMIT_MB`, `HB_JS_STACK_LIMIT_KB`：单个执行上下文的内存与栈上限。
@@ -161,6 +165,7 @@ max_archive_size = 104857600
 [security.cors]
 origins = ["https://my-app.com", "https://admin.herta.ai"]
 
+# 以下 jsvm/mail 配置为 Phase 3 设计示例，当前二进制不支持。
 [jsvm]
 enabled = true
 memory_limit_mb = 16

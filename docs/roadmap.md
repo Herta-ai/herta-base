@@ -34,15 +34,18 @@ HertaBase 项目的开发生命周期分为 7 个核心阶段（Phases），按�
 
 * **Step 1: 运行时与注册表**。配置 `rquickjs::AsyncRuntime`、隔离的 `AsyncContext`
   、资源限制、脚本发现、编译缓存和原子热重载；扩展通过注册函数声明行为，不再通过文件名推断 Hook。
-* **Step 2: Event Hooks**。支持 Record、Collection、Auth 和应用生命周期事件，采用 `e.next()`
-  中间件链语义，并明确调用前的事务内逻辑与调用后的提交后逻辑边界。
+* **Step 2: Event Hooks**。先验证当前数据层的跨异步调用事务方案，再接入 Record、Collection、
+  Auth 和应用生命周期事件。采用 `e.next()` 中间件链语义，但下游完成不能当作外层事务已提交。
 * **Step 3: FFI 边界映射 (Rust -> JS)**。
     * 提供 Record/Collection 优先的数据库 API，并保留受限且可关闭的 `$app.db.query` 高级接口。
     * 提供五级结构化日志、受限环境变量和统一错误类型。
     * 将 HTTP Request/Response 映射给 JS，支持 `routerAdd()` 注册自定义路由。
 * **Step 4: 后台与外部服务**。支持 `cronAdd()` 定时任务、受 SSRF 策略保护的 HTTP 请求和基于 Mailer trait 的邮件发送。
-* **Step 5: 跨阶段能力桥接**。定义 `$app.realtime` 和 `$app.files` 契约；分别对接 Phase 4 实时总线和 Phase 5
-  Storage，在服务未启用时明确返回能力不可用错误。
+* **Step 5: 跨阶段能力桥接**。复用已实现的 Phase 5 Storage，补齐扩展文件服务；Phase 4
+  目前只有集合变更 SSE，应用 topic 需要新增消息总线及客户端订阅契约。适配器缺失时明确返回
+  能力不可用错误。
+
+2026-09-07 复核后的实现前置问题见 [运行时设计第 16.1 节](js-runtime.md#161-实现前必须关闭的问题)。
 
 ### Phase 4: 实时订阅引擎 — *已实现*
 
