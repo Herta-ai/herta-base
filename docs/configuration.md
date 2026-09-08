@@ -108,24 +108,38 @@ SMTP 凭据永远不会暴露给 `$app.env()`。完整使用与测试步骤见 [
 
 当前 `HbConfig` 尚无 `jsvm` 字段，也未读取下列 `HB_JS_*` 环境变量；写入 JS 配置不会启用运行时。
 `mail`、`HB_MAIL_*`、`HB_SMTP_*` 已实现。已实现的 `HB_HOOKS_DIR` 和 `--hooks-dir`
-目前仅保存路径。实现前的契约缺口见 [JavaScript 扩展运行时设计](js-runtime.md) 第 16.1 节。
+目前仅保存路径。目标默认值见 [JavaScript 扩展运行时设计](js-runtime.md) 第 15 节，
+尚未通过的开放门槛见第 16.3 节。以下与该目标契约一致，均不是当前可生效的环境变量。
 
-* `HB_JS_ENABLED`：是否启用 JS 扩展运行时。
-* `HB_JS_MEMORY_LIMIT_MB`, `HB_JS_STACK_LIMIT_KB`：单个执行上下文的内存与栈上限。
-* `HB_JS_EXECUTION_TIMEOUT_MS`：同步 JS CPU 执行上限。
-* `HB_JS_ASYNC_TIMEOUT_MS`：包含数据库和外部 I/O 的单次总时长上限。
-* `HB_JS_POOL_SIZE`, `HB_JS_QUEUE_CAPACITY`：运行时池大小和有界等待队列容量。
-* `HB_JS_RAW_QUERY_ENABLED`：是否允许使用受审计的 `$app.db.query`。
-* `HB_JS_ENV_ALLOWLIST`：`$app.env()` 可读取的非敏感环境变量名列表。
-* `HB_JS_HTTP_ENABLED`, `HB_JS_HTTP_ALLOWLIST`：是否允许出站 HTTP 及 `host:port` 白名单。
-* `HB_JS_HTTP_TIMEOUT_MS`, `HB_JS_HTTP_MAX_RESPONSE_BYTES`：出站请求总超时和响应上限。
-* `HB_JS_FILES_ENABLED`, `HB_JS_FILES_ROOT`：是否允许文件操作及其沙盒根目录。
-* `HB_JS_FILES_QUOTA_BYTES`, `HB_JS_FILES_MAX_FILE_BYTES`：文件总配额和单文件上限。
-* `HB_JS_MAIL_ENABLED`：是否允许通过宿主 Mailer 发送邮件。
-* `HB_JS_CRON_ENABLED`, `HB_JS_CRON_TIMEZONE`：是否启用定时任务及默认 IANA 时区。
+* `HB_JS_ENABLED`：是否启用 JS 扩展运行时，默认 false。
+* `HB_JS_MEMORY_LIMIT_MB`, `HB_JS_STACK_LIMIT_KB`：整个调用 runtime 的堆/栈上限，默认 16 MiB/512 KiB。
+* `HB_JS_EXECUTION_TIMEOUT_MS`：累计 JS 活跃执行片段的墙钟预算，默认 100 毫秒；等待宿主 I/O 时暂停累计，不是 OS CPU 时间。
+* `HB_JS_ASYNC_TIMEOUT_MS`：包含数据库和外部 I/O 的根调用总时长，默认 5000 毫秒。
+* `HB_JS_STARTUP_TIMEOUT_MS`, `HB_JS_QUEUE_TIMEOUT_MS`, `HB_JS_SHUTDOWN_TIMEOUT_MS`：候选验证、排队和 JS 排空时限，默认 10000/1000/30000 毫秒。
+* `HB_JS_POOL_SIZE`, `HB_JS_QUEUE_CAPACITY`：并行根调用数和等待队列容量，默认 4/128；每次新建 runtime，嵌套 Hook 不重复申请槽。
+* `HB_JS_MAX_RESPONSE_BYTES`, `HB_JS_MAX_BRIDGE_BYTES`：单个路由响应、单次 FFI 入/出参上限，各 4194304 字节。
+* `HB_JS_MAX_HOST_BUFFER_BYTES`：每根调用同时持有的宿主缓冲预留，默认 16777216 字节，释放后归还。
+* `HB_JS_MAX_PENDING_HOST_CALLS`, `HB_JS_MAX_HOST_CALLS`：每根调用在途/累计宿主调用数，默认 32/256。
+* `HB_JS_MAX_HOOK_DEPTH`, `HB_JS_MAX_LOGS`, `HB_JS_MAX_LOG_BYTES`：嵌套深度、累计日志条数/字节数，默认 8/100/65536。
+* `HB_JS_ROUTE_PREFIXES`：可注册的路由前缀，默认 `["/api/"]`，不能覆盖内置保留路径。
+* `HB_JS_RAW_QUERY_ENABLED`：是否允许受限 `$app.db.query`，默认 false；开启也只允许 system 模式单表只读查询。
+* `HB_JS_ENV_ALLOWLIST`：`$app.env()` 可读取的非敏感环境变量名列表，默认空。
+* `HB_JS_HTTP_ENABLED`, `HB_JS_HTTP_ALLOWLIST`：出站 HTTP 开关和精确 origin 白名单，默认 false/空。
+* `HB_JS_HTTP_CONNECT_TIMEOUT_MS`, `HB_JS_HTTP_TIMEOUT_MS`：连接/总超时，默认 3000/5000 毫秒，再受调用剩余预算限制。
+* `HB_JS_HTTP_MAX_REDIRECTS`, `HB_JS_HTTP_MAX_REQUEST_BYTES`, `HB_JS_HTTP_MAX_RESPONSE_BYTES`：重定向次数、请求/响应字节上限，默认 3/1048576/4194304。
+* `HB_JS_FILES_ENABLED`, `HB_JS_FILES_PREFIX`：文件操作开关和当前 Storage 内的扩展前缀，默认 false/`extensions`，不提供独立本地 root。
+* `HB_JS_FILES_QUOTA_BYTES`, `HB_JS_FILES_MAX_FILE_BYTES`：文件配额和单文件上限，默认 104857600/10485760 字节；仍受 FFI/响应上限限制。
+* `HB_JS_MAIL_ENABLED`, `HB_JS_MAIL_MAX_RECIPIENTS`, `HB_JS_MAIL_MAX_BODY_BYTES`：邮件授权、收件人数和 text+html 字节上限，默认 false/20/1048576；JS 上限只能收紧已有 MailConfig。
+* `HB_JS_REALTIME_ENABLED`, `HB_JS_REALTIME_MAX_MESSAGE_BYTES`, `HB_JS_REALTIME_PUBLISH_PER_SECOND`：应用消息授权、单消息字节数和每秒发布数，默认 false/65536/100；独立于现有集合 SSE。
+* `HB_JS_REALTIME_MAX_AUDIENCE`, `HB_JS_REALTIME_CONNECTION_QUEUE_CAPACITY`, `HB_JS_REALTIME_CONNECTION_QUEUE_BYTES`：单次目标数、单连接队列条数/字节数，默认 100/64/262144。
+* `HB_JS_CRON_ENABLED`, `HB_JS_CRON_TIMEZONE`, `HB_JS_CRON_MAX_RUNTIME_MS`：cron 开关、默认 IANA 时区和每次尝试总时限，默认 true/UTC/30000；仅在 JS 开启时生效，替代普通调用总时限。
+* `HB_JS_CRON_RETRIES`, `HB_JS_CRON_MAX_RETRIES`：默认重试次数及任务可配置上限，默认 0/3，需任务显式声明幂等。
 
-`HB_JS_HTTP_ALLOWLIST` 只接受明确的 HTTP(S) 主机与端口，不能用于放开私网和云元数据
-地址。SMTP、JWT、数据库和对象存储密钥不得加入 `HB_JS_ENV_ALLOWLIST`。
+新增环境变量统一由 `jsvm.*` 字段路径转成 `HB_JS_*`，嵌套点改为下划线。JS 列表采用 JSON
+数组字符串，布尔值为 true/false，环境变量覆盖 TOML，未知 jsvm 字段和非法值拒绝启动。
+这不改变已有 `HB_MAIL_ALLOWED_FROM_ADDRESSES` 的逗号列表格式；现有邮件配置未启用未知字段拒绝。
+`HB_JS_HTTP_ALLOWLIST` 示例为 `["https://api.example.com:443"]`，只授权该 scheme/host/port，
+不能放开私网和云元数据地址。SMTP、JWT、数据库和对象存储密钥不得加入 `HB_JS_ENV_ALLOWLIST`。
 
 ## 4. 配置文件示例 (hertabase.toml)
 
@@ -175,7 +189,7 @@ origins = ["https://my-app.com", "https://admin.herta.ai"]
 
 # 以下 jsvm 配置为 Phase 3 设计示例，尚未支持；mail 配置已实现。
 [jsvm]
-enabled = true
+enabled = false
 memory_limit_mb = 16
 stack_limit_kb = 512
 execution_timeout_ms = 100
@@ -183,31 +197,34 @@ async_timeout_ms = 5000
 pool_size = 4
 queue_capacity = 128
 raw_query_enabled = false
-env_allowlist = ["PUBLIC_APP_URL"]
+env_allowlist = []
 
 [jsvm.http]
 enabled = false
-allowlist = ["api.github.com:443"]
+allowlist = [] # 例如 ["https://api.github.com:443"]
 max_redirects = 3
 max_request_bytes = 1048576
 max_response_bytes = 4194304
+connect_timeout_ms = 3000
 timeout_ms = 5000
 
 [jsvm.files]
 enabled = false
-root = "./hb_data/js-files"
+prefix = "extensions"
 quota_bytes = 104857600
 max_file_bytes = 10485760
 
 [jsvm.mail]
 enabled = false
 max_recipients = 20
-max_message_bytes = 1048576
+max_body_bytes = 1048576
 
 [jsvm.cron]
 enabled = true
 timezone = "UTC"
 max_runtime_ms = 30000
+retries = 0
+max_retries = 3
 
 [mail]
 driver = "disabled"
