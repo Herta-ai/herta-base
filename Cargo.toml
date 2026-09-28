@@ -1,11 +1,14 @@
 [workspace]
 resolver = "2"
+exclude = ["vendor/surrealdb-core-3.2.3", "vendor/surrealdb-3.2.3", "vendor/rquickjs-sys-0.11.0", "vendor/rquickjs-core-0.11.0"]
 members = [
     "crates/herta_core",
+    "crates/herta_jsvm",
     "crates/herta_db",
     "crates/herta_auth",
     "crates/herta_storage",
     "crates/herta_mail",
+    "crates/herta_http",
     "crates/herta_api",
     "crates/herta_server",
 ]
@@ -36,6 +39,11 @@ object_store = { version = "0.13.2", default-features = false, features = ["fs",
 percent-encoding = "2.3.2"
 rand = "0.8.7"
 regex = "1.12.3"
+reqwest = { version = "0.12.28", default-features = false, features = ["rustls-tls-webpki-roots", "stream"] }
+rquickjs = { version = "=0.11.0", default-features = false, features = ["std", "futures", "classes", "array-buffer", "macro"] }
+chrono-tz = { version = "0.10.4", features = ["serde"] }
+cap-std = "3.4"
+cap-fs-ext = "3.4"
 rust-embed = { version = "8.12.0", features = ["mime-guess"] }
 salvo = { version = "0.95.0", features = ["affix-state", "anyhow", "cors", "oapi", "sse"] }
 serde = { version = "1.0.228", features = ["derive"] }
@@ -61,3 +69,13 @@ codegen-units = 1
 lto = "fat"
 opt-level = "z"
 strip = true
+
+[patch.crates-io]
+# Preserve the typed outcome of the embedded SDK's explicit commit.
+surrealdb = { path = "vendor/surrealdb-3.2.3" }
+# Preserve LIVE SELECT delivery when using the SDK's explicit transaction handle.
+surrealdb-core = { path = "vendor/surrealdb-core-3.2.3" }
+# Capture async continuation context for await and Promise reactions.
+rquickjs-sys = { path = "vendor/rquickjs-sys-0.11.0" }
+# Job exception wrappers own a context reference; QuickJS returns a borrowed pointer.
+rquickjs-core = { path = "vendor/rquickjs-core-0.11.0" }

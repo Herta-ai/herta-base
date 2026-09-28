@@ -39,6 +39,7 @@ impl<T> ApiResponse<T> {
 pub fn error_value(error: &HbError, dev_mode: bool) -> Value {
     let details = match error {
         HbError::Validation { details, .. } => details.clone(),
+        HbError::Extension(error) => error.details.clone(),
         _ => None,
     };
     serde_json::to_value(ApiResponse::<Value> {

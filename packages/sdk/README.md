@@ -46,6 +46,23 @@ const admin = new HertaBaseAdminClient({ baseUrl: 'http://localhost:8080' })
 
 ## 运行环境
 
+应用消息使用独立的 topic 订阅接口（需要先登录，服务端开启 `jsvm.realtime.enabled`）：
+
+```ts
+const subscription = await hb.realtime.subscribe<{ reportId: string }>('reports/ready', {
+  onEvent(event) {
+    if (event.type === 'message')
+      console.log(event.data.data.reportId)
+  },
+  onStatus: console.log,
+  onError: console.error,
+  reconnect: true,
+})
+subscription.close()
+```
+
+支持 `signal: AbortSignal`，沿用集合订阅的回调与重连方式。topic 消息没有断线重放，重连不会发送 Last-Event-ID。
+
 - Node.js 20 或更高版本。
 - 支持 `fetch`、`FormData`、`Blob`、Web Streams 和 `AbortController` 的现代浏览器。
 - ESM 和 CommonJS 均可使用。

@@ -2,17 +2,20 @@ import type { HertaBaseClientOptions, HertaRecord, HertaRequestOptions } from '.
 import { AuthClient } from './auth'
 import { CollectionClient } from './collection'
 import { FilesClient } from './files'
+import { RealtimeClient } from './realtime'
 import { ClientRuntime } from './runtime'
 
 export class HertaBaseClient {
   protected readonly runtime: ClientRuntime
   readonly auth: AuthClient
   readonly files: FilesClient
+  readonly realtime: RealtimeClient
 
   constructor(options: HertaBaseClientOptions = {}) {
     this.runtime = new ClientRuntime(options)
     this.auth = new AuthClient(this.runtime.transport, this.runtime.authState, { kind: 'default' })
     this.files = new FilesClient(this.runtime.transport)
+    this.realtime = new RealtimeClient(this.runtime.transport)
   }
 
   collection<

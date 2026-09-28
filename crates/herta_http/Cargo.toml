@@ -1,0 +1,23 @@
+[package]
+name = "herta_http"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+# Native integration harness only. Never enabled by the server's dependency graph.
+test-support = []
+
+[dependencies]
+async-trait.workspace = true
+futures-util.workspace = true
+herta_core = { path = "../herta_core" }
+reqwest.workspace = true
+tokio.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+rcgen = "0.14.8"
+tokio-rustls = { version = "0.26.4", default-features = false, features = ["ring", "tls12"] }

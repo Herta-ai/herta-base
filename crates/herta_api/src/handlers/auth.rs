@@ -1,4 +1,4 @@
-use herta_auth::{AuthIdentity, Credentials, RefreshRequest};
+use herta_auth::{AuthIdentity, AuthResponse, Credentials, PreparedAuth, RefreshRequest};
 use herta_core::{HbError, HbResult};
 use herta_db::RuleContext;
 use salvo::prelude::*;
@@ -40,7 +40,8 @@ async fn register(
         .parse_json_with_max_size(state.config.server.max_body_size)
         .await
         .map_err(parse_error)?;
-    let auth = state.auth.register(collection, body).await?;
+    let prepared = state.auth.prepare_register(collection, body).await?;
+    let auth = complete(req, depot, prepared).await?;
     res.status_code(StatusCode::CREATED);
     res.render(Json(ApiResponse::ok(auth)));
     Ok(())
@@ -87,7 +88,8 @@ async fn login(
         .parse_json_with_max_size(state.config.server.max_body_size)
         .await
         .map_err(parse_error)?;
-    let auth = state.auth.login(collection, body, admin).await?;
+    let prepared = state.auth.prepare_login(collection, body, admin).await?;
+    let auth = complete(req, depot, prepared).await?;
     res.render(Json(ApiResponse::ok(auth)));
     Ok(())
 }
@@ -133,12 +135,56 @@ async fn refresh(
         .parse_json_with_max_size(state.config.server.max_body_size)
         .await
         .map_err(parse_error)?;
-    let auth = state
+    let prepared = state
         .auth
-        .refresh(&body.refresh_token, admin, collection)
+        .prepare_refresh(&body.refresh_token, admin, collection)
         .await?;
+    let auth = complete(req, depot, prepared).await?;
     res.render(Json(ApiResponse::ok(auth)));
     Ok(())
+}
+
+async fn complete(req: &Request, depot: &Depot, prepared: PreparedAuth) -> HbResult<AuthResponse> {
+    use herta_core::extension::{AuthMode, Invocation};
+    let state = state(depot).map_err(|failure| failure.0)?;
+    let Some(dispatcher) = super::extensions::pinned(depot, state) else {
+        return prepared.commit().await;
+    };
+    let identity = identity(req, state).await?;
+    let name = prepared.name().to_owned();
+    let mut payload = prepared.payload();
+    // All body readers see the same cleaned profile; credentials, query and
+    // user-supplied headers are never copied into an authentication event.
+    let body = payload["profile"].as_object().cloned().unwrap_or_default();
+    let bytes = serde_json::to_vec(&body).map_err(|_| HbError::Internal)?;
+    payload["request"] = serde_json::json!({"method":req.method().as_str(),"path":req.uri().path(),
+        "validUtf8":true,"headers":{},"query":{},"params":{}});
+    payload["auth"] = identity.as_rule_value();
+    let mut context = crate::extensions::request_context(&identity, Value::Object(body));
+    context.mode = AuthMode::System;
+    let factory = crate::extensions::ApiHostFactory::new(
+        state.db.clone(),
+        state.config.clone(),
+        state.mailer.clone(),
+        state.storage.clone(),
+    )
+    .with_docs(state.docs.clone())
+    .with_messages(state.messages.clone());
+    let (host, output) = factory.create_auth(context, prepared);
+    dispatcher
+        .dispatch_frame(
+            Invocation {
+                name,
+                payload,
+                auth_mode: AuthMode::System,
+                request_id: Some(uuid::Uuid::now_v7().to_string()),
+                registration: None,
+            },
+            host,
+            Some(bytes),
+        )
+        .await?;
+    output.take()
 }
 
 #[handler]

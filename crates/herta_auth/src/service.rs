@@ -23,6 +23,9 @@ use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+mod prepared;
+pub use prepared::PreparedAuth;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TokenClaims {
     pub sub: String,
@@ -233,6 +236,17 @@ impl AuthService {
         collection: &str,
         credentials: Credentials,
     ) -> HbResult<AuthResponse> {
+        self.prepare_register(collection, credentials)
+            .await?
+            .commit()
+            .await
+    }
+
+    pub async fn prepare_register(
+        &self,
+        collection: &str,
+        credentials: Credentials,
+    ) -> HbResult<PreparedAuth> {
         let definition = SchemaManager::new(&self.db)
             .get_collection(collection)
             .await?;
@@ -247,7 +261,7 @@ impl AuthService {
         let token_key = Uuid::now_v7().to_string();
         let id = Uuid::now_v7().to_string();
         let mut data = credentials.profile;
-        for protected in AUTH_PROTECTED_FIELDS {
+        for &protected in AUTH_PROTECTED_FIELDS {
             data.remove(protected);
         }
         for field in definition
@@ -266,30 +280,15 @@ impl AuthService {
                 }
             }
         }
-        let mut profile = Value::Object(data.clone());
-        validate_record(&definition, &mut profile, true)?;
-        data.insert("email".into(), Value::String(email.clone()));
-        data.insert("password_hash".into(), Value::String(password_hash));
-        data.insert("token_key".into(), Value::String(token_key.clone()));
-        data.insert("verified".into(), Value::Bool(false));
-        data.insert("role".into(), Value::String("user".into()));
-        data.insert("failed_attempts".into(), json!(0));
-
-        let table = quote_table(collection)?;
-        let sql = format!("CREATE ONLY type::record('{table}', $id) CONTENT $data RETURN AFTER");
-        let mut response = self
-            .db
-            .inner()
-            .query(sql)
-            .bind(("id", id))
-            .bind(("data", Value::Object(data)))
-            .await
-            .map_err(database_error)?
-            .check()
-            .map_err(database_error)?;
-        let created: Option<Value> = response.take(0).map_err(database_error)?;
-        let user = user_from_value(collection, false, created.ok_or(HbError::Internal)?)?;
-        self.issue_pair(&user, &token_key, None).await
+        Ok(PreparedAuth::registration(
+            self.clone(),
+            definition,
+            id,
+            email,
+            password_hash,
+            token_key,
+            data,
+        ))
     }
 
     pub async fn login(
@@ -298,6 +297,18 @@ impl AuthService {
         credentials: Credentials,
         admin: bool,
     ) -> HbResult<AuthResponse> {
+        self.prepare_login(collection, credentials, admin)
+            .await?
+            .commit()
+            .await
+    }
+
+    pub async fn prepare_login(
+        &self,
+        collection: &str,
+        credentials: Credentials,
+        admin: bool,
+    ) -> HbResult<PreparedAuth> {
         if !admin {
             let definition = SchemaManager::new(&self.db)
                 .get_collection(collection)
@@ -330,6 +341,9 @@ impl AuthService {
             delay_failed_login(0).await;
             return Err(HbError::Unauthorized);
         };
+        if !account["deleted_at"].is_null() {
+            return Err(HbError::Unauthorized);
+        }
         let locked_until = account
             .get("locked_until")
             .and_then(Value::as_u64)
@@ -367,7 +381,13 @@ impl AuthService {
             .ok_or(HbError::Internal)?
             .to_owned();
         let user = user_from_value(collection, admin, account)?;
-        self.issue_pair(&user, &token_key, None).await
+        Ok(PreparedAuth::tokens(
+            self.clone(),
+            "auth.login",
+            user,
+            token_key,
+            None,
+        ))
     }
 
     pub async fn refresh(
@@ -376,6 +396,18 @@ impl AuthService {
         expected_admin: bool,
         expected_collection: Option<&str>,
     ) -> HbResult<AuthResponse> {
+        self.prepare_refresh(refresh_token, expected_admin, expected_collection)
+            .await?
+            .commit()
+            .await
+    }
+
+    pub async fn prepare_refresh(
+        &self,
+        refresh_token: &str,
+        expected_admin: bool,
+        expected_collection: Option<&str>,
+    ) -> HbResult<PreparedAuth> {
         let claims = self.decode_token(refresh_token, "refresh")?;
         if claims.admin != expected_admin
             || expected_collection.is_some_and(|collection| claims.collection != collection)
@@ -414,7 +446,13 @@ impl AuthService {
             return Err(HbError::Unauthorized);
         }
         let user = user_from_value(&claims.collection, claims.admin, account)?;
-        self.issue_pair(&user, &current_key, claims.family).await
+        Ok(PreparedAuth::tokens(
+            self.clone(),
+            "auth.refresh",
+            user,
+            current_key,
+            claims.family,
+        ))
     }
 
     pub async fn authenticate(&self, token: &str) -> HbResult<AuthIdentity> {
@@ -428,20 +466,28 @@ impl AuthService {
             return Err(HbError::Unauthorized);
         }
         let id = full_record_id(&account)?;
+        let email = account["email"]
+            .as_str()
+            .ok_or(HbError::Unauthorized)?
+            .to_owned();
+        let role = account["role"]
+            .as_str()
+            .unwrap_or(if claims.admin { "admin" } else { "user" })
+            .to_owned();
         let expires_at = claims.exp;
         let identity = if claims.admin {
             AuthIdentity::Admin {
                 id,
-                email: claims.email,
-                role: claims.role,
+                email,
+                role,
                 token_key: claims.token_key,
             }
         } else {
             AuthIdentity::User {
                 id,
                 collection: claims.collection,
-                email: claims.email,
-                role: claims.role,
+                email,
+                role,
                 token_key: claims.token_key,
             }
         };
@@ -578,6 +624,7 @@ impl AuthService {
 
     async fn issue_pair(
         &self,
+        session: herta_db::DbSession<'_>,
         user: &AuthUser,
         token_key: &str,
         family: Option<String>,
@@ -617,9 +664,7 @@ impl AuthService {
             "used_at": Value::Null,
             "revoked_at": Value::Null,
         });
-        let response = self
-            .db
-            .inner()
+        let response = session
             .query("CREATE `_auth_refresh_tokens` CONTENT $hb_refresh")
             .bind(("hb_refresh", refresh_data))
             .await
@@ -677,8 +722,14 @@ impl AuthService {
             .map_err(database_error)?;
         let records: Vec<Value> = response.take(0).map_err(database_error)?;
         let account = records.into_iter().next().ok_or(HbError::Unauthorized)?;
-        if full_record_id(&account)? != claims.sub {
+        if full_record_id(&account)? != claims.sub || !account["deleted_at"].is_null() {
             return Err(HbError::Unauthorized);
+        }
+        if account["locked_until"]
+            .as_u64()
+            .is_some_and(|until| until > now())
+        {
+            return Err(HbError::AccountLocked);
         }
         Ok(account)
     }
@@ -781,17 +832,7 @@ impl AuthService {
     }
 }
 
-const AUTH_PROTECTED_FIELDS: [&str; 9] = [
-    "id",
-    "email",
-    "password",
-    "password_hash",
-    "token_key",
-    "verified",
-    "role",
-    "failed_attempts",
-    "locked_until",
-];
+const AUTH_PROTECTED_FIELDS: &[&str] = herta_core::models::AUTH_MANAGED_FIELDS;
 
 fn normalize_email(value: &str) -> HbResult<String> {
     let email = value.trim().to_ascii_lowercase();
@@ -935,13 +976,7 @@ fn user_from_value(collection: &str, admin: bool, mut value: Value) -> HbResult<
         .unwrap_or(false);
     let created_at = object.remove("created_at");
     let updated_at = object.remove("updated_at");
-    for field in [
-        "password_hash",
-        "token_key",
-        "failed_attempts",
-        "locked_until",
-        "deleted_at",
-    ] {
+    for &field in AUTH_PROTECTED_FIELDS {
         object.remove(field);
     }
     Ok(AuthUser {

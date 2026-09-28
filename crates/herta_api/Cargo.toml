@@ -6,12 +6,14 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+bytes.workspace = true
 chrono.workspace = true
 flate2.workspace = true
 futures-util.workspace = true
 herta_auth = { path = "../herta_auth" }
 herta_core = { path = "../herta_core" }
 herta_mail = { path = "../herta_mail" }
+herta_http = { path = "../herta_http" }
 herta_db = { path = "../herta_db" }
 herta_storage = { path = "../herta_storage" }
 mime.workspace = true
@@ -20,16 +22,20 @@ percent-encoding.workspace = true
 salvo.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 sevenz-rust.workspace = true
 tar.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
 uuid.workspace = true
+url.workspace = true
 walkdir.workspace = true
 zip.workspace = true
 
 [dev-dependencies]
+herta_http = { path = "../herta_http", features = ["test-support"] }
+herta_jsvm = { path = "../herta_jsvm" }
 http-body-util = "0.1.3"
 jsonwebtoken.workspace = true
 tempfile = "3.27.0"

@@ -10,11 +10,11 @@ use surrealdb::types::{Object, RecordId, Value as SurrealValue};
 use uuid::Uuid;
 
 use crate::{
-    DbClient, SchemaManager,
-    filter::compile_filter,
+    DbSession, SchemaManager,
+    filter::compile_filter_with_params,
     models::{
-        ApiRule, CollectionDef, CollectionType, FieldDef, FieldType, ListParams, RuleContext,
-        relation_is_many,
+        ApiRule, CollectionDef, CollectionType, FieldDef, FieldType, ListParams, RecordQuery,
+        RuleContext, relation_is_many,
     },
     schema::{database_error, record_id},
     validation::{quote_identifier, validate_identifier, validate_record},
@@ -25,12 +25,12 @@ const MAX_EXPAND_DEPTH: usize = 3;
 const MAX_EXPAND_PATHS: usize = 10;
 
 pub struct RecordManager<'a> {
-    db: &'a DbClient,
+    db: DbSession<'a>,
 }
 
 impl<'a> RecordManager<'a> {
-    pub fn new(db: &'a DbClient) -> Self {
-        Self { db }
+    pub fn new(db: impl Into<DbSession<'a>>) -> Self {
+        Self { db: db.into() }
     }
 
     pub async fn list(&self, collection: &str, params: &ListParams) -> HbResult<(Vec<Value>, u64)> {
@@ -44,11 +44,30 @@ impl<'a> RecordManager<'a> {
         params: &ListParams,
         context: &RuleContext,
     ) -> HbResult<(Vec<Value>, u64)> {
+        self.query_authorized(collection, &RecordQuery::from_list(params)?, context)
+            .await
+    }
+
+    pub async fn query_authorized(
+        &self,
+        collection: &str,
+        params: &RecordQuery,
+        context: &RuleContext,
+    ) -> HbResult<(Vec<Value>, u64)> {
         params.validate()?;
         let schema = SchemaManager::new(self.db)
             .get_collection(collection)
             .await?;
         let allowed_fields = allowed_fields(&schema);
+        if let Some(fields) = &params.fields {
+            for field in fields {
+                if !allowed_fields.contains(field) {
+                    return Err(HbError::validation(format!(
+                        "unknown projection field '{field}'"
+                    )));
+                }
+            }
+        }
         let mut where_sql = String::from("deleted_at IS NONE");
         let rule = compile_rule(&schema.rules.list, context, true)?;
         where_sql.push_str(" AND (");
@@ -57,7 +76,8 @@ impl<'a> RecordManager<'a> {
         let compiled_filter = params
             .filter
             .as_deref()
-            .map(|filter| compile_filter(filter, &schema))
+            .filter(|filter| !filter.trim().is_empty())
+            .map(|filter| compile_filter_with_params(filter, &schema, &params.bindings))
             .transpose()?;
         if let Some(filter) = &compiled_filter {
             where_sql.push_str(" AND (");
@@ -72,10 +92,9 @@ impl<'a> RecordManager<'a> {
         );
         let mut query = self
             .db
-            .inner()
             .query(sql)
-            .bind(("limit", params.per_page()))
-            .bind(("offset", (params.page() - 1) * params.per_page()))
+            .bind(("limit", params.limit))
+            .bind(("offset", params.offset))
             .bind(("hb_auth", context.auth.clone()))
             .bind(("hb_auth_record", context.auth_record.clone()))
             .bind(("hb_request", json_request(&context.request_body)));
@@ -103,7 +122,32 @@ impl<'a> RecordManager<'a> {
             let paths = validate_expand_paths(self.db, &schema, expand).await?;
             self.expand_records(&mut records, &paths, context).await?;
         }
+        if let Some(fields) = &params.fields {
+            for record in &mut records {
+                if let Some(object) = record.as_object_mut() {
+                    object.retain(|key, _| fields.contains(key));
+                }
+            }
+        }
         Ok((records, total))
+    }
+
+    pub async fn select_authorized(
+        &self,
+        sql: &str,
+        parameters: &Map<String, Value>,
+        context: &RuleContext,
+    ) -> HbResult<Vec<Value>> {
+        let (collection, query) = crate::filter::parse_select_query(sql, parameters)?;
+        let schema = SchemaManager::new(self.db)
+            .get_collection(&collection)
+            .await?;
+        if schema.collection_type != CollectionType::Base {
+            return Err(herta_core::JsErrorKind::QueryUnsupported.into());
+        }
+        self.query_authorized(&collection, &query, context)
+            .await
+            .map(|(rows, _)| rows)
     }
 
     pub async fn get(&self, collection: &str, id: &str, expand: Option<&str>) -> HbResult<Value> {
@@ -124,7 +168,6 @@ impl<'a> RecordManager<'a> {
         let rule = compile_rule(&schema.rules.view, context, true)?;
         let mut response = self
             .db
-            .inner()
             .query(format!(
                 "SELECT * FROM ONLY $record WHERE deleted_at IS NONE AND ({rule})"
             ))
@@ -245,7 +288,6 @@ impl<'a> RecordManager<'a> {
         let rule = compile_rule(&schema.rules.update, context, true)?;
         let mut response = self
             .db
-            .inner()
             .query(format!(
                 "SELECT id FROM ONLY $record WHERE deleted_at IS NONE AND ({rule})"
             ))
@@ -330,7 +372,6 @@ impl<'a> RecordManager<'a> {
         );
         let mut query = self
             .db
-            .inner()
             .query(sql)
             .bind(("record", route_record_id(&schema.name, id)?))
             .bind(("hb_auth", context.auth.clone()))
@@ -378,7 +419,6 @@ impl<'a> RecordManager<'a> {
         let rule = compile_rule(&schema.rules.delete, context, true)?;
         let mut response = self
             .db
-            .inner()
             .query(format!(
                 "UPDATE ONLY $record SET deleted_at = time::now(), updated_at = time::now() \
                  WHERE deleted_at IS NONE AND ({rule}) RETURN AFTER"
@@ -409,7 +449,6 @@ impl<'a> RecordManager<'a> {
         let rule = compile_rule(&schema.rules.view, context, true)?;
         let mut response = self
             .db
-            .inner()
             .query(format!(
                 "SELECT id FROM ONLY $record WHERE deleted_at IS NONE AND ({rule})"
             ))
@@ -457,7 +496,6 @@ impl<'a> RecordManager<'a> {
         let sql = format!("SELECT * FROM $records FETCH {fetch}");
         let mut response = self
             .db
-            .inner()
             .query(sql)
             .bind(("records", ids))
             .await
@@ -569,7 +607,6 @@ impl<'a> RecordManager<'a> {
         };
         let mut response = self
             .db
-            .inner()
             .query(format!(
                 "SELECT id FROM ONLY $record WHERE deleted_at IS NONE AND ({rule})"
             ))
@@ -679,7 +716,7 @@ pub(crate) fn compile_rule(
 }
 
 async fn check_create_rule(
-    db: &DbClient,
+    db: DbSession<'_>,
     schema: &CollectionDef,
     context: &RuleContext,
     record: &Value,
@@ -689,7 +726,6 @@ async fn check_create_rule(
         return Ok(());
     }
     let mut response = db
-        .inner()
         .query(format!("RETURN ({expression})"))
         .bind(("hb_auth", context.auth.clone()))
         .bind(("hb_auth_record", context.auth_record.clone()))
@@ -707,7 +743,8 @@ async fn check_create_rule(
     }
 }
 
-fn native_record_value(schema: &CollectionDef, record: &Value) -> HbResult<SurrealValue> {
+/// Convert a validated candidate to native database values, including relations.
+pub fn native_record_value(schema: &CollectionDef, record: &Value) -> HbResult<SurrealValue> {
     let object = record
         .as_object()
         .ok_or_else(|| HbError::validation("record body must be a JSON object"))?;
@@ -756,12 +793,7 @@ pub(crate) fn sanitize_record(schema: &CollectionDef, record: &mut Value) {
         return;
     }
     if let Some(object) = record.as_object_mut() {
-        for field in [
-            "password_hash",
-            "token_key",
-            "failed_attempts",
-            "locked_until",
-        ] {
+        for &field in herta_core::models::AUTH_SENSITIVE_FIELDS {
             object.remove(field);
         }
     }
@@ -771,12 +803,7 @@ fn sanitize_sensitive_expansion(value: &mut Value) {
     match value {
         Value::Array(values) => values.iter_mut().for_each(sanitize_sensitive_expansion),
         Value::Object(object) => {
-            for field in [
-                "password_hash",
-                "token_key",
-                "failed_attempts",
-                "locked_until",
-            ] {
+            for &field in herta_core::models::AUTH_SENSITIVE_FIELDS {
                 object.remove(field);
             }
             object.values_mut().for_each(sanitize_sensitive_expansion);
@@ -814,6 +841,12 @@ fn compile_sort(sort: Option<&str>, allowed: &HashSet<String>) -> HbResult<Strin
         return Err(HbError::InvalidSort(
             "at least one sort field is required".into(),
         ));
+    }
+    if !sort
+        .split(',')
+        .any(|item| item.trim().trim_start_matches('-') == "id")
+    {
+        fields.push("`id` ASC".into());
     }
     Ok(format!("ORDER BY {}", fields.join(", ")))
 }
@@ -870,7 +903,7 @@ struct ExpandPath {
 }
 
 async fn validate_expand_paths(
-    db: &DbClient,
+    db: DbSession<'_>,
     root: &CollectionDef,
     input: &str,
 ) -> HbResult<Vec<ExpandPath>> {

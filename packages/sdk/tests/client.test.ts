@@ -15,6 +15,14 @@ function jsonResponse<T>(
 }
 
 describe('hertaBaseClient', () => {
+  it('returns undefined for 204 without attempting to parse JSON', async () => {
+    const client = new HertaBaseClient({
+      baseUrl: 'https://example.test',
+      fetch: async () => new Response(null, { status: 204 }),
+    })
+    await expect(client.request<void>('/api/custom/empty', { method: 'DELETE' })).resolves.toBeUndefined()
+  })
+
   it('encodes record IDs and serializes list options', async () => {
     const urls: string[] = []
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {

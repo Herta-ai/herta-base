@@ -58,6 +58,8 @@ export class Transport {
     options: InternalRequestOptions = {},
   ): Promise<TransportResult<T>> {
     const outcome = await this.fetchWithAuthRetry(path, options)
+    if (outcome.response.status === 204)
+      return { data: undefined as T, meta: null, response: outcome.response }
     const envelope = await this.readEnvelope<T>(outcome.response, outcome.request)
     if (!outcome.response.ok || envelope.error) {
       throw this.envelopeError(envelope, outcome.response, outcome.request)

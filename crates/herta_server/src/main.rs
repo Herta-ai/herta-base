@@ -2,6 +2,7 @@ use std::{path::PathBuf, sync::Arc};
 
 use clap::{Parser, Subcommand};
 mod db_log_layer;
+mod extensions;
 mod ui;
 
 use herta_api::{ApiState, build_router_with_logger};
@@ -108,15 +109,41 @@ async fn main() -> anyhow::Result<()> {
             } else {
                 None
             };
-            let state = ApiState::new(db, config.clone()).await?;
+            let mut state = ApiState::new(db, config.clone()).await?;
+            let mut extensions = extensions::RuntimeServices::start(&mut state).await?;
+            let messages = state.messages.clone();
             let router = build_router_with_logger(request_logger).push(ui::router());
-            let service = Service::new(router).hoop(affix_state::inject(Arc::new(state)));
+            let service = Service::new(router)
+                .hoop(affix_state::inject(Arc::new(state)))
+                .hoop(herta_api::handlers::extensions::dispatch);
             let address = format!("{}:{}", config.server.host, config.server.port);
-            let acceptor = TcpListener::new(address.clone()).bind().await;
+            let acceptor = TcpListener::new(address.clone()).try_bind().await?;
+            if let Some(runtime) = &mut extensions {
+                runtime.lifecycle("serve").await?;
+                runtime.start_scheduled_tasks();
+            }
             tracing::info!(%address, "server listening");
             tracing::info!(url = %format!("http://{address}/webui/"), "Admin UI");
             tracing::info!(url = %format!("http://{address}/swagger-ui/"), "Swagger UI");
-            Server::new(acceptor).serve(service).await;
+            let server = Server::new(acceptor);
+            let handle = server.handle();
+            let serving = server.try_serve(service);
+            tokio::pin!(serving);
+            let result = tokio::select! {
+                result = &mut serving => result,
+                signal = extensions::shutdown_signal() => {
+                    messages.shutdown();
+                    if let Some(runtime) = &mut extensions { runtime.stop_background(); }
+                    handle.stop_graceful(Some(std::time::Duration::from_millis(config.jsvm.shutdown_timeout_ms)));
+                    let served = serving.await;
+                    signal.and(served)
+                }
+            };
+            messages.shutdown();
+            if let Some(runtime) = extensions {
+                runtime.shutdown().await?;
+            }
+            result?;
         }
         Command::Version => println!("hertabase v{}", env!("CARGO_PKG_VERSION")),
     }

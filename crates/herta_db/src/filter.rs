@@ -14,12 +14,15 @@ const MAX_DEPTH: usize = 8;
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
     Ident(String),
+    Parameter(String),
     Literal(Value),
     LParen,
     RParen,
     LBracket,
     RBracket,
     Comma,
+    Star,
+    Semicolon,
     Eq,
     Ne,
     Gt,
@@ -56,13 +59,63 @@ enum Expr {
     Compare {
         field: String,
         op: CompareOp,
-        value: Value,
+        value: ValueExpr,
     },
     Logical {
         left: Box<Expr>,
         op: LogicalOp,
         right: Box<Expr>,
     },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum ValueExpr {
+    Literal(Value),
+    Parameter(String),
+    Array(Vec<ValueExpr>),
+}
+
+impl ValueExpr {
+    fn resolve(&self, parameters: &serde_json::Map<String, Value>) -> HbResult<Value> {
+        match self {
+            Self::Literal(value) => Ok(value.clone()),
+            Self::Parameter(name) => parameters.get(name).cloned().ok_or_else(|| {
+                HbError::InvalidFilter(format!("missing filter parameter '${name}'"))
+            }),
+            Self::Array(values) => values
+                .iter()
+                .map(|value| value.resolve(parameters))
+                .collect::<HbResult<Vec<_>>>()
+                .map(Value::Array),
+        }
+    }
+    fn resolved(&self) -> HbResult<&Value> {
+        if let Self::Literal(value) = self {
+            Ok(value)
+        } else {
+            Err(HbError::Internal)
+        }
+    }
+}
+
+fn bind_parameters(
+    expression: &mut Expr,
+    parameters: &serde_json::Map<String, Value>,
+) -> HbResult<()> {
+    match expression {
+        Expr::Compare { op, value, .. } => {
+            let resolved = value.resolve(parameters)?;
+            if *op == CompareOp::In && !resolved.is_array() {
+                return Err(HbError::InvalidFilter("IN requires an array value".into()));
+            }
+            *value = ValueExpr::Literal(resolved);
+            Ok(())
+        }
+        Expr::Logical { left, right, .. } => {
+            bind_parameters(left, parameters)?;
+            bind_parameters(right, parameters)
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -73,6 +126,14 @@ pub struct CompiledFilter {
 }
 
 pub fn compile_filter(input: &str, schema: &CollectionDef) -> HbResult<CompiledFilter> {
+    compile_filter_with_params(input, schema, &serde_json::Map::new())
+}
+
+pub fn compile_filter_with_params(
+    input: &str,
+    schema: &CollectionDef,
+    parameters: &serde_json::Map<String, Value>,
+) -> HbResult<CompiledFilter> {
     if input.len() > MAX_FILTER_BYTES {
         return Err(HbError::InvalidFilter(format!(
             "filter exceeds {MAX_FILTER_BYTES} bytes"
@@ -84,11 +145,12 @@ pub fn compile_filter(input: &str, schema: &CollectionDef) -> HbResult<CompiledF
         pos: 0,
         conditions: 0,
     };
-    let expression = parser.parse_expression(0)?;
+    let mut expression = parser.parse_expression(0)?;
     if parser.peek() != &Token::End {
         return Err(HbError::InvalidFilter("unexpected trailing input".into()));
     }
     let mut bindings = Vec::new();
+    bind_parameters(&mut expression, parameters)?;
     let sql = compile_expr(&expression, schema, &mut bindings)?;
     let live_sql = compile_live_expr(&expression, schema)?;
     Ok(CompiledFilter {
@@ -148,6 +210,47 @@ fn tokenize(input: &str) -> HbResult<Vec<Token>> {
             '<' => {
                 tokens.push(Token::Lt);
                 index += 1;
+            }
+            '*' => {
+                tokens.push(Token::Star);
+                index += 1;
+            }
+            ';' => {
+                tokens.push(Token::Semicolon);
+                index += 1;
+            }
+            '`' => {
+                let start = index + 1;
+                index += 1;
+                while chars.get(index).is_some_and(|ch| *ch != '`') {
+                    index += 1;
+                }
+                if chars.get(index) != Some(&'`') {
+                    return Err(HbError::InvalidFilter("unterminated identifier".into()));
+                }
+                let name: String = chars[start..index].iter().collect();
+                crate::validation::validate_identifier("query field", &name)?;
+                tokens.push(Token::Ident(name));
+                index += 1;
+            }
+            '$' => {
+                index += 1;
+                let start = index;
+                if !chars
+                    .get(index)
+                    .is_some_and(|ch| ch.is_ascii_alphabetic() || *ch == '_')
+                {
+                    return Err(HbError::InvalidFilter(
+                        "invalid filter parameter name".into(),
+                    ));
+                }
+                while chars
+                    .get(index)
+                    .is_some_and(|ch| ch.is_ascii_alphanumeric() || *ch == '_')
+                {
+                    index += 1;
+                }
+                tokens.push(Token::Parameter(chars[start..index].iter().collect()));
             }
             quote @ ('\'' | '"') => {
                 let (value, next) = read_string(&chars, index + 1, quote)?;
@@ -310,28 +413,19 @@ impl Parser {
             }
         };
         let value = self.parse_value()?;
-        if op == CompareOp::In && !value.is_array() {
-            return Err(HbError::InvalidFilter(
-                "IN requires an array literal".into(),
-            ));
-        }
         Ok(Expr::Compare { field, op, value })
     }
 
-    fn parse_value(&mut self) -> HbResult<Value> {
+    fn parse_value(&mut self) -> HbResult<ValueExpr> {
         if matches!(self.peek(), Token::LBracket) {
             self.next();
             let mut values = Vec::new();
             if matches!(self.peek(), Token::RBracket) {
                 self.next();
-                return Ok(Value::Array(values));
+                return Ok(ValueExpr::Array(values));
             }
             loop {
-                let Token::Literal(value) = self.next() else {
-                    return Err(HbError::InvalidFilter(
-                        "array values must be literals".into(),
-                    ));
-                };
+                let value = self.parse_scalar()?;
                 values.push(value);
                 match self.next() {
                     Token::Comma => {}
@@ -339,12 +433,19 @@ impl Parser {
                     _ => return Err(HbError::InvalidFilter("expected ',' or ']'".into())),
                 }
             }
-            return Ok(Value::Array(values));
+            return Ok(ValueExpr::Array(values));
         }
-        let Token::Literal(value) = self.next() else {
-            return Err(HbError::InvalidFilter("expected literal value".into()));
-        };
-        Ok(value)
+        self.parse_scalar()
+    }
+
+    fn parse_scalar(&mut self) -> HbResult<ValueExpr> {
+        match self.next() {
+            Token::Literal(value) => Ok(ValueExpr::Literal(value)),
+            Token::Parameter(name) => Ok(ValueExpr::Parameter(name)),
+            _ => Err(HbError::InvalidFilter(
+                "expected literal or value parameter".into(),
+            )),
+        }
     }
 }
 
@@ -355,6 +456,7 @@ fn compile_expr(
 ) -> HbResult<String> {
     match expression {
         Expr::Compare { field, op, value } => {
+            let value = value.resolved()?;
             let definition = schema
                 .fields
                 .iter()
@@ -395,6 +497,154 @@ fn compile_expr(
 }
 
 const SYSTEM_FIELDS: [&str; 4] = ["id", "created_at", "updated_at", "deleted_at"];
+
+/// Parse only a SELECT over one named collection. The Surreal AST is opaque in
+/// 3.2.3, so this deliberately smaller AST is the allowlist. The submitted SQL is
+/// never executed: it is lowered into the same RecordQuery used by HTTP and JS.
+pub fn parse_select_query(
+    input: &str,
+    parameters: &serde_json::Map<String, Value>,
+) -> HbResult<(String, crate::models::RecordQuery)> {
+    use herta_core::JsErrorKind;
+    let parse = || -> HbResult<_> {
+        if input.len() > MAX_FILTER_BYTES || parameters.len() > 64 {
+            return Err(JsErrorKind::QueryUnsupported.into());
+        }
+        // Also reject syntax which our restricted grammar could otherwise read
+        // as identifiers but which is not a valid Surreal SELECT statement.
+        surrealdb_core::syn::parse(input)
+            .map_err(|_| HbError::from(JsErrorKind::QueryUnsupported))?;
+        let mut parser = Parser {
+            tokens: tokenize(input)?,
+            pos: 0,
+            conditions: 0,
+        };
+        parser.keyword("SELECT")?;
+        let fields = if parser.peek() == &Token::Star {
+            parser.next();
+            None
+        } else {
+            let mut fields = vec![parser.identifier()?];
+            while parser.peek() == &Token::Comma {
+                parser.next();
+                fields.push(parser.identifier()?);
+            }
+            Some(fields)
+        };
+        parser.keyword("FROM")?;
+        let collection = parser.identifier()?;
+        crate::validation::validate_identifier("collection", &collection)?;
+        if collection.starts_with('_') {
+            return Err(JsErrorKind::QueryUnsupported.into());
+        }
+        let mut query = crate::models::RecordQuery {
+            fields,
+            ..Default::default()
+        };
+        if parser.has_keyword("WHERE") {
+            let mut expression = parser.parse_expression(0)?;
+            bind_parameters(&mut expression, parameters)?;
+            query.filter = Some(lower_select_filter(&expression, &mut query.bindings)?);
+        }
+        if parser.has_keyword("ORDER") {
+            parser.keyword("BY")?;
+            let mut fields = Vec::new();
+            loop {
+                let field = parser.identifier()?;
+                let descending = parser.has_keyword("DESC");
+                if !descending {
+                    parser.has_keyword("ASC");
+                }
+                fields.push(if descending {
+                    format!("-{field}")
+                } else {
+                    field
+                });
+                if parser.peek() != &Token::Comma {
+                    break;
+                }
+                parser.next();
+            }
+            query.sort = Some(fields.join(","));
+        }
+        if parser.has_keyword("LIMIT") {
+            query.limit = parser.unsigned_parameter(parameters)?;
+        }
+        if parser.has_keyword("START") {
+            parser.has_keyword("AT");
+            query.offset = parser.unsigned_parameter(parameters)?;
+        }
+        if parser.peek() == &Token::Semicolon {
+            parser.next();
+        }
+        if parser.peek() != &Token::End {
+            return Err(JsErrorKind::QueryUnsupported.into());
+        }
+        query.validate()?;
+        Ok((collection, query))
+    };
+    parse().map_err(|_| JsErrorKind::QueryUnsupported.into())
+}
+
+impl Parser {
+    fn has_keyword(&mut self, keyword: &str) -> bool {
+        if matches!(self.peek(), Token::Ident(word) if word.eq_ignore_ascii_case(keyword)) {
+            self.next();
+            true
+        } else {
+            false
+        }
+    }
+    fn keyword(&mut self, keyword: &str) -> HbResult<()> {
+        if self.has_keyword(keyword) {
+            Ok(())
+        } else {
+            Err(herta_core::JsErrorKind::QueryUnsupported.into())
+        }
+    }
+    fn identifier(&mut self) -> HbResult<String> {
+        if let Token::Ident(name) = self.next() {
+            Ok(name)
+        } else {
+            Err(herta_core::JsErrorKind::QueryUnsupported.into())
+        }
+    }
+    fn unsigned_parameter(&mut self, parameters: &serde_json::Map<String, Value>) -> HbResult<u64> {
+        self.parse_scalar()?
+            .resolve(parameters)?
+            .as_u64()
+            .ok_or_else(|| herta_core::JsErrorKind::QueryUnsupported.into())
+    }
+}
+
+fn lower_select_filter(
+    expression: &Expr,
+    bindings: &mut serde_json::Map<String, Value>,
+) -> HbResult<String> {
+    match expression {
+        Expr::Compare { field, op, value } => {
+            let name = format!("select_{}", bindings.len());
+            bindings.insert(name.clone(), value.resolved()?.clone());
+            let operator = match op {
+                CompareOp::Eq => "=",
+                CompareOp::Ne => "!=",
+                CompareOp::Gt => ">",
+                CompareOp::Ge => ">=",
+                CompareOp::Lt => "<",
+                CompareOp::Le => "<=",
+                CompareOp::In => "IN",
+                CompareOp::Contains => "CONTAINS",
+            };
+            Ok(format!("{field} {operator} ${name}"))
+        }
+        Expr::Logical { left, op, right } => {
+            let left = lower_select_filter(left, bindings)?;
+            let right = lower_select_filter(right, bindings)?;
+            let operator = if *op == LogicalOp::And { "AND" } else { "OR" };
+            Ok(format!("({left} {operator} {right})"))
+        }
+    }
+}
 
 fn compile_relation_value(
     field: &FieldDef,
@@ -451,6 +701,7 @@ fn compile_relation_value(
 fn compile_live_expr(expression: &Expr, schema: &CollectionDef) -> HbResult<String> {
     match expression {
         Expr::Compare { field, op, value } => {
+            let value = value.resolved()?;
             let definition = schema
                 .fields
                 .iter()
@@ -536,6 +787,76 @@ fn parse_relation_id(field: &str, target: &str, value: &Value) -> HbResult<Recor
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn value_parameters_cannot_become_identifiers_or_query_text() {
+        let definition = schema(vec![
+            field("status", FieldType::Text, None),
+            field(
+                "owner",
+                FieldType::Relation,
+                Some(serde_json::json!({"collection":"users","maxSelect":1})),
+            ),
+        ]);
+        let bindings = serde_json::json!({"status":"' OR true; DELETE tasks; --", "owner":"users:one", "owners":["users:one","users:two"]});
+        let bindings = bindings.as_object().unwrap();
+        let filter = compile_filter_with_params(
+            "status = $status AND owner IN $owners",
+            &definition,
+            bindings,
+        )
+        .unwrap();
+        assert!(!filter.sql.contains("DELETE"));
+        assert_eq!(filter.bindings.len(), 2);
+        assert_eq!(
+            filter.bindings[0].1,
+            SurrealValue::from_t(bindings["status"].clone())
+        );
+        assert!(compile_filter_with_params("owner = $owner", &definition, bindings).is_ok());
+        for input in [
+            "$status = 'x'",
+            "status = $missing",
+            "status IN $status",
+            "status = $status.name",
+        ] {
+            assert!(
+                compile_filter_with_params(input, &definition, bindings).is_err(),
+                "{input}"
+            );
+        }
+    }
+
+    #[test]
+    fn restricted_select_rejects_every_non_whitelisted_shape() {
+        for sql in [
+            "SELECT * FROM _admins",
+            "DELETE tasks",
+            "SELECT * FROM tasks; DELETE tasks",
+            "SELECT * FROM $table",
+            "SELECT * FROM tasks:one",
+            "SELECT * FROM tasks, users",
+            "SELECT http::get('https://example.com') FROM tasks",
+            "SELECT * FROM (SELECT * FROM tasks)",
+            "SELECT ->likes FROM tasks",
+            "SELECT count() FROM tasks GROUP ALL",
+            "SELECT * FROM tasks WHERE true",
+            "SELECT * FROM tasks FETCH owner",
+            "SELECT * FROM tasks LIMIT 501",
+            "SELECT * FROM tasks START -1",
+            "SELECT VALUE status FROM tasks",
+            "SELECT status AS admin FROM tasks",
+        ] {
+            assert!(
+                parse_select_query(sql, &Default::default()).is_err(),
+                "{sql}"
+            );
+        }
+        let (name, query) = parse_select_query("SELECT status FROM tasks WHERE status IN ['a', 'b'] ORDER BY status DESC LIMIT 1 START 1;", &Default::default()).unwrap();
+        assert_eq!(name, "tasks");
+        assert_eq!(query.offset, 1);
+        assert_eq!(query.limit, 1);
+        assert_eq!(query.fields, Some(vec!["status".into()]));
+    }
 
     fn schema(fields: Vec<FieldDef>) -> CollectionDef {
         CollectionDef {

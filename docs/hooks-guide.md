@@ -1,8 +1,8 @@
 # HertaBase JavaScript 扩展开发指南
 
-> Phase 3 尚在开发，本指南定义目标 API，不代表当前二进制已经实现这些接口。运行时架构、
-> 安全边界与实施顺序见 [JavaScript 扩展运行时设计](js-runtime.md)。2026-09-08 已统一目标
-> 契约；尚未通过的事务、闭包隔离和跨服务开放门槛见该文档第 16.3 节，示例不是可运行承诺。
+> Phase 3 尚在开发。Record/Auth/Collection、事务、自定义路由、邮件、受限 HTTP、cron 和应用消息已接入，
+> 扩展文件和 outbox 已接入，默认关闭。运行时架构与边界见 [运行时设计](js-runtime.md)，实际通过范围见
+> [验证记录](js-runtime-validation.md)。可运行的事务、注册、路由和服务示例位于 [examples/js-runtime](../examples/js-runtime/README.md)。
 
 ## 1. 扩展文件
 
@@ -64,7 +64,7 @@ Collection。
 只在下游成功时运行。**整条持久化链完成后才提交**，`next()` 后的代码仍在事务内；邮件、HTTP
 和实时通知使用 `e.afterCommit(callback)`，宿主确认提交后才执行。已确认提交后的回调失败不能回滚数据，
 宿主将其记录为 post-commit failure；需要可靠投递时应使用同事务 outbox 与独立投递任务。
-当前数据层尚无供 Hook 连续调用的事务句柄或通用 outbox 服务。
+当前数据层已提供共用事务 session；`$app.outbox.enqueue` 在当前事务中写入宿主任务。
 
 ## 3. Record 与数据库操作
 
@@ -168,7 +168,7 @@ Rust 宿主 SMTP 服务和管理员邮件发送接口已实现，见 [邮件发�
 
 这些调用会产生不可事务化的外部副作用。下例监听业务订阅记录，用 afterCommit 在最外层
 事务提交确认后执行；直接写在持久化 Hook 的 `next()` 后仍会被拒绝。afterCommit 是
-进程内 best-effort；可靠发送使用待实现的事务 outbox。Auth 注册接入另见运行时设计。
+进程内 best-effort；可靠发送使用事务 outbox。Auth 注册接入另见运行时设计。
 
 ```javascript
 onRecordCreate(async (e) => {

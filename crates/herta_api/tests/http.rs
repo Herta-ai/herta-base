@@ -81,6 +81,65 @@ async fn service() -> Service {
     service_with_settings(1000, 20, 900).await
 }
 
+#[tokio::test]
+async fn operation_status_requires_original_identity_or_credential_and_returns_no_data() {
+    use herta_db::transaction::TransactionOwner;
+    let db = DbClient::memory().await.unwrap();
+    let mut config = HbConfig::default();
+    config.server.dev_mode = true;
+    config.auth.jwt_secret = Some(TEST_JWT_SECRET.into());
+    config.auth.bootstrap_admin_email = Some("admin@example.com".into());
+    config.auth.bootstrap_admin_password = Some("correct horse battery staple".into());
+    let state = Arc::new(
+        ApiState::new_with_storage(db.clone(), config, Arc::new(ObjectStoreStorage::memory()))
+            .await
+            .unwrap(),
+    );
+    let service = Service::new(build_router()).hoop(affix_state::inject(state.clone()));
+    let token = admin_token(&service).await;
+    let identity = state.auth.authenticate(&token).await.unwrap();
+    let owner = TransactionOwner::new(db, identity.record_id().map(str::to_owned));
+    let receipt = owner.begin().await.unwrap();
+    owner.commit(&receipt.id).await.unwrap();
+    let url = format!("http://localhost{}", receipt.check_url);
+    for request in [
+        TestClient::get(&url),
+        TestClient::get(&url).add_header("x-hb-operation-credential", "wrong", true),
+    ] {
+        assert_eq!(
+            request.send(&service).await.status_code,
+            Some(StatusCode::NOT_FOUND)
+        );
+    }
+    for request in [
+        TestClient::get(&url).bearer_auth(&token),
+        TestClient::get(&url).bearer_auth(&token).add_header(
+            "x-hb-operation-credential",
+            "wrong",
+            true,
+        ),
+        TestClient::get(&url).bearer_auth("invalid").add_header(
+            "x-hb-operation-credential",
+            &receipt.check_credential,
+            true,
+        ),
+        TestClient::get(&url).add_header(
+            "x-hb-operation-credential",
+            &receipt.check_credential,
+            true,
+        ),
+    ] {
+        let mut response = request.send(&service).await;
+        assert_eq!(response.status_code, Some(StatusCode::OK));
+        assert_eq!(response.headers().get("cache-control").unwrap(), "no-store");
+        let body: Value = response.take_json().await.unwrap();
+        assert_eq!(
+            body["data"],
+            json!({"operationId":receipt.operation_id,"state":"committed"})
+        );
+    }
+}
+
 async fn service_with_db() -> (Service, DbClient) {
     let db = DbClient::memory().await.unwrap();
     let mut config = HbConfig::default();

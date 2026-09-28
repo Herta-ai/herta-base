@@ -74,7 +74,14 @@ pub async fn subscribe(
 }
 
 async fn authenticate(req: &Request, state: &ApiState) -> HbResult<(AuthIdentity, Option<u64>)> {
-    let token = if let Some(header) = req.headers().get("authorization") {
+    let Some(token) = token(req)? else {
+        return Ok((AuthIdentity::Anonymous, None));
+    };
+    let authentication = state.auth.authenticate_with_expiry(&token).await?;
+    Ok((authentication.identity, Some(authentication.expires_at)))
+}
+pub(super) fn token(req: &Request) -> HbResult<Option<String>> {
+    Ok(if let Some(header) = req.headers().get("authorization") {
         let header = header.to_str().map_err(|_| HbError::Unauthorized)?;
         Some(
             header
@@ -85,12 +92,7 @@ async fn authenticate(req: &Request, state: &ApiState) -> HbResult<(AuthIdentity
         )
     } else {
         req.query::<String>("token")
-    };
-    let Some(token) = token else {
-        return Ok((AuthIdentity::Anonymous, None));
-    };
-    let authentication = state.auth.authenticate_with_expiry(&token).await?;
-    Ok((authentication.identity, Some(authentication.expires_at)))
+    })
 }
 
 struct StreamState {
@@ -199,11 +201,11 @@ fn expiry_sleep(expires_at: u64) -> Pin<Box<Sleep>> {
     Box::pin(sleep(Duration::from_secs(expires_at.saturating_sub(now))))
 }
 
-fn timestamp() -> String {
+pub(super) fn timestamp() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)
 }
 
-fn event(name: &'static str, data: Value) -> SseEvent {
+pub(super) fn event(name: &'static str, data: Value) -> SseEvent {
     SseEvent::default()
         .name(name)
         .json(data)

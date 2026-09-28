@@ -1,9 +1,13 @@
 # JavaScript 扩展运行时设计
 
-> 状态：设计草案，JS 运行时尚未实现。2026-09-08 已对照 `4c0fe64` 复核；下文的 JS API
-> 和配置均为目标契约，不能据此认为当前二进制已支持。正文与第 16.1 节采用同一套目标方案，
+> 状态：实施中，尚未达到完整开放标准。2026-09-09 已接入服务器加载、生命周期、开发重载、
+> JSON/multipart Record、Auth、Collection 事件、自定义路由和邮件桥接；Windows x64/MSVC 已验证本页验证报告所列范围。
+> 2026-09-28 补齐受限 HTTP 出站、cron 调度、应用消息 SSE 和 SDK topic 订阅，并通过对应 Windows 测试。
+> 同日接入扩展文件目录/版本/配额账本及 mail.send、http.send 事务 outbox；基本故障与集成用例通过，完整六步及最终发布验收尚未完成。
+> 逐项实测及待验收项见 [实施验证](js-runtime-validation.md)。
+> 第 1.1 节保留实施前基线，固定业务约定见第 16.4 节。正文与第 16.1 节采用同一套目标方案，
 > 第 16.3 节列出开放对应功能前必须完成的验证，不再把推荐方案视为验证已通过。
-> Rust 宿主邮件服务、`[mail]` 配置及管理员邮件发送接口已实现，见 [邮件发送](mail.md)；JS 调用仍未接入。
+> Rust 宿主邮件服务、`[mail]` 配置及管理员邮件发送接口见 [邮件发送](mail.md)。JS 门禁和本地 SMTP 邮箱的实际 Message-ID 核对已通过。
 
 ## 1. 目标与范围
 
@@ -20,7 +24,7 @@ Phase 3 不再只提供按文件名匹配的记录 Hook，而是提供一个参�
 业务代码：可以按授权使用系统身份操作业务数据，但不能直接获得宿主进程、凭据或任意网络与
 文件系统权限。资源和能力限制既防御恶意脚本，也防止可信脚本的缺陷拖垮服务。
 
-### 1.1 当前实现基线
+### 1.1 实施前基线（`4c0fe64`）
 
 | 能力 | 当前实现与本阶段需要补齐的部分 |
 | --- | --- |
@@ -48,7 +52,7 @@ Phase 3 不再只提供按文件名匹配的记录 Hook，而是提供一个参�
 
 | 模块 | 职责 |
 | --- | --- |
-| `herta_core` | 待新增的 `JsvmConfig`、能力开关、公共错误码和不依赖具体实现的宿主契约 |
+| `herta_core` | `JsvmConfig`、共享 DTO、能力开关、公共错误码和不依赖具体实现的宿主契约 |
 | `herta_jsvm` | 脚本发现/编译、QuickJS 池、注册表、事件调度、FFI 与资源限制 |
 | `herta_db` | Record/Collection 操作、事务句柄、Schema/API Rules 最终校验 |
 | `herta_api` | 请求事件适配、自定义路由快照和 JS Response 到 Salvo Response 的转换 |
@@ -178,6 +182,19 @@ interface BaseEvent {
 `collection` 和 `originalCollection`。创建时的 `original*` 为 null，其余 `original*`
 是只读快照；请求身份只暴露经脱敏的数据，不能包含 `AuthIdentity` 内部的 token_key。
 
+AuthRegister 提供 `e.profile`，允许在 next 前对顶层业务字段赋值或 delete；嵌套值是深拷贝，修改后须重新赋回。
+`e.account` 在注册核心执行前为 null，执行后为只读账户视图；登录和刷新从一开始就提供只读账户。
+Auth 请求的 json/text/bytes 只包含清理后的注册 profile，登录/刷新为 `{}`；headers/query/params 不复制认证输入。
+afterCommit 快照仅含事件名、集合、requestId、只读账户以及注册时的最终 profile，不包含凭据或令牌。
+
+Collection 事件通过 `e.collection.fields = [...]`、`indexes` 或 `rules` 赋回候选，嵌套读取同样返回深拷贝。
+管理接口和 `$app.collections.findByName/list` 返回不可伪造的 `version`；save 必须携带读到的版本。
+HTTP PATCH 仍接受原有增量字段/索引/规则格式，可额外携带 version 做乐观并发校验。未修改返回原版本。
+已确认的数据库事务冲突返回 409；仅无法确认提交结果时进入核对流程。删除后的文件清理记录与 DDL 共用事务，
+提交后执行，失败保留账本并阻止同名集合重建，启动时恢复。
+
+已接通 API 的声明和类型测试位于 `packages/types`，运行示例见 [examples/js-runtime](../examples/js-runtime/README.md)。
+
 Record Hook 在 `e.next()` 前的修改会在 Schema 校验和 API Rules 最终检查前写入候选
 Record。请求体快照与候选 Record 必须分开保存：已有 Rules 中的 `$request.body` 保持
 HTTP 适配层现有解析/规范化后的输入语义，不随 Hook 修改候选值而改变；`$record` 的新旧值
@@ -185,18 +202,18 @@ HTTP 适配层现有解析/规范化后的输入语义，不随 Hook 修改候�
 写入前记录，不能因 Hook 修改候选而变成另一套授权对象。公开 CRUD 的
 核心写入始终使用原请求身份，不能被 Hook 的系统身份提升权限。
 
-**共同事务尚未接入项目；SDK 能力已确认，集成行为待验证。** 克隆 `DbClient` 不会创建共同事务；现有
+**Record 共同事务已接入，完整故障/平台验收仍在进行。** 克隆 `DbClient` 不会创建共同事务；现有
 SchemaManager 的单次 `BEGIN ... COMMIT` 查询也不能直接作为跨 JS await 的事务句柄。
-目标是整条持久化 Hook 链完成后才提交，嵌套 save/delete 加入同一事务；链中 `next()` 后的
-异常仍会回滚。只有在第 16.1 节的事务验证通过后，才能开放这一保证。
+整条持久化 Hook 链完成后才提交，嵌套 save/delete 加入同一 owner 的真实事务；链中 `next()` 后的
+异常仍会回滚。Mem/SurrealKv 的已通过用例和仍待完成的故障验证分别记录在实施验证报告中。
 
 `e.next()` 仅表示下游处理完成，不天然代表最外层事务已提交。特别是 Hook 内的嵌套
 `$app.save()`，其 `e.next()` 返回时外层仍可能失败。HTTP、邮件、实时推送及不可事务化文件
 操作只能在宿主确认脱离事务后执行，不能仅根据源码位于 `await e.next()` 后就放行。
 持久化事件提供 `e.afterCommit(callback): void`，在最外层提交确认后按顺序接收只读快照；
 回滚丢弃，失败只记日志，受原调用剩余预算限制。请求事件没有此方法，显式事务使用
-`tx.afterCommit`。可靠副作用需要在同一事务中写入 outbox，再由独立任务投递；当前尚无
-通用 outbox 服务，afterCommit 也不提供宕机可靠性。
+`tx.afterCommit`。可靠副作用使用 `$app.outbox.enqueue` 或 `tx.outbox.enqueue` 在同一事务入队，
+独立宿主 worker 投递；afterCommit 本身不提供宕机可靠性。
 
 Hook 接入需同时覆盖 JSON 与 multipart 写入，保留已有上传失败补偿；确认回滚后回收本次
 新上传对象，提交结果 unknown 时保留并核对，不能直接按超时删除。具体顺序见第 16.1.2 节。
@@ -277,10 +294,10 @@ await $app.delete(draft)
 `$app.findFirstRecordByFilter`、`findRecordById`、`findRecordsByFilter`、`newRecord`、
 `save` 和 `delete` 是主要业务接口。所有过滤变量必须绑定，不能字符串拼接用户输入。
 
-`$name` 是拟新增的过滤器参数语法，不是当前 `compile_filter` 已支持的功能。应在既有受限
-语法的 AST 中加入参数节点并绑定值，不能把 filter 直接拼接为 SurrealQL；limit/offset 也需
-新增明确的数据层接口，不能用页码近似换算任意 offset。JS delete 沿用 RecordManager 的
-软删除语义。Record 包装器需区分字段未修改与 unset，不能将完整快照当作 PATCH 回写系统字段。
+`$name` 过滤参数已通过受限 AST 的值参数节点绑定，不将用户值拼接为 SurrealQL。
+RecordQuery 支持精确 limit/offset、投影和稳定排序，HTTP 继续支持 page/perPage。
+JS delete 沿用 RecordManager 的软删除语义。Record 包装器区分字段未修改与 unset，
+保存时只提交候选变更并保护系统字段。
 
 根 Record/Collection/Auth Hook、任务和生命周期默认 system，自定义路由默认 request。
 system 可绕过公共 API Rules，仍不能绕过 Schema、系统表保护和事务约束。Hook 可用第 4.1
@@ -324,7 +341,7 @@ cronAdd("daily-report", "0 0 8 * * *", async () => {
 cronRemove("obsolete-job")
 ```
 
-- 表达式使用含秒的 6 段 cron，时区默认 UTC，可在任务选项中指定 IANA 时区。
+- 表达式使用含秒的 6 段 cron，支持数字、`*`、逗号列表、闭区间和 `/步长`；不接受宏、英文月份/星期、`?`、`L`、`W`、`#`。星期 0/7 均表示周日，各段按 AND 匹配。时区默认 UTC，可在任务选项中指定 IANA 时区。
 - 任务名称全局唯一；重载时用新注册表原子替换旧调度，但仍在运行的旧任务保留原快照，
   同名任务的互斥状态必须跨快照保留，不能因重载获得第二个执行槽。
 - 同一任务默认不并发执行；上一次未完成时跳过并记录 `warn`。
@@ -349,7 +366,7 @@ await $app.mailer.send({
 })
 ```
 
-Rust `herta_core::Mailer` trait 和 `herta_mail` SMTP 实现已提供；上述 JS 绑定仍为目标契约，
+Rust `herta_core::Mailer` trait、`herta_mail` SMTP 实现及上述 JS 绑定已接入，真实邮箱验证仍待完成；
 示例用于已脱离事务的回调。复用 `ApiState.mailer` 对应的服务实例，不经管理员 HTTP 接口转发。
 JS 入参按现有 `MailMessage` 解码：from 可省略，to/subject 必填，text/html 至少一种非空；
 只接受 `X-*` 字符串自定义头，未知字段（含 attachments/cc/bcc）拒绝。JS 不接触 SMTP 凭据。
@@ -365,7 +382,7 @@ Promise 返回现有 `MailReceipt` 的 JSON：`{ messageId, status: "accepted" }
 envelope；accepted 只表示 SMTP 接收端确认接收。现有校验、413、`HB_MAIL_SEND_FAILED`
 和 `HB_MAIL_TIMEOUT` 错误保留。发送预算取调用剩余时长与 mail.timeout_ms 的较小值；
 宿主跟踪在途发送的结果，超时或丢弃等待都不表示未发送，不自动重试。事务内可靠发送需写入
-待实现的 outbox，提交后独立投递；直接发送可放在 afterCommit，但不保证宕机可靠性。
+事务 outbox，提交后独立投递；直接发送可放在 afterCommit，但不保证宕机可靠性。
 
 ## 9. HTTP 请求
 
@@ -389,6 +406,14 @@ const payload = response.json()
 拒绝用户信息、路径（空路径或 `/` 除外）、query、fragment 和通配符。仅配置 HTTPS 不授权
 同一主机的 HTTP。每跳校验并固定连接 IP、禁用环境代理，细节见第 16.1.6 节。
 
+当前桥接由 `herta_http` 实现，仅接受 GET/HEAD/POST/PUT/PATCH/DELETE/OPTIONS；GET/HEAD 不带正文。
+body 为 UTF-8 字符串，响应为 `{ status, ok, headers, body, json() }`；非 2xx 仍返回响应，`json()` 同步解析，
+无效 JSON 抛出 `BadRequestError`。响应不自动解压，无效 UTF-8 返回 `HB_HTTP_SEND_FAILED`。
+Host、Content-Length、Transfer-Encoding 等传输头由宿主管理，CRLF、重复大小写头拒绝；跨源仅保留
+Accept、Accept-Language、Accept-Encoding、Content-Type。301/302 的 POST 及 303 的非 HEAD 改为 GET，307/308 保留方法和正文。
+整个 DNS/连接/重定向/读取过程共用剩余总预算；请求、响应、URL、头数量/字节和 DNS 地址数量均有上限。
+`HB_HTTP_SEND_FAILED` 为 502，`HB_HTTP_TIMEOUT` 为 504，超限为 413；请求均不自动重试，超时可能已经产生远端副作用。
+
 ## 10. 实时事件
 
 ```javascript
@@ -397,7 +422,7 @@ await $app.realtime.publish("reports/ready", {
 }, { users: [{ collection: e.auth.collection, id: e.auth.id }] })
 ```
 
-`publish(topic, data, audience)` 是待新增的应用消息能力，不能直接桥接现有集合 SSE。
+`publish(topic, data, audience)` 已接入独立的应用消息总线。
 示例要求 e.auth 非匿名；客户端使用新增 `GET /api/events?topic=...` 与独立的
 `hb.realtime.subscribe(topic, options)`，必须登录，一个连接订阅一个精确 topic，无断线重放。
 现有 `/api/realtime/{collection}` 的协议保持兼容；只实现发送端不能算完成功能。topic 必须符合
@@ -406,6 +431,8 @@ await $app.realtime.publish("reports/ready", {
 `connections: [connectionId]`；省略返回 `HB_CAPABILITY_DENIED`，混用/空列表为校验错误，
 首版不开放全局广播。管理员角色使用 `_admins` 命名空间。记录 CRUD 的标准实时事件由核心
 自动产生，JS 只负责业务事件。投递校验与慢消费者处理见第 16.1.6 节。
+返回 `{ queued, dropped }`，分别表示入队及因撤销/过期/慢消费关闭的连接数；它不是客户端处理确认。
+队列中的消息在出队前再次校验当前身份和 audience；不匹配的消息丢弃，撤销和到期会关闭连接。
 
 ## 11. 文件操作
 
@@ -425,6 +452,42 @@ await $app.files.remove("exports/report.json")
 符号链接/junction 逃逸和超限文件；本地访问必须以受控目录句柄防止路径替换竞态。
 list 使用有界分页。move 为 copy + delete，删除失败必须报告目标已存在的可恢复错误；
 总配额按第 16.1.6 节的账本预留和恢复，不承诺 Storage 跨键原子性。
+
+`list(prefix, {limit, cursor})` 返回 `{items, nextCursor}`，默认 100、最多 500。
+items 包含 `key/size/contentType/version/updatedAt`；prefix 是字面前缀，可使用 `exports/`。
+cursor 绑定命名空间和 prefix，采用 keyset 分页，不冻结目录快照。
+每次 write/copy 分配新物理版本，目录切换与旧版本待清理标记共同提交。清理失败保留旧占用，
+服务器启动按每批 100 条账本恢复；PUT/COPY 失败且对象仍未出现时保守保留预留，不能仅凭一次 HEAD 404 释放配额。
+`HB_FILE_MOVE_PARTIAL` 的 details 返回 destination 元数据、`destinationExists: true` 和
+`sourceState: present|absent|unknown`。后续恢复可能完成源删除，调用方应重新查询状态。
+
+### 11.1 事务 outbox
+
+```javascript
+await $app.transaction(async tx => {
+  await tx.save(tx.newRecord('audit', { message: 'queued welcome' }))
+  await tx.outbox.enqueue('mail.send', {
+    to: [{ address: 'reader@example.com' }], subject: 'Welcome', text: 'Hello',
+  }, { idempotencyKey: 'welcome-001' })
+})
+```
+
+仅支持 `mail.send` 与 `http.send`，payload 复用相应 DTO；没有活动事务时 enqueue 自行建立事务。
+幂等键限 1–128 个 ASCII 字母、数字或 `-_.:`，作用域为应用内 `(kind, key)`。
+相同规范化 payload 复用已有任务，不同 payload 返回 `409 HB_IDEMPOTENCY_CONFLICT`；事务中的失败仍标记 rollback-only。
+回执只含 jobId、kind、state、attempts、毫秒时间戳、errorCode 和宿主 result，不含 payload 或凭据。
+
+worker 在 serve 成功后启动，按 60 秒租约、20 秒续租投递；可确定安全的失败最多重试三次，
+延迟 1/2/4 秒。`leased` 尚未发送，过期可重新排队；`sending` 过期进入 unknown。
+SMTP 错误/超时不自动重发。HTTP 的明确未发送临时失败可重试；不确定结果只有目标 origin
+列在 `jsvm.outbox.idempotent_origins` 才可重试，此时宿主设置稳定 `Idempotency-Key` 并禁止跳转。
+收到 HTTP 响应即记录 accepted 和 status，accepted 不表示业务成功；SMTP accepted 也不表示最终送达。
+
+管理员 `GET /api/admin/outbox?limit=100&cursor=...`、`GET /api/admin/outbox/{id}` 查询回执；
+`POST /api/admin/outbox/{id}/resolve` 接受 `{resolution: "accepted"|"not_sent", note: "核对依据"}`。
+仅 unknown 可核对；not_sent 要求运维确认原尝试已停止且未被接收，之后重新排队。核对保留管理员身份和说明。
+accepted/failed 默认保留七天；pending/unknown 不自动清除。shutdown 停止接收新投递并有界排空，
+未收敛发送保留持久化租约，不能当作未发送自动重试。
 
 ## 12. 日志
 
@@ -458,7 +521,7 @@ $app.logger.error("delivery failed", { error: String(error) })
 - Hook 注册表使用不可变快照。热重载期间已开始的请求继续使用旧快照，新请求使用新快照。
 - 禁止脚本保存请求、Record 或事务对象供下次执行使用。
 
-**闭包与上下文隔离仍需验证。** 启动 context 中的 Function 保留其创建环境，传递函数引用
+**闭包与上下文隔离已有 Windows 回归用例。** 启动 context 中的 Function 保留其创建环境，传递函数引用
 不会生成独立的请求闭包，也不能将它当作跨 runtime 共享的缓存。快照只保存源码、哈希及注册
 描述，每次调用在新 runtime/context 重放纯初始化以建立本地闭包，并核对注册描述一致性；这意味着
 顶层计算可能重复执行，不能承诺“顶层只执行一次”或支持跨请求全局变量。重放期间禁止 I/O、
@@ -470,9 +533,9 @@ $app.logger.error("delivery failed", { error: String(error) })
 
 ## 14. 错误模型
 
-宿主错误在 JS 中表现为带 `code`、`message`、`details` 的 Error 子类。下列是目标错误码，
-其中 `HB_CAPABILITY_UNAVAILABLE` 已随邮件服务实现（当前文案为邮件禁用，通用化时需调整）。
-其余尚未实现；复用既有错误时保持现有 HTTP 状态，不把邮件错误统一折叠成 Hook 错误。
+宿主错误在 JS 中表现为带 `code`、`message`、`details` 的 Error 子类。下列错误码已接入共享
+错误模型和 JS 桥接，`HB_CAPABILITY_UNAVAILABLE` 使用通用服务不可用文案。
+复用既有错误时保持现有 HTTP 状态，不把邮件错误统一折叠成 Hook 错误。
 
 | 错误码 | 含义 |
 | --- | --- |
@@ -484,6 +547,8 @@ $app.logger.error("delivery failed", { error: String(error) })
 | `HB_CAPABILITY_DENIED` | 403；当前调用未获能力授权 |
 | `HB_CAPABILITY_UNAVAILABLE` | 503；依赖服务尚未启用 |
 | `HB_OUTBOUND_DENIED` | 403；HTTP 目标未通过安全策略 |
+| `HB_HTTP_SEND_FAILED` | 502；出站连接、TLS、传输或 UTF-8 响应失败 |
+| `HB_HTTP_TIMEOUT` | 504；出站总预算耗尽，远端结果可能不确定 |
 | `HB_FILE_ACCESS_DENIED` | 403；文件路径或操作越权 |
 | `HB_HOOK_ABORTED` | 409；持久化/Auth 链未调用 next，核心操作拒绝 |
 | `HB_HOOK_RECURSION` | 409；同记录递归或嵌套深度超限 |
@@ -560,6 +625,16 @@ max_runtime_ms = 30000
 retries = 0
 max_retries = 3
 
+[jsvm.outbox]
+enabled = false
+lease_seconds = 60
+renew_seconds = 20
+max_retries = 3
+retention_days = 7
+concurrency = 4
+max_jobs = 10000
+idempotent_origins = []
+
 [mail]
 driver = "disabled"
 from_address = "noreply@example.com"
@@ -590,10 +665,9 @@ startup_timeout_ms 限制完整候选验证，单次重放还受根调用预算�
 
 ### 16.1 目标方案与验证要求
 
-以下六项是本草案采用的方案，正文与开发指南同步遵循。事务已有当前版本 SDK 的直接支持，
-其余主要是宿主服务抽象和执行生命周期实现。新增 JS API、配置与错误码仍未实现（已存在的
-邮件服务及错误除外），源码查证不等于集成测试通过。各项验收门槛见第 16.3 节；
-只有实际落地部分才能进入类型包。
+以下六项是采用的实施方案，正文与开发指南同步遵循。事务、宿主服务、执行生命周期、配置
+和错误码已接入；具体测试及剩余缺口见第 16.3 节及 [验证记录](js-runtime-validation.md)。
+源码查证不等于集成测试通过，只有实际落地部分才能进入类型包。
 
 #### 1. 事务与提交边界
 
@@ -604,7 +678,7 @@ startup_timeout_ms 限制完整候选验证，单次重放还受根调用预算�
 源码：`surrealdb-3.2.3/src/method/transaction.rs` 提供 `Transaction<C>` 及 query/commit/cancel；
 `src/method/mod.rs` 提供 `Surreal::begin(self)`；`src/engine/local/mod.rs` 按事务 ID 执行查询。
 上游 `tests/api_integration/basic.rs::client_side_transactions` 也包含提交、取消及多次写入用例。
-缺口在本项目尚未接入，而非该版本 SDK 没有能力；远程 HTTP 不在本次支持范围内。
+本项目现已通过 DbSession 和独立 TransactionOwner 接入上述句柄；远程 HTTP 数据库连接不在本次支持范围内。
 
 **采用方案：**
 
@@ -625,7 +699,7 @@ startup_timeout_ms 限制完整候选验证，单次重放还受根调用预算�
   回调含糊地绑定到“下一次写入”。
 - 可靠副作用通过 `$app.outbox.enqueue(kind, payload, { idempotencyKey })` 写入同一事务，
   由宿主独立投递。仅存可序列化数据与宿主已注册的任务类型，不持久化 JS 闭包；投递采用租约、
-  有界重试与失败状态，语义为 at-least-once，收件服务仍需按幂等键去重。
+  有界重试与待核对状态；它不承诺无条件 at-least-once，结果不确定且接收端不保证幂等时停在 unknown。
 - 事务由独立于请求 future 的宿主 owner 管理，状态为 active、committing、committed、
   rolling-back、rolled-back 或 unknown。超时/断连只通知 owner；未提交时显式等待 cancel，
   提交已发出时继续收取结果。不能依赖 Drop 自动回滚，也不能因丢弃 commit future 就宣告失败。
@@ -937,19 +1011,40 @@ outbox.enqueue 只落库，可在事务内调用。outbox 发送也必须经过�
 - 自定义参数路由与 admin/files/realtime/web 等保留路径冲突、响应 envelope 的 SDK
   兼容性；文件并发配额、Windows junction、S3 copy 成功 delete 失败均有明确结果。
 
-### 16.3 尚未通过的开放门槛
+### 16.3 验证范围与剩余门槛
 
-以下是具体的验证或待补契约，不能仅凭本次文档统一就勾选完成。按能力分别阻塞发布，
-不要求尚未启用的外部服务阻塞事务/worker 的独立验证。
+以下区分已经执行的 Windows 用例与仍需完成的验收。完整统一入口的结果单独记录在
+[验证记录](js-runtime-validation.md)，未执行的 Linux/macOS 不计入通过项。
 
-| 开放范围 | 必须提交的验证或契约 |
-| --- | --- |
-| CRUD Hook | Mem/SurrealKv 的 read-your-writes、异常回滚、commit/cancel 竞态、LIVE SELECT 提交通知；JSON/multipart 一次 Hook、补填必填字段、Rules 输入及上传补偿回归。 |
-| JS worker | 固定 rquickjs 版本和支持平台；运行死循环、Promise 循环、OOM、栈溢出、启动重放、pool_size=1 重入和关闭用例；给脚本文件数/总源码字节数、注册项数量、保留旧快照数量设置上限，避免快照内存不受 JS 堆配额约束。 |
-| HTTP/Auth | 逐事件的字段/可变性/响应状态表；明确注册流程是否触发 Record Hook，确保密码处理只发生一次；authMode 嵌套矩阵、HEAD/OPTIONS 与 SDK envelope/204 验证；提交 unknown 的公开状态码及客户端核对方式。 |
-| 邮件 JS 桥接 | mock Mailer 验证 DENIED/UNAVAILABLE/事务拒绝时 send 次数为 0；复用现有内存邮箱按 Message-ID 核对一次实际提交，覆盖嵌套回滚不发信、提交后发信、限额和超时不重试。 |
-| raw SELECT / HTTP | AST 白名单、投影与敏感字段隔离测试；HTTP 每跳固定已验证 IP、HTTPS 不降级、响应流限额及代理隔离测试，不能只有字符串黑名单。 |
-| 文件 / 应用消息 / cron / outbox | 补齐分页与部分 move 错误 DTO、配额账本恢复；订阅 options/事件类型、身份撤销与慢连接测试；固定 cron 的日/月/星期同时受限语义及 DST 用例；outbox 首批 kind/payload、幂等键作用域、租约/重试/保留期限和运维查询接口。 |
+| 开放范围 | 已有通过用例 | 剩余门槛 |
+| --- | --- | --- |
+| CRUD Hook | Mem/SurrealKv 事务内可见性、异常回滚、冲突、LIVE 提交通知；真实引擎 commit 内取消/等待者丢弃；SurrealKv 提交入口与完成边界强制终止后核对；JSON/multipart 一次 Hook、补填、Rules 原始输入；上传/Collection 清理重试与进程恢复 | Windows 统一回归通过；未模拟断电或 WAL 扇区损坏 |
+| JS worker | 固定 rquickjs 0.11.0；同步/Promise 循环、OOM、栈溢出、重放、pool_size=1 重入、关闭、快照配额；有界宿主通道、finish 有界等待；请求/文件二进制通道、取消后的缓冲保留、JS 堆计量 | 宿主适配器内部与 JSON 值树的完整临时分配计量；读取正文前的执行槽/缓冲接纳 |
+| HTTP/Auth | 注册双链、密码一次处理、凭据隔离、可变性、嵌套权限、HEAD/OPTIONS、SDK envelope/204、提交 unknown 核对；两个后端的签发/撤销冲突、Schema 迁移；真实 Windows 进程生命周期 | 本轮 Windows 统一回归通过 |
+| 邮件 JS 桥接 | 拒绝路径 send=0、回滚不发信、afterCommit、限额/超时不重试、本地 SMTP 收件及 Message-ID 核对 | 本轮 Windows 统一回归通过 |
+| raw SELECT / HTTP | AST 白名单、参数/投影/敏感字段；逐跳固定 IP、TLS 原主机/降级拒绝、流限额、代理隔离；outbox 丢失响应/稳定幂等键的本地真实接收端联合测试 | 本轮 Windows 统一回归通过 |
+| 文件 | 逻辑/物理分页、部分 move DTO、完整覆盖配额、SurrealKv 崩溃恢复、Windows junction、S3 协议故障；管理员核对释放；孤儿扫描与失败删除的配额账本；单目录超过 10,000 项清理 | 实际 S3 部署验收未执行 |
+| 消息 / cron / outbox | 消息身份撤销/过期/慢连接；六段 AND 与 DST；outbox 共同回滚、幂等冲突、租约/重试/保留、管理员核对、HTTP 接收端只执行一次；Windows 进程停服 | 本轮 Windows 统一回归通过 |
 
 outbox 与 cron 不得把 SMTP accepted 解释为最终送达，也不得把发送超时解释为可以安全重发；
-具体去重与重试方案应在最后一行的契约中确定。所有未开放能力返回明确错误，类型包不提前声明。
+具体去重与重试方案采用第 16.4 节。所有未开放能力返回明确错误，类型包不提前声明。
+
+### 16.4 已固定的实施契约
+
+以下约定已确定，替代前文中对应的待决选项；实现及测试完成状态单独记录，不据此推定功能已开放。
+
+| 项目 | 固定约定 |
+| --- | --- |
+| 注册链 | `AuthRegister → RecordCreate → 核心创建` 共用事务。密码只由 AuthService 处理一次，密码、凭据和令牌不进入事件、请求读取接口或提交快照。 |
+| 可变性 | Record/Collection create、update 的候选只在 next 前可写；delete 及核心执行后的视图只读。AuthRegister 只可修改清理后的 profile；登录、刷新账户视图只读。嵌套值返回深拷贝，保留的事件引用不会重新变为可写。 |
+| 事件结束 | 请求事件可返回 Response；无 next 且无 Response 为 500。持久化/Auth 无 next 为 409 并回滚。Record/Collection/Auth 事务事件允许 afterCommit，请求事件不提供。 |
+| 提交不确定 | `503 HB_COMMIT_UNKNOWN`，返回 operationId、checkUrl 和随机 checkCredential。`GET /api/operations/{id}` 凭原身份的 Bearer token 或 `X-HB-Operation-Credential` 请求头仅返回状态，绝不返回记录或 Auth 令牌。核对凭证不放入 URL。提交标记与业务写入同事务；持久化 owner 日志负责重启核对。前缀 `/api/operations` 保留。 |
+| 文件分页 | `list(prefix, {limit,cursor}) → {items,nextCursor}`，默认 100，最大 500。条目含 key、size、contentType、version、updatedAt。 |
+| 文件移动 | copy 后 delete。部分失败返回 `409 HB_FILE_MOVE_PARTIAL`，明确目标已存在和源对象的已确认状态。覆盖写入预留完整新对象大小。 |
+| 消息订阅 | connected 含 connectionId/topic/timestamp；message 使用第 10 节 DTO。options 为 onEvent/onStatus/onError/reconnect/signal，无断线重放。publish 返回入队及丢弃连接数量。 |
+| cron 日历 | 严格六段；秒、分、时、日、月、星期全部按 AND 匹配。DST 不存在时刻跳过，重复时刻只运行较早一次。任务名互斥跨快照保留，重试等待也持有互斥权。 |
+| outbox 幂等 | 首批任务为 `mail.send`、`http.send`，复用对应请求 DTO；作用域为应用内 `(kind,idempotencyKey)`。同键同 payload 返回既有任务，不同 payload 返回 409。入队和投递均校验能力与目标。 |
+| 不确定投递 | SMTP 和未获接收端幂等保证的 HTTP 进入 unknown 待核对，不自动重发。HTTP 只对运维配置的幂等 origin 允许不确定结果重试。 |
+| outbox 运维 | 默认关闭；租约 60 秒，每 20 秒续租。明确可安全重试的失败最多重试 3 次，间隔 1/2/4 秒。管理员 list/get/resolve；unknown 由运维核对为已接受或明确未发送后处理。终态保留 7 天，待处理和 unknown 不自动清除。 |
+| 快照额度 | 默认最多 128 个脚本、单文件 1 MiB、总源码 8 MiB、1024 注册项、4 个存活快照（含候选）。额度不足保留当前版本，旧快照释放后才可重载。 |
+| 配置和平台 | jsvm.enabled 默认关闭，外部能力分别授权；新增字段严格校验并映射 HB_JS_*。启用而目录不存在时启动失败，明确存在的空目录允许。Windows x64/MSVC 实测验收，Linux/macOS 仅在实际执行后记为通过。 |

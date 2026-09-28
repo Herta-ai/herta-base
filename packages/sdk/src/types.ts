@@ -188,22 +188,33 @@ export type RealtimeEvent<TRecord>
     | { type: 'ping', id?: string, data: PingEventData }
     | { type: 'error', id?: string, data: ApiEnvelope<never> }
 
-export interface SubscribeOptions<TRecord> {
-  filter?: string
+export interface EventSubscribeOptions<TEvent> {
   signal?: AbortSignal
   reconnect?: boolean | ReconnectOptions
-  onEvent?: (event: RealtimeEvent<TRecord>) => void
+  onEvent?: (event: TEvent) => void
   onStatus?: (status: RealtimeStatus) => void
   onError?: (error: Error) => void
 }
 
-export interface RealtimeSubscription<TRecord> {
+export interface EventSubscription<TEvent> {
   readonly status: RealtimeStatus
-  onEvent: (listener: (event: RealtimeEvent<TRecord>) => void) => () => void
+  onEvent: (listener: (event: TEvent) => void) => () => void
   onStatus: (listener: (status: RealtimeStatus) => void) => () => void
   onError: (listener: (error: Error) => void) => () => void
   close: () => void
 }
+
+export interface SubscribeOptions<TRecord> extends EventSubscribeOptions<RealtimeEvent<TRecord>> { filter?: string }
+export type RealtimeSubscription<TRecord> = EventSubscription<RealtimeEvent<TRecord>>
+export interface TopicConnectedEventData { connectionId: string, topic: string, timestamp: string }
+export interface MessageEventData<TData> { id: string, topic: string, data: TData, timestamp: string }
+export type TopicEvent<TData>
+  = | { type: 'connected', id?: string, data: TopicConnectedEventData }
+    | { type: 'message', id?: string, data: MessageEventData<TData> }
+    | { type: 'ping', id?: string, data: PingEventData }
+    | { type: 'error', id?: string, data: ApiEnvelope<never> }
+export type TopicSubscribeOptions<TData> = EventSubscribeOptions<TopicEvent<TData>>
+export type TopicSubscription<TData> = EventSubscription<TopicEvent<TData>>
 
 export type ApiRule = string | boolean | null
 

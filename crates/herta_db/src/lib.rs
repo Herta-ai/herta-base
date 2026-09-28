@@ -1,10 +1,16 @@
 pub mod client;
+pub mod collections;
+pub mod commands;
 pub mod filter;
 pub mod log;
 pub mod models;
+pub mod outbox;
 pub mod realtime;
 pub mod record;
 pub mod schema;
+pub mod session;
+pub mod transaction;
+pub mod uploads;
 pub mod validation;
 pub mod web;
 
@@ -14,4 +20,5 @@ pub use models::*;
 pub use realtime::{RealtimeAction, RealtimeEvent, RealtimeManager, RealtimeSubscription};
 pub use record::RecordManager;
 pub use schema::SchemaManager;
+pub use session::DbSession;
 pub use web::{WebProject, WebProjectManager};

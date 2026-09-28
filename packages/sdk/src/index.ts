@@ -4,6 +4,7 @@ export { HertaBaseClient, HertaBaseClient as HertaBaseSDK } from './client'
 export { CollectionClient } from './collection'
 export { HertaError, type HertaErrorKind, isHertaError } from './errors'
 export { FilesClient } from './files'
+export { RealtimeClient } from './realtime'
 export type {
   ApiEnvelope,
   ApiErrorPayload,
@@ -16,6 +17,8 @@ export type {
   ChangeEventData,
   ConnectedEventData,
   Credentials,
+  EventSubscribeOptions,
+  EventSubscription,
   FetchLike,
   FileAccessOptions,
   FileMutationOptions,
@@ -27,6 +30,7 @@ export type {
   HertaRecord,
   HertaRequestOptions,
   ListOptions,
+  MessageEventData,
   MutationOptions,
   Page,
   PingEventData,
@@ -37,5 +41,9 @@ export type {
   ReconnectOptions,
   RecordUpload,
   SubscribeOptions,
+  TopicConnectedEventData,
+  TopicEvent,
+  TopicSubscribeOptions,
+  TopicSubscription,
   UploadFile,
 } from './types'

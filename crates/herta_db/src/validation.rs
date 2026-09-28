@@ -37,6 +37,7 @@ pub fn validate_collection(def: &CollectionDef) -> HbResult<()> {
 
     let mut fields = HashSet::new();
     for field in &def.fields {
+        validate_auth_field(def, field)?;
         validate_field(field)?;
         if !fields.insert(field.name.as_str()) {
             return Err(HbError::validation(format!(
@@ -67,6 +68,7 @@ pub fn validate_patch(existing: &CollectionDef, patch: &UpdateCollectionRequest)
         .collect();
     let mut new_fields = HashSet::new();
     for field in &patch.fields {
+        validate_auth_field(existing, field)?;
         validate_field(field)?;
         if known_fields.contains(field.name.as_str()) || !new_fields.insert(field.name.as_str()) {
             return Err(HbError::Conflict(format!(
@@ -104,6 +106,18 @@ pub fn validate_patch(existing: &CollectionDef, patch: &UpdateCollectionRequest)
         return Err(HbError::validation(
             "at least one new field or index is required",
         ));
+    }
+    Ok(())
+}
+
+fn validate_auth_field(definition: &CollectionDef, field: &FieldDef) -> HbResult<()> {
+    if definition.collection_type == crate::CollectionType::Auth
+        && herta_core::models::AUTH_MANAGED_FIELDS.contains(&field.name.as_str())
+    {
+        return Err(HbError::validation(format!(
+            "Auth field '{}' is managed by AuthService",
+            field.name
+        )));
     }
     Ok(())
 }
@@ -511,6 +525,7 @@ pub fn relation_fields_to_record_ids(
 mod tests {
     use super::*;
     use crate::models::CollectionType;
+    use crate::models::SurrealField;
 
     fn strict_collection() -> CollectionDef {
         CollectionDef {

@@ -20,6 +20,9 @@ pub async fn list(
     depot: &mut Depot,
     res: &mut Response,
 ) -> Result<(), ApiFailure> {
+    if dispatch_extension(req, depot, res, "list").await? {
+        return Ok(());
+    }
     let state = state(depot)?;
     let identity = identity(req, state).await?;
     let collection = path(req, "collection")?;
@@ -46,6 +49,9 @@ pub async fn get(
     depot: &mut Depot,
     res: &mut Response,
 ) -> Result<(), ApiFailure> {
+    if dispatch_extension(req, depot, res, "view").await? {
+        return Ok(());
+    }
     let state = state(depot)?;
     let identity = identity(req, state).await?;
     let record = RecordManager::new(&state.db)
@@ -66,6 +72,9 @@ pub async fn create(
     depot: &mut Depot,
     res: &mut Response,
 ) -> Result<(), ApiFailure> {
+    if dispatch_extension(req, depot, res, "create").await? {
+        return Ok(());
+    }
     let state = state(depot)?;
     let identity = identity(req, state).await?;
     let collection = path(req, "collection")?;
@@ -92,6 +101,9 @@ pub async fn update(
     depot: &mut Depot,
     res: &mut Response,
 ) -> Result<(), ApiFailure> {
+    if dispatch_extension(req, depot, res, "update").await? {
+        return Ok(());
+    }
     let state = state(depot)?;
     let identity = identity(req, state).await?;
     let collection = path(req, "collection")?;
@@ -123,6 +135,9 @@ pub async fn delete(
     depot: &mut Depot,
     res: &mut Response,
 ) -> Result<(), ApiFailure> {
+    if dispatch_extension(req, depot, res, "delete").await? {
+        return Ok(());
+    }
     let state = state(depot)?;
     let identity = identity(req, state).await?;
     let record = RecordManager::new(&state.db)
@@ -134,6 +149,148 @@ pub async fn delete(
         .await?;
     res.render(Json(ApiResponse::ok(record)));
     Ok(())
+}
+
+async fn dispatch_extension(
+    req: &mut Request,
+    depot: &Depot,
+    res: &mut Response,
+    action: &str,
+) -> Result<bool, ApiFailure> {
+    use herta_core::extension::{AuthMode, Invocation};
+    let state = state(depot)?;
+    let Some(extensions) = &state.extensions else {
+        return Ok(false);
+    };
+    let dispatcher =
+        super::extensions::pinned(depot, state).ok_or(herta_core::HbError::Internal)?;
+    let identity = identity(req, state).await?;
+    let collection = path(req, "collection")?;
+    let id = if action == "create" {
+        Uuid::now_v7().to_string()
+    } else if action == "list" {
+        String::new()
+    } else {
+        normalize_record_id(&collection, &path(req, "id")?)?
+    };
+    let schema = SchemaManager::new(&state.db)
+        .get_collection(&collection)
+        .await?;
+    let original = if matches!(action, "update" | "delete" | "view") {
+        RecordManager::new(&state.db)
+            .get_authorized(
+                &collection,
+                &id,
+                None,
+                &rule_context(&identity, Value::Null),
+            )
+            .await?
+    } else {
+        Value::Null
+    };
+    let mut uploads = Vec::new();
+    let (input, original_body) = if matches!(action, "create" | "update") && is_multipart(req) {
+        let append = req.query::<String>("appendFiles");
+        let form = req
+            .form_data_max_size(state.config.server.max_body_size)
+            .await
+            .map_err(parse_error)?;
+        let mut data = parse_multipart_data(form)?;
+        let snapshot = data.clone();
+        reject_file_references(&schema, &data)?;
+        normalize_file_clears(&schema, &mut data);
+        let parts = collect_uploads(form, &schema, state.config.storage.max_file_size)?;
+        let append_fields =
+            validate_append_fields(append.as_deref(), &schema.fields, &parts, &data)?;
+        apply_uploaded_references(
+            &mut data,
+            &schema.fields,
+            &parts,
+            Some(&original),
+            &append_fields,
+        )?;
+        uploads = parts
+            .into_iter()
+            .map(|part| herta_core::extension::RecordUpload {
+                collection: collection.clone(),
+                record_id: id.clone(),
+                field: part.field,
+                filename: part.reference,
+                source: part.source,
+            })
+            .collect();
+        (data, snapshot)
+    } else if matches!(action, "create" | "update") {
+        let mut input: Value = req
+            .parse_json_with_max_size(state.config.server.max_body_size)
+            .await
+            .map_err(parse_error)?;
+        let snapshot = input.clone();
+        prepare_json_body(&state.db, &collection, &mut input).await?;
+        (input, snapshot)
+    } else {
+        (Value::Null, Value::Null)
+    };
+    if matches!(action, "create" | "update") {
+        let object = input
+            .as_object()
+            .ok_or_else(|| herta_core::HbError::validation("record input must be an object"))?;
+        if schema.collection_type == herta_db::CollectionType::Auth
+            && object
+                .keys()
+                .any(|key| herta_core::models::AUTH_MANAGED_FIELDS.contains(&key.as_str()))
+        {
+            return Err(
+                herta_core::HbError::validation("Auth fields are managed by AuthService").into(),
+            );
+        }
+    }
+    let params = ListParams {
+        page: req.query("page"),
+        per_page: req.query("perPage"),
+        sort: req.query("sort"),
+        filter: req.query("filter"),
+        expand: req.query("expand"),
+    };
+    let query = if action == "list" {
+        herta_core::models::RecordQuery::from_list(&params)?
+    } else {
+        Default::default()
+    };
+    let body = if original_body.is_null() {
+        Vec::new()
+    } else {
+        serde_json::to_vec(&original_body).map_err(|_| herta_core::HbError::Internal)?
+    };
+    let request = super::extensions::request_view(
+        req,
+        &herta_core::routes::normalize_path(req.uri().path())?,
+        &std::collections::BTreeMap::from([
+            ("collection".into(), collection.clone()),
+            ("id".into(), id.clone()),
+        ]),
+        &body,
+    );
+    let payload = json!({"collection":collection,"schema":schema,"id":id,"input":input,"original":original,
+        "requestBody":original_body,"request":request,"auth":identity.as_rule_value(),"query":query,
+        "page":params.page(),"perPage":params.per_page(),"expand":params.expand});
+    let mut context = crate::extensions::request_context(&identity, original_body);
+    context.uploads = uploads;
+    let value = dispatcher
+        .dispatch_frame(
+            Invocation {
+                name: format!("record.{action}Request"),
+                payload,
+                auth_mode: AuthMode::Request,
+                request_id: Some(Uuid::now_v7().to_string()),
+                registration: None,
+            },
+            extensions.hosts.create(context),
+            Some(body),
+        )
+        .await?;
+    super::extensions::render_frame(value, req, res, state.config.jsvm.max_response_bytes)?;
+    Ok(true)
 }
 
 fn state(depot: &Depot) -> Result<&ApiState, ApiFailure> {

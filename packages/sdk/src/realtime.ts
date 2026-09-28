@@ -1,11 +1,16 @@
 import type { Transport } from './transport'
 import type {
   ApiEnvelope,
+  EventSubscribeOptions,
+  EventSubscription,
   RealtimeEvent,
   RealtimeStatus,
   RealtimeSubscription,
   ReconnectOptions,
   SubscribeOptions,
+  TopicEvent,
+  TopicSubscribeOptions,
+  TopicSubscription,
 } from './types'
 import { HertaError } from './errors'
 import { encodePath } from './utils'
@@ -66,14 +71,35 @@ export async function subscribeToCollection<TRecord>(
   collection: string,
   options: SubscribeOptions<TRecord> = {},
 ): Promise<RealtimeSubscription<TRecord>> {
-  const subscription = new RealtimeSubscriptionImpl(transport, collection, options)
-  await subscription.start()
+  const subscription = new EventSubscriptionImpl<RealtimeEvent<TRecord>>(transport, `/api/realtime/${encodePath(collection)}`, options, options.filter ? { filter: options.filter } : undefined, ['connected', 'create', 'update', 'delete', 'ping', 'error'])
+  await start(subscription)
   return subscription
 }
 
-class RealtimeSubscriptionImpl<TRecord> implements RealtimeSubscription<TRecord> {
+export class RealtimeClient {
+  constructor(private readonly transport: Transport) {}
+  async subscribe<TData = unknown>(topic: string, options: TopicSubscribeOptions<TData> = {}): Promise<TopicSubscription<TData>> {
+    if (!/^[A-Z0-9][\w./-]{0,127}$/i.test(topic))
+      throw new HertaError('Invalid application message topic', { kind: 'protocol' })
+    const subscription = new EventSubscriptionImpl<TopicEvent<TData>>(this.transport, '/api/events', options, { topic }, ['connected', 'message', 'ping', 'error'])
+    await start(subscription)
+    return subscription
+  }
+}
+
+async function start<T extends { type: string, data: unknown }>(subscription: EventSubscriptionImpl<T>): Promise<void> {
+  try {
+    await subscription.start()
+  }
+  catch (error) {
+    subscription.close()
+    throw error
+  }
+}
+
+class EventSubscriptionImpl<TEvent extends { type: string, data: unknown }> implements EventSubscription<TEvent> {
   private currentStatus: RealtimeStatus = 'connecting'
-  private readonly eventListeners = new Set<(event: RealtimeEvent<TRecord>) => void>()
+  private readonly eventListeners = new Set<(event: TEvent) => void>()
   private readonly statusListeners = new Set<(status: RealtimeStatus) => void>()
   private readonly errorListeners = new Set<(error: Error) => void>()
   private readonly reconnect: Required<ReconnectOptions>
@@ -82,11 +108,14 @@ class RealtimeSubscriptionImpl<TRecord> implements RealtimeSubscription<TRecord>
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private attempts = 0
   private closed = false
+  private readonly abortListener = (): void => this.close()
 
   constructor(
     private readonly transport: Transport,
-    private readonly collection: string,
-    private readonly options: SubscribeOptions<TRecord>,
+    private readonly path: string,
+    private readonly options: EventSubscribeOptions<TEvent>,
+    private readonly query: Record<string, string> | undefined,
+    private readonly eventTypes: readonly string[],
   ) {
     this.reconnect = normalizeReconnect(options.reconnect)
     if (options.onEvent)
@@ -98,7 +127,7 @@ class RealtimeSubscriptionImpl<TRecord> implements RealtimeSubscription<TRecord>
     if (options.signal) {
       if (options.signal.aborted)
         this.closed = true
-      else options.signal.addEventListener('abort', () => this.close(), { once: true })
+      else options.signal.addEventListener('abort', this.abortListener, { once: true })
     }
   }
 
@@ -115,7 +144,7 @@ class RealtimeSubscriptionImpl<TRecord> implements RealtimeSubscription<TRecord>
     await this.connect(true)
   }
 
-  onEvent(listener: (event: RealtimeEvent<TRecord>) => void): () => void {
+  onEvent(listener: (event: TEvent) => void): () => void {
     this.eventListeners.add(listener)
     return () => this.eventListeners.delete(listener)
   }
@@ -134,6 +163,7 @@ class RealtimeSubscriptionImpl<TRecord> implements RealtimeSubscription<TRecord>
     if (this.closed)
       return
     this.closed = true
+    this.options.signal?.removeEventListener('abort', this.abortListener)
     if (this.reconnectTimer)
       clearTimeout(this.reconnectTimer)
     this.reconnectTimer = null
@@ -150,9 +180,8 @@ class RealtimeSubscriptionImpl<TRecord> implements RealtimeSubscription<TRecord>
     const controller = new AbortController()
     this.controller = controller
     this.setStatus(initial ? 'connecting' : 'reconnecting')
-    const query = this.options.filter ? { filter: this.options.filter } : undefined
-    const response = await this.transport.response(`/api/realtime/${encodePath(this.collection)}`, {
-      query,
+    const response = await this.transport.response(this.path, {
+      query: this.query,
       signal: controller.signal,
       timeoutMs: 0,
     })
@@ -184,13 +213,13 @@ class RealtimeSubscriptionImpl<TRecord> implements RealtimeSubscription<TRecord>
   }
 
   private async dispatch(parsed: ParsedSseEvent): Promise<void> {
-    if (!isKnownEvent(parsed.type))
+    if (!this.eventTypes.includes(parsed.type))
       return
     const event = {
       type: parsed.type,
       data: parsed.data,
       ...(parsed.id ? { id: parsed.id } : {}),
-    } as RealtimeEvent<TRecord>
+    } as TEvent
     this.emitEvent(event)
     if (parsed.type === 'connected') {
       this.attempts = 0
@@ -270,7 +299,7 @@ class RealtimeSubscriptionImpl<TRecord> implements RealtimeSubscription<TRecord>
     this.close()
   }
 
-  private emitEvent(event: RealtimeEvent<TRecord>): void {
+  private emitEvent(event: TEvent): void {
     for (const listener of this.eventListeners) safelyCall(() => listener(event))
   }
 
@@ -314,10 +343,6 @@ function parseFrame(frame: string): ParsedSseEvent | null {
     // Non-JSON data is preserved for forward compatibility.
   }
   return { type, data: parsed, ...(id ? { id } : {}) }
-}
-
-function isKnownEvent(type: string): type is RealtimeEvent<unknown>['type'] {
-  return ['connected', 'create', 'update', 'delete', 'ping', 'error'].includes(type)
 }
 
 function normalizeReconnect(

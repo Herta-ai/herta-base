@@ -4,6 +4,13 @@ HertaBase Phase 4 使用 SurrealDB `LIVE SELECT` 与 Salvo Server-Sent Events (S
 推送集合变更。本阶段只支持服务器到客户端的 SSE，不支持 WebSocket、事件持久化或
 `Last-Event-ID` 重放，也不会在连接时发送初始记录快照。
 
+JS 应用消息使用独立的 `GET /api/events?topic=...`，需要登录，并开启 `jsvm.enabled` 和
+`jsvm.realtime.enabled`。SDK 调用 `hb.realtime.subscribe(topic, options)`；topic 协议使用
+connected/message/ping/error，其中 connected 返回 connectionId/topic/timestamp，message 返回
+id/topic/data/timestamp。该接口与集合 SSE 共用连接/IP 配额，但消息在入队、出队时重新检查
+当前账户、角色、令牌有效性和明确的 audience。消息不持久化，慢消费者断开，无断线重放。
+发布端为 `$app.realtime.publish`，详见 [JS 消息契约](js-runtime.md#10-实时事件)。
+
 ## 订阅端点
 
 ```http

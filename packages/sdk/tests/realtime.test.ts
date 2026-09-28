@@ -80,7 +80,7 @@ describe('sSE parsing and subscriptions', () => {
     expect(calls).toBe(callsAtClose)
   })
 
-  it('rotates an expired token from a stream error before reconnecting', async () => {
+  it.each(['collection', 'topic'] as const)('rotates an expired token before reconnecting a %s stream', async (kind) => {
     const user = {
       id: '_users:one',
       collection: '_users',
@@ -143,9 +143,10 @@ describe('sSE parsing and subscriptions', () => {
         )
       },
     })
-    const subscription = await client.collection('tasks').subscribe({
-      reconnect: { initialDelayMs: 0, maxDelayMs: 0, jitter: 0 },
-    })
+    const options = { reconnect: { initialDelayMs: 0, maxDelayMs: 0, jitter: 0 } }
+    const subscription = kind === 'topic'
+      ? await client.realtime.subscribe('reports/ready', options)
+      : await client.collection('tasks').subscribe(options)
 
     await vi.waitFor(() => expect(streams).toBe(2))
     expect((await store.get())?.accessToken).toBe('access-new')
@@ -171,5 +172,73 @@ describe('sSE parsing and subscriptions', () => {
       code: 'HB_FORBIDDEN',
     })
     expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+
+  it('subscribes to an exact topic with a separate message model and AbortSignal', async () => {
+    const encoder = new TextEncoder()
+    const aborted = new AbortController()
+    const cancelled = vi.fn()
+    const fetcher = vi.fn(async (_input: RequestInfo | URL) => new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const [type, data] of [
+          ['connected', { connectionId: 'connection-one', topic: 'reports/ready', timestamp: 'now' }],
+          ['message', { id: 'one', topic: 'reports/ready', data: { count: 1 }, timestamp: 'now' }],
+          ['update', { record: 'must not enter the topic model' }],
+        ]) controller.enqueue(encoder.encode(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`))
+      },
+      cancel: cancelled,
+    })))
+    const client = new HertaBaseClient({ baseUrl: 'https://example.test', fetch: fetcher })
+    const events: string[] = []
+    const counts: number[] = []
+    const subscription = await client.realtime.subscribe<{ count: number }>('reports/ready', {
+      signal: aborted.signal,
+      onEvent(event) {
+        events.push(event.type)
+        if (event.type === 'message')
+          counts.push(event.data.data.count)
+        if (event.type === 'connected')
+          expect(event.data.connectionId).toBe('connection-one')
+      },
+    })
+    await vi.waitFor(() => expect(counts).toEqual([1]))
+    expect(events).toEqual(['connected', 'message'])
+    const url = new URL(String(fetcher.mock.calls[0]?.[0]))
+    expect(url.pathname).toBe('/api/events')
+    expect(url.searchParams.get('topic')).toBe('reports/ready')
+    aborted.abort()
+    expect(subscription.status).toBe('closed')
+    await vi.waitFor(() => expect(cancelled).toHaveBeenCalledOnce())
+  })
+
+  it('reconnects topics without requesting message replay', async () => {
+    const encoder = new TextEncoder()
+    let calls = 0
+    const client = new HertaBaseClient({
+      baseUrl: 'https://example.test',
+      fetch: async (_input, init) => {
+        expect(new Headers(init?.headers).has('last-event-id')).toBe(false)
+        calls += 1
+        return new Response(new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(encoder.encode(`event: connected\ndata: {"connectionId":"${calls}","topic":"ready","timestamp":"now"}\n\n`))
+            controller.enqueue(encoder.encode('event: message\nid: previous\ndata: {"id":"previous","topic":"ready","data":1,"timestamp":"now"}\n\n'))
+            if (calls === 1)
+              controller.close()
+          },
+        }))
+      },
+    })
+    const subscription = await client.realtime.subscribe('ready', { reconnect: { initialDelayMs: 0, maxDelayMs: 0, jitter: 0 } })
+    await vi.waitFor(() => expect(calls).toBe(2))
+    subscription.close()
+  })
+
+  it('rejects invalid topics and already aborted subscriptions before fetching', async () => {
+    const fetcher = vi.fn(async () => new Response())
+    const client = new HertaBaseClient({ baseUrl: 'https://example.test', fetch: fetcher })
+    await expect(client.realtime.subscribe('a?b')).rejects.toMatchObject({ kind: 'protocol' })
+    await expect(client.realtime.subscribe('ready', { signal: AbortSignal.abort() })).rejects.toMatchObject({ kind: 'abort' })
+    expect(fetcher).not.toHaveBeenCalled()
   })
 })

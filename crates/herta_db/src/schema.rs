@@ -1,19 +1,20 @@
+use crate::models::SurrealField;
 use herta_core::{HbError, HbResult};
 use surrealdb::types::RecordId;
 
 use crate::{
-    DbClient,
+    DbSession,
     models::{CollectionDef, FieldDef, IndexDef, SchemaMode, UpdateCollectionRequest},
     validation::{quote_identifier, validate_collection, validate_patch},
 };
 
 pub struct SchemaManager<'a> {
-    db: &'a DbClient,
+    db: DbSession<'a>,
 }
 
 impl<'a> SchemaManager<'a> {
-    pub fn new(db: &'a DbClient) -> Self {
-        Self { db }
+    pub fn new(db: impl Into<DbSession<'a>>) -> Self {
+        Self { db: db.into() }
     }
 
     pub async fn create_collection(&self, def: &CollectionDef) -> HbResult<CollectionDef> {
@@ -36,7 +37,7 @@ impl<'a> SchemaManager<'a> {
             }
         }
 
-        let mut sql = String::from("BEGIN TRANSACTION;\n");
+        let mut sql = String::new();
         let table = quote_identifier(&def.name);
         let schema = match def.schema_mode {
             SchemaMode::Strict => "SCHEMAFULL",
@@ -54,17 +55,12 @@ impl<'a> SchemaManager<'a> {
             append_index_ddl(&mut sql, &table, index);
         }
         sql.push_str("CREATE ONLY type::record('_collections', $name) CONTENT $definition;\n");
-        sql.push_str("COMMIT TRANSACTION;");
 
         let response = self
             .db
-            .inner()
-            .query(sql)
+            .atomic_query(sql)
             .bind(("name", def.name.clone()))
-            .bind((
-                "definition",
-                serde_json::to_value(def).map_err(|error| HbError::Database(error.to_string()))?,
-            ))
+            .bind(("definition", versioned_definition(def)?))
             .await
             .map_err(database_error)?;
         response.check().map_err(database_error)?;
@@ -74,7 +70,6 @@ impl<'a> SchemaManager<'a> {
     pub async fn list_collections(&self) -> HbResult<Vec<CollectionDef>> {
         let mut response = self
             .db
-            .inner()
             .query("SELECT * OMIT id FROM _collections ORDER BY name ASC")
             .await
             .map_err(database_error)?
@@ -96,7 +91,6 @@ impl<'a> SchemaManager<'a> {
     async fn get_collection_optional(&self, name: &str) -> HbResult<Option<CollectionDef>> {
         let mut response = self
             .db
-            .inner()
             .query("SELECT * OMIT id FROM type::record('_collections', $name)")
             .bind(("name", name.to_owned()))
             .await
@@ -137,28 +131,20 @@ impl<'a> SchemaManager<'a> {
         }
 
         let table = quote_identifier(name);
-        let mut sql = String::from("BEGIN TRANSACTION;\n");
+        let mut sql = String::new();
         for field in &patch.fields {
             append_field_ddl(&mut sql, &table, field);
         }
         for index in &patch.indexes {
             append_index_ddl(&mut sql, &table, index);
         }
-        sql.push_str(
-            "UPDATE ONLY type::record('_collections', $name) CONTENT $definition;\n\
-             COMMIT TRANSACTION;",
-        );
+        sql.push_str("UPDATE ONLY type::record('_collections', $name) CONTENT $definition;");
 
         let response = self
             .db
-            .inner()
-            .query(sql)
+            .atomic_query(sql)
             .bind(("name", name.to_owned()))
-            .bind((
-                "definition",
-                serde_json::to_value(&updated)
-                    .map_err(|error| HbError::Database(error.to_string()))?,
-            ))
+            .bind(("definition", versioned_definition(&updated)?))
             .await
             .map_err(database_error)?;
         response.check().map_err(database_error)?;
@@ -169,21 +155,24 @@ impl<'a> SchemaManager<'a> {
         self.get_collection(name).await?;
         let table = quote_identifier(name);
         let sql = format!(
-            "BEGIN TRANSACTION;\n\
-             REMOVE TABLE {table};\n\
-             DELETE ONLY type::record('_collections', $name);\n\
-             COMMIT TRANSACTION;"
+            "REMOVE TABLE {table};\n\
+             DELETE ONLY type::record('_collections', $name);"
         );
         let response = self
             .db
-            .inner()
-            .query(sql)
+            .atomic_query(sql)
             .bind(("name", name.to_owned()))
             .await
             .map_err(database_error)?;
         response.check().map_err(database_error)?;
         Ok(())
     }
+}
+
+fn versioned_definition(definition: &CollectionDef) -> HbResult<serde_json::Value> {
+    let mut value = serde_json::to_value(definition).map_err(database_error)?;
+    value["version"] = uuid::Uuid::now_v7().to_string().into();
+    Ok(value)
 }
 
 fn append_field_ddl(sql: &mut String, table: &str, field: &FieldDef) {
@@ -207,6 +196,7 @@ fn append_auth_fields(sql: &mut String, table: &str) {
         "DEFINE FIELD email ON TABLE {table} TYPE string;\n\
          DEFINE FIELD password_hash ON TABLE {table} TYPE string;\n\
          DEFINE FIELD token_key ON TABLE {table} TYPE string;\n\
+         DEFINE FIELD _hb_auth_issuance ON TABLE {table} TYPE option<string>;\n\
          DEFINE FIELD verified ON TABLE {table} TYPE bool DEFAULT false;\n\
          DEFINE FIELD role ON TABLE {table} TYPE string DEFAULT 'user';\n\
          DEFINE FIELD failed_attempts ON TABLE {table} TYPE number DEFAULT 0;\n\

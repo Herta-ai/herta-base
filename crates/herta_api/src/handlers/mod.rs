@@ -1,10 +1,15 @@
 pub mod auth;
 pub mod collections;
 pub mod docs;
+pub mod events;
+pub mod extensions;
+pub mod file_operations;
 pub mod files;
 pub mod logging;
 pub mod logs;
 pub mod mail;
+pub mod operations;
+pub mod outbox;
 pub mod realtime;
 pub mod records;
 pub mod web;

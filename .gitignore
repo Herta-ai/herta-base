@@ -67,3 +67,6 @@ packages/sdk/dist/
 # os
 .DS_Store
 /lib/
+
+# Cargo registry extraction markers in vendored sources
+vendor/**/.cargo-ok

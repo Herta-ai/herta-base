@@ -23,7 +23,10 @@ pub struct ApiState {
     pub storage: Arc<dyn Storage>,
     pub mailer: Arc<dyn Mailer>,
     pub realtime: RealtimeLimiter,
+    pub messages: crate::messages::RealtimeBus,
     pub web: web::WebHosting,
+    pub extensions: Option<herta_core::extension::Extensions>,
+    pub extension_limits: crate::handlers::extensions::RouteLimits,
 }
 
 pub type SharedApiState = Arc<ApiState>;
@@ -55,7 +58,12 @@ impl ApiState {
             config.realtime.max_connections_per_ip,
         );
         let web = web::WebHosting::new(&config)?;
+        crate::extensions::reconcile_uploads(&db, storage.as_ref(), None).await?;
+        crate::files::FileService::new(db.clone(), storage.clone(), config.jsvm.files.clone())
+            .reconcile()
+            .await?;
         let state = Self {
+            messages: crate::messages::RealtimeBus::new(auth.clone(), config.jsvm.realtime.clone()),
             db,
             config: Arc::new(config),
             docs: OpenApiCache::empty(),
@@ -64,7 +72,11 @@ impl ApiState {
             mailer,
             realtime,
             web,
+            extensions: None,
+            extension_limits: Default::default(),
         };
+        crate::extensions::reconcile_collections(&state.db, state.storage.as_ref(), &state.docs)
+            .await?;
         state.docs.refresh(&state).await?;
         Ok(state)
     }
@@ -194,6 +206,8 @@ pub fn build_router_with_logger(
         root = root.hoop(logger);
     }
     root.push(Router::with_path("api/realtime/{collection}").get(realtime::subscribe))
+        .push(Router::with_path("api/events").get(crate::handlers::events::subscribe))
+        .push(Router::with_path("api/operations/{id}").get(crate::handlers::operations::get))
         .push(records_router)
         .push(collections_router)
         .push(default_auth)
@@ -201,6 +215,27 @@ pub fn build_router_with_logger(
         .push(admin_auth)
         .push(admin_logs)
         .push(Router::with_path("api/admin/mail/send").post(mail::send))
+        .push(
+            Router::with_path("api/admin/file-operations")
+                .get(crate::handlers::file_operations::list)
+                .push(
+                    Router::with_path("{version}")
+                        .get(crate::handlers::file_operations::get)
+                        .push(
+                            Router::with_path("resolve")
+                                .post(crate::handlers::file_operations::resolve),
+                        ),
+                ),
+        )
+        .push(
+            Router::with_path("api/admin/outbox")
+                .get(crate::handlers::outbox::list)
+                .push(
+                    Router::with_path("{id}")
+                        .get(crate::handlers::outbox::get)
+                        .push(Router::with_path("resolve").post(crate::handlers::outbox::resolve)),
+                ),
+        )
         .push(web_projects)
         .push(files_router)
         .push(

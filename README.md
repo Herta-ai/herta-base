@@ -24,11 +24,11 @@
 
 ## ✨ 核心特性
 
-HertaBase 旨在提供极致的开发体验（DX），同时利用 Rust 生态带来高性能与可扩展性。
+HertaBase 使用 Rust 构建嵌入式后端，提供数据库、认证、文件与应用扩展接口。
 
 - 📦 **All-in-One 单文件部署**：无需配置复杂的环境，一个二进制文件包含数据库、API 和管理后台。
 - 🗄️ **强悍的 SurrealDB 引擎**：原生支持图关系（Graph）、文档（Document）、Schema-less/full 混合模式。支持从本地单文件（RocksDB）无缝迁移至分布式集群（TiKV）。
-- ⚡ **极速 JS 运行时（计划中）**：内置 `rquickjs`，允许使用 JavaScript/TypeScript 编写生命周期 Hook，微秒级冷启动，内存占用极低。
+- **JS 扩展运行时（实施中）**：已接入独立 worker、数据库事务、Record/Auth/Collection 事件、自定义路由、邮件、受限 HTTP、cron、应用消息订阅、扩展文件及事务 outbox；完整故障和发布验收仍在进行。可运行示例见 [examples/js-runtime](examples/js-runtime/README.md)；全部能力的进度与实测范围见 [运行时设计](docs/js-runtime.md) 和 [验证记录](docs/js-runtime-validation.md)。
 - 🔄 **原生实时订阅 (Realtime)**：基于 SurrealDB 的 `LIVE SELECT` 与 Salvo SSE，数据变更推送到客户端。
 - 📖 **OpenAPI 自动生成**：当在后台创建 Collection（表）时，系统自动生成 Swagger/Redoc API 文档。
 - 🛡️ **内建 Auth 与权限引擎**：开箱即用的 JWT 鉴权，支持细粒度的 API 访问规则（API Rules）。
@@ -42,7 +42,7 @@ HertaBase 旨在提供极致的开发体验（DX），同时利用 Rust 生态�
 
 | 模块 | 核心技术 | 描述 |
 | :--- | :--- | :--- |
-| **语言** | 🦀 **Rust** | 内存安全、零成本抽象、无与伦比的并发性能 |
+| **语言** | 🦀 **Rust** | 内存安全与原生异步并发支持 |
 | **HTTP 层** | 🌐 **Salvo** | 易用且强大的 Rust Web 框架，原生支持 OpenAPI |
 | **数据库** | 🗄️ **SurrealDB** | 多模数据库，BaaS 架构的核心组件 |
 | **JS 引擎** | 🚀 **rquickjs** | 轻量的 JavaScript 引擎，融入 Rust 异步生态 |
@@ -177,7 +177,7 @@ pnpm test
 | :--- | :--- | :--- |
 | **Phase 1** | 基础架构与动态 ORM (Salvo + SurrealDB) | 已实现 |
 | **Phase 2** | 鉴权与权限引擎 (JWT, API Rules) | 已实现 |
-| **Phase 3** | JS 扩展运行时 (rquickjs 集成) | 已跳过 |
+| **Phase 3** | JS 扩展运行时 (rquickjs 集成) | 实施中 |
 | **Phase 4** | 实时订阅引擎 (SurrealDB LIVE SELECT + SSE) | 已实现 |
 | **Phase 5** | 文件存储模块 (LocalFS + S3) | 已实现 |
 | **Phase 6** | 管理后台与单体打包 (React, rust-embed) | 部分实现（内置 Admin UI 已完成） |

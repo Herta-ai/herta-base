@@ -13,6 +13,19 @@ HertaBase 采用 RESTful 风格的 API 设计理念，致力于提供清晰、�
 
 管理端 API 则以 `/_/` 作为特殊标识。
 
+### GET /api/operations/{id}
+
+事务返回 `503 HB_COMMIT_UNKNOWN` 时，使用错误 details 中的 checkUrl 查询实际状态。
+带原请求身份的 Bearer，或通过 `X-HB-Operation-Credential` 提交随机 checkCredential；任一验证成功即可。
+无权限和不存在均返回 404，成功响应始终带 `Cache-Control: no-store`。
+
+```json
+{"data":{"operationId":"operation-id","state":"committed"},"meta":null,"error":null}
+```
+
+state 为 `pending`、`committing`、`committed`、`rolled_back` 或 `unknown`。仅返回状态，不提供业务记录、
+密码或 Auth 令牌；unknown 状态不能作为自动重发依据。不要把随机核对凭证放入 URL 或日志。
+
 ## 3. 认证接口 (Authentication)
 
 认证接口处理用户注册、登录以及会话管理，对应 HertaBase 鉴权与权限引擎（Phase 2）。
@@ -270,6 +283,11 @@ Collection 管理接口为 `GET/POST /_/collections` 和 `GET/PATCH/DELETE /_/co
 
 ## 11. 管理员邮件发送
 
+应用消息订阅另见 `GET /api/events?topic=reports%2Fready`：需要登录及 `jsvm.realtime.enabled=true`，
+支持 Bearer（SDK 默认）或 token 查询参数；一个连接订阅一个精确 topic，与集合 SSE 共用连接/IP 配额。
+事件为 connected `{ connectionId, topic, timestamp }`、message `{ id, topic, data, timestamp }`、ping 和 error。
+消息无断线重放；发布队列满时服务端断开慢连接。出队前重新检查账户、当前角色、令牌有效性及 audience。
+
 `POST /api/admin/mail/send` 使用管理员 Bearer Token，通过配置的 SMTP 服务提交邮件。
 请求包含 `to`、`subject`、至少一个非空 `text` / `html`，以及可选 `from` 和 `headers`。
 省略 `from` 使用配置默认发件人，`headers` 仅支持 `X-*` 自定义头；首版不支持附件、cc、bcc。
@@ -287,3 +305,29 @@ Collection 管理接口为 `GET/POST /_/collections` 和 `GET/PATCH/DELETE /_/co
 邮件未启用返回 503 `HB_CAPABILITY_UNAVAILABLE`，SMTP 失败返回 502 `HB_MAIL_SEND_FAILED`，
 超时返回 504 `HB_MAIL_TIMEOUT`，无自动重试。校验失败和大小超限分别返回 400、413。
 配置、字段限制、内存收件箱和完整示例见 [邮件发送](mail.md)。
+
+## 事务 outbox 运维
+
+以下接口均要求管理员身份；回执不返回任务 payload、收件地址、HTTP 凭据或响应正文。
+
+- `GET /api/admin/outbox?limit=100&cursor=...`：返回 envelope，data 为 `{ items, nextCursor }`；limit 最大 500。
+- `GET /api/admin/outbox/{id}`：返回任务状态与宿主收据。state 为 pending、leased、sending、accepted、failed 或 unknown。
+- `POST /api/admin/outbox/{id}/resolve`：仅处理 unknown；正文为 `{ "resolution": "accepted" | "not_sent", "note": "核对依据" }`。not_sent 表示已确认原尝试停止且未被接受，之后可重新排队。重复核对已结束任务返回 409。
+
+时间字段 createdAt、updatedAt、nextAttemptAt 为 Unix 毫秒；attempts 统计进入发送阶段的次数。
+SMTP accepted 表示 SMTP 已接受；HTTP accepted 表示收到 HTTP 响应，result.status 保留 HTTP 状态码。
+发送前的临时 DNS/超时失败使用独立的最多三次退避重试，不增加 attempts。某次发送结果不确定后，
+后续明确未发送的失败、授权撤销或重试耗尽仍保留 unknown，直到接收端确认或管理员核对。
+
+## 扩展文件写入核对
+
+以下接口均要求管理员身份，操作当前 `jsvm.files.prefix` 命名空间，返回 envelope，不返回物理对象地址。
+
+- `GET /api/admin/file-operations?limit=100&cursor=...`：分页列出 writing/uncertain 预留，返回 `{ items, nextCursor }`；limit 为 1–500，cursor 为上一页末项 version。
+- `GET /api/admin/file-operations/{version}`：返回文件元数据和状态；已释放版本包含 resolution、resolvedBy、resolvedAt、note。
+- `POST /api/admin/file-operations/{version}/resolve`：正文 `{ "resolution": "not_written", "note": "核对依据" }`，note 为 1–2000 UTF-8 字节。
+
+`not_written` 表示管理员已向后端确认写入未发生，且不存在迟到的写请求；一次 HEAD 404 不能替代此确认。
+服务等待本进程在途文件操作结束，再检查对象不存在。只允许释放 writing/uncertain 预留；对象存在或
+状态不符返回 409，元数据错误不释放。释放与审计共同提交，重试返回原核对回执，state 为 released；
+回执保留原文件元数据及核对人/时间/说明，不自动清除。不存在版本返回 404。

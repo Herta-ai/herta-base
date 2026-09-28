@@ -1,5 +1,9 @@
 pub mod docs;
+pub mod extensions;
+pub mod files;
 pub mod handlers;
+pub mod messages;
+pub mod outbox;
 pub mod response;
 pub mod router;
 

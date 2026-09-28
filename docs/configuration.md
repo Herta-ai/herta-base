@@ -101,15 +101,17 @@ HertaBase 通过基于 `clap` 构筑的 CLI 工具进行管理：
 
 以上配置对应 `[mail]` / `[mail.smtp]` 同名字段，环境变量覆盖 TOML，CLI 覆盖后统一校验；所有限制和超时必须大于零。
 SMTP 凭据可从 TOML 或环境变量读取，不进入配置序列化、调试输出和 API 响应。推荐使用环境变量注入凭据。
-管理员可调用 `POST /api/admin/mail/send`。JS 邮件调用仍未实现，将来还需 `HB_JS_MAIL_ENABLED` 单独授权，
+管理员可调用 `POST /api/admin/mail/send`。JS 邮件调用已接入，还需 `HB_JS_MAIL_ENABLED` 单独授权，
 SMTP 凭据永远不会暴露给 `$app.env()`。完整使用与测试步骤见 [邮件发送](mail.md)。
 
-**JS Sandbox（Phase 3 目标配置，尚未实现）**
+**JS Sandbox（已接入配置；完整能力仍在实施）**
 
-当前 `HbConfig` 尚无 `jsvm` 字段，也未读取下列 `HB_JS_*` 环境变量；写入 JS 配置不会启用运行时。
-`mail`、`HB_MAIL_*`、`HB_SMTP_*` 已实现。已实现的 `HB_HOOKS_DIR` 和 `--hooks-dir`
-目前仅保存路径。目标默认值见 [JavaScript 扩展运行时设计](js-runtime.md) 第 15 节，
-尚未通过的开放门槛见第 16.3 节。以下与该目标契约一致，均不是当前可生效的环境变量。
+`HbConfig.jsvm` 和以下 `HB_JS_*` 环境变量已接入严格校验。`HB_JS_ENABLED=true` 后从
+`HB_HOOKS_DIR` / `--hooks-dir` 加载脚本；目录不存在或首次加载失败会终止启动，存在的空目录允许启动。
+Record/Auth/Collection、生命周期、自定义路由、数据库、邮件、受限 HTTP、应用消息和 cron 已接线。
+扩展文件和 outbox 已接入；两者默认关闭。outbox 的邮件和 HTTP 任务还分别受对应能力开关与目标策略约束。
+数组环境变量使用 JSON 数组，布尔值使用 true/false；字段默认值见 [JavaScript 扩展运行时设计](js-runtime.md)
+第 15 节，实测范围见 [验证报告](js-runtime-validation.md)。
 
 * `HB_JS_ENABLED`：是否启用 JS 扩展运行时，默认 false。
 * `HB_JS_MEMORY_LIMIT_MB`, `HB_JS_STACK_LIMIT_KB`：整个调用 runtime 的堆/栈上限，默认 16 MiB/512 KiB。
@@ -187,7 +189,7 @@ max_archive_size = 104857600
 [security.cors]
 origins = ["https://my-app.com", "https://admin.herta.ai"]
 
-# 以下 jsvm 配置为 Phase 3 设计示例，尚未支持；mail 配置已实现。
+# jsvm 及外部能力默认关闭；逐项启用所需适配器。
 [jsvm]
 enabled = false
 memory_limit_mb = 16
@@ -225,6 +227,16 @@ timezone = "UTC"
 max_runtime_ms = 30000
 retries = 0
 max_retries = 3
+
+[jsvm.outbox]
+enabled = false
+lease_seconds = 60
+renew_seconds = 20
+max_retries = 3
+retention_days = 7
+concurrency = 4
+max_jobs = 10000
+idempotent_origins = [] # 必须同时在 HTTP allowlist 中；接收端应实现 Idempotency-Key 去重
 
 [mail]
 driver = "disabled"

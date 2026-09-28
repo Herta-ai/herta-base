@@ -15,6 +15,7 @@ pub struct HbConfig {
     pub storage: StorageConfig,
     pub web: WebConfig,
     pub mail: crate::MailConfig,
+    pub jsvm: crate::JsvmConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -254,6 +255,7 @@ impl HbConfig {
     }
 
     fn apply_env(&mut self) -> anyhow::Result<()> {
+        self.jsvm.apply_env()?;
         self.mail.apply_env()?;
         if let Ok(value) = std::env::var("HB_HOST") {
             self.server.host = value;
@@ -376,6 +378,7 @@ impl HbConfig {
     }
 
     pub fn validate(&self) -> anyhow::Result<()> {
+        self.jsvm.validate()?;
         self.mail.validate(self.server.dev_mode)?;
         if self.server.host.trim().is_empty() {
             bail!("server.host cannot be empty");

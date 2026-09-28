@@ -46,12 +46,14 @@ pub enum HbError {
     Storage(String),
     #[error("Internal error")]
     Internal,
-    #[error("Mail service is disabled")]
+    #[error("Requested service is unavailable")]
     CapabilityUnavailable,
     #[error("SMTP send failed")]
     MailSendFailed,
     #[error("SMTP send timed out; acceptance is unknown")]
     MailTimeout,
+    #[error(transparent)]
+    Extension(#[from] crate::JsError),
 }
 
 impl HbError {
@@ -64,6 +66,7 @@ impl HbError {
 
     pub fn status_code(&self) -> u16 {
         match self {
+            Self::Extension(error) => error.kind.status(),
             Self::Validation { .. } | Self::InvalidFilter(_) | Self::InvalidSort(_) => 400,
             Self::NotFound | Self::RecordNotFound | Self::CollectionNotFound(_) => 404,
             Self::Conflict(_) => 409,
@@ -83,6 +86,7 @@ impl HbError {
 
     pub fn error_code(&self) -> &'static str {
         match self {
+            Self::Extension(error) => error.kind.code(),
             Self::Validation { .. } => "HB_VALIDATION_ERROR",
             Self::InvalidFilter(_) => "HB_INVALID_FILTER",
             Self::InvalidSort(_) => "HB_INVALID_SORT",
@@ -110,6 +114,7 @@ impl HbError {
 
     pub fn public_message(&self, dev_mode: bool) -> String {
         match self {
+            Self::Extension(error) if !dev_mode => error.kind.message().into(),
             Self::Database(message) if dev_mode => format!("Database error: {message}"),
             Self::Storage(message) if dev_mode => format!("Storage error: {message}"),
             Self::Database(_) | Self::Storage(_) | Self::Internal => "Internal server error".into(),

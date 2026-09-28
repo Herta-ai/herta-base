@@ -3,5 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "main": "index.d.ts",
-  "types": "index.d.ts"
+  "types": "index.d.ts",
+  "scripts": { "typecheck": "tsc --project tsconfig.json" }
 }

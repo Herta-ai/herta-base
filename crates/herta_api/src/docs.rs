@@ -11,20 +11,33 @@ use tokio::sync::RwLock;
 use crate::router::ApiState;
 
 #[derive(Clone)]
-pub struct OpenApiCache(Arc<RwLock<Value>>);
+pub struct OpenApiCache(Arc<RwLock<Value>>, Arc<tokio::sync::Mutex<()>>);
 
 impl OpenApiCache {
     pub fn empty() -> Self {
-        Self(Arc::new(RwLock::new(generate_document(&[]))))
+        Self(
+            Arc::new(RwLock::new(generate_document(&[]))),
+            Arc::new(tokio::sync::Mutex::new(())),
+        )
     }
 
     pub async fn read(&self) -> Value {
         self.0.read().await.clone()
     }
+    pub(crate) async fn collection_effects_lock(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.1.lock().await
+    }
 
     pub async fn refresh(&self, state: &ApiState) -> HbResult<()> {
-        let collections = SchemaManager::new(&state.db).list_collections().await?;
-        *self.0.write().await = generate_document(&collections);
+        self.refresh_db(&state.db).await
+    }
+
+    pub async fn refresh_db(&self, db: &herta_db::DbClient) -> HbResult<()> {
+        // Serialize reads as well as publication so an older read cannot
+        // overwrite a document generated after a newer schema commit.
+        let mut document = self.0.write().await;
+        let collections = SchemaManager::new(db).list_collections().await?;
+        *document = generate_document(&collections);
         Ok(())
     }
 }
@@ -49,7 +62,8 @@ pub fn generate_document(collections: &[CollectionDef]) -> Value {
         "components": {
             "schemas": schemas,
             "securitySchemes": {
-                "bearerAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"}
+                "bearerAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"},
+                "operationCredential": {"type":"apiKey","in":"header","name":"X-HB-Operation-Credential"}
             }
         }
     })
@@ -57,6 +71,56 @@ pub fn generate_document(collections: &[CollectionDef]) -> Value {
 
 fn base_paths() -> Map<String, Value> {
     let mut paths = Map::new();
+    paths.insert("/api/admin/file-operations".into(),json!({"get":{
+        "summary":"List uncertain file writes (administrator only)","security":[{"bearerAuth":[]}],
+        "parameters":[{"name":"limit","in":"query","schema":{"type":"integer","minimum":1,"maximum":500,"default":100}},
+            {"name":"cursor","in":"query","schema":{"type":"string","format":"uuid"}}],
+        "responses":{"200":{"description":"File metadata page in the configured namespace, without physical locations"},"401":{"description":"Authentication required"},"403":{"description":"Administrator required"}}
+    }}));
+    paths.insert("/api/admin/file-operations/{version}".into(),json!({"get":{
+        "summary":"Get a file operation or immutable resolution receipt (administrator only)","security":[{"bearerAuth":[]}],"parameters":[path_parameter("version")],
+        "responses":{"200":{"description":"Metadata, reservation state, and resolution audit when present"},"404":{"description":"Version not found"}}
+    }}));
+    paths.insert("/api/admin/file-operations/{version}/resolve".into(),json!({"post":{
+        "summary":"Release a verified absent file write (administrator only)","security":[{"bearerAuth":[]}],"parameters":[path_parameter("version")],
+        "description":"Administrator attests that the backend rejected the write and no pending request can create the object. Current HEAD absence is also required. Repeats return the original audit receipt.",
+        "requestBody":{"required":true,"content":{"application/json":{"schema":{"type":"object","additionalProperties":false,"required":["resolution","note"],
+            "properties":{"resolution":{"type":"string","enum":["not_written"]},"note":{"type":"string","minLength":1,"maxLength":2000}}}}}},
+        "responses":{"200":{"description":"Quota released atomically with durable resolution audit"},"409":{"description":"Object exists or reservation is not uncertain"}}
+    }}));
+    paths.insert("/api/admin/outbox".into(),json!({"get":{
+        "summary":"List outbox receipts (administrator only)","security":[{"bearerAuth":[]}],
+        "parameters":[{"name":"limit","in":"query","schema":{"type":"integer","minimum":1,"maximum":500,"default":100}},
+            {"name":"cursor","in":"query","schema":{"type":"string"}}],
+        "responses":{"200":{"description":"Bounded receipt page, without message payloads or credentials"},"401":{"description":"Authentication required"},"403":{"description":"Administrator required"}}
+    }}));
+    paths.insert("/api/admin/outbox/{id}".into(),json!({"get":{
+        "summary":"Get an outbox receipt (administrator only)","security":[{"bearerAuth":[]}],"parameters":[path_parameter("id")],
+        "responses":{"200":{"description":"Job state and native receipt"},"404":{"description":"Job not found"}}
+    }}));
+    paths.insert("/api/admin/outbox/{id}/resolve".into(),json!({"post":{
+        "summary":"Resolve a verified unknown delivery (administrator only)","security":[{"bearerAuth":[]}],"parameters":[path_parameter("id")],
+        "requestBody":{"required":true,"content":{"application/json":{"schema":{"type":"object","additionalProperties":false,"required":["resolution","note"],
+            "properties":{"resolution":{"type":"string","enum":["accepted","not_sent"]},"note":{"type":"string","minLength":1,"maxLength":2000}}}}}},
+        "responses":{"200":{"description":"Updated receipt; not_sent queues a new attempt"},"409":{"description":"Job is not unknown"}}
+    }}));
+    paths.insert("/api/events".into(),json!({"get":{
+        "summary":"Subscribe to application messages",
+        "description":"One authenticated connection per exact topic; connected/message/ping/error events. No replay. Shares connection quotas with collection SSE and revalidates identity before delivery.",
+        "security":[{"bearerAuth":[]}],
+        "parameters":[{"name":"topic","in":"query","required":true,"schema":{"type":"string","maxLength":128}},
+            {"name":"token","in":"query","required":false,"schema":{"type":"string"}}],
+        "responses":{"200":{"description":"Application message stream","content":{"text/event-stream":{"schema":{"type":"string"}}}},
+            "401":{"description":"Authentication required"},"403":{"description":"Application messages not enabled"},"429":{"description":"Connection quota exhausted"}}
+    }}));
+    paths.insert("/api/operations/{id}".into(),json!({"get":{
+        "summary":"Verify a transaction outcome",
+        "description":"Accessible with the original identity or the random verification credential. Returns status only, never records or Auth tokens. Responses are not cached.",
+        "security":[{"bearerAuth":[]},{"operationCredential":[]}],
+        "parameters":[path_parameter("id")],
+        "responses":{"200":{"description":"Operation status","content":{"application/json":{"schema":{"$ref":"#/components/schemas/OperationStatusEnvelope"}}}},
+            "404":{"description":"Unknown operation or verification not authorized"}}
+    }}));
     paths.insert("/api/admin/mail/send".into(), json!({"post": {
         "summary": "Send an email (administrator only)",
         "description": "Success means SMTP acceptance, not final delivery. Submission is not retried automatically.",
@@ -257,6 +321,8 @@ fn base_paths() -> Map<String, Value> {
 
 fn base_schemas() -> Map<String, Value> {
     let mut schemas = Map::new();
+    schemas.insert("OperationStatusEnvelope".into(),envelope(json!({"type":"object","additionalProperties":false,
+        "required":["operationId","state"],"properties":{"operationId":{"type":"string"},"state":{"type":"string","enum":["pending","committing","committed","rolled_back","unknown"]}}})));
     schemas.insert("MailAddress".into(), json!({
         "type": "object", "additionalProperties": false, "required": ["address"],
         "properties": {"address": {"type": "string", "format": "email"}, "name": {"type": "string"}}
@@ -463,6 +529,7 @@ fn collection_schema() -> Value {
         "required": ["name", "type", "schema_mode", "fields"],
         "properties": {
             "name": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$"},
+            "version": {"type":"string","readOnly":true,"description":"Opaque collection revision used by extension save operations"},
             "type": {"type": "string", "enum": ["base", "auth"]},
             "schema_mode": {"type": "string", "enum": ["schema-less", "strict", "mixed"]},
             "fields": {"type": "array", "items": {"type": "object"}},

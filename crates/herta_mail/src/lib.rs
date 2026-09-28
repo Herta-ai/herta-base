@@ -202,4 +202,58 @@ mod tests {
             assert!(raw.contains(expected), "missing {expected}: {raw}");
         }
     }
+
+    #[tokio::test]
+    async fn local_smtp_mailbox_observes_the_receipt_message_id() {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let inbox = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let (read, mut write) = stream.into_split();
+            let mut lines = BufReader::new(read).lines();
+            write.write_all(b"220 mailbox ESMTP\r\n").await.unwrap();
+            let mut message = String::new();
+            while let Some(line) = lines.next_line().await.unwrap() {
+                if line == "DATA" {
+                    write.write_all(b"354 send data\r\n").await.unwrap();
+                    while let Some(line) = lines.next_line().await.unwrap() {
+                        if line == "." {
+                            break;
+                        }
+                        message.push_str(&line);
+                        message.push('\n');
+                    }
+                    write.write_all(b"250 queued\r\n").await.unwrap();
+                } else if line == "QUIT" {
+                    write.write_all(b"221 bye\r\n").await.unwrap();
+                    break;
+                } else {
+                    write.write_all(b"250 OK\r\n").await.unwrap();
+                }
+            }
+            message
+        });
+        let mut config = MailConfig {
+            driver: "smtp".into(),
+            timeout_ms: 3000,
+            ..Default::default()
+        };
+        config.smtp.host = "127.0.0.1".into();
+        config.smtp.port = port;
+        config.smtp.tls = "none".into();
+        let mailer = SmtpMailer::new(&config, true).unwrap();
+        let receipt = mailer.send(message()).await.unwrap();
+        drop(mailer);
+        let received = tokio::time::timeout(Duration::from_secs(5), inbox)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            received.contains(&format!("Message-ID: {}", receipt.message_id)),
+            "{received}"
+        );
+        assert!(received.contains("X-Event-Id: event-123"));
+        assert_eq!(receipt.status, MailStatus::Accepted);
+    }
 }
